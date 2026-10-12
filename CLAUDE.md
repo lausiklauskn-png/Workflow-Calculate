@@ -21,17 +21,17 @@ unterscheiden), Violett = intern wie dort.
 | `assets/schluesseltresor.js` | **byte-1:1 aus Workflow-Needs** (dort aus kim-hub-company), SHA in `tests/kern.mjs` — nie hier abwandeln |
 | `assets/kern/katalog.js` | Katalog prüfen, ex-/importieren, Platzhalter zählen, **Arbeitsgebiet hinzufügen** (`gebietHinzufuegen`: nur Fehlendes, eigene Zahlen bleiben) |
 | `assets/kern/recherche.js` | **KI-Recherche** der Marktpreise: Claude-API (`claude-opus-5-5`) mit eigenem Schlüssel und Websuche (`web_search_20260209`, direkt, ≤ 5 Suchen); übernimmt nur Preise, deren Quelle die Suche lieferte UND deren Zahl wörtlich im Zitat (`cited_text`) steht; Funde `ungeprueft: true` |
-| `assets/kern/anfrage.js` | **Anfrage lesen** (2026-10-13): E-Mail-Text oder `.eml` → Absender, Kundennummer, Mengen, Maße, Farben, Produkte; Kunde finden (Nr. > E-Mail > Firmen-Domain > Name); alte Angebote nach **Ähnlichkeit** (gleicher Kunde 45 · gleiche Produkte 30 · Wörter 20 · Menge 5), Suche; **Entwurf** aus dem nächstliegenden (≥ 40 %) oder aus den erkannten Produkten. Offline, ohne KI |
+| `assets/kern/anfrage.js` | **Anfrage lesen** (2026-10-12): E-Mail-Text oder `.eml` → Absender, Kundennummer, Mengen, Maße, Farben, Produkte; Kunde finden (Nr. > E-Mail > Firmen-Domain > Name); alte Angebote nach **Ähnlichkeit** (gleicher Kunde 45 · gleiche Produkte 30 · Wörter 20 · Menge 5), Suche; **Entwurf** aus dem nächstliegenden (≥ 40 %) oder aus den erkannten Produkten. Offline, ohne KI |
 | `assets/kern/mail.js` | **byte-1:1 aus Workflow-Needs** (`c46c753`), SHA in `tests/kern.mjs` — `.eml` lesen (RFC 2047, multipart, base64, QP; HTML nur als Text). Nie hier abwandeln |
 | `assets/kern/ki-anfrage.js` | **Anfrage mit KI lesen** (freiwillig, eigener Schlüssel): prüfen (`PrueferMail`) → einmal anhalten bei Anweisung an eine KI / verstecktem Text → verdecken (Modul 25 + eigene Muster: Kundennummer, Telefon, Straße, PLZ+Ort, „600 €“) → `findLeak` → senden (nur verdeckter Text + Vorlagen ohne Preise) → nur übernehmen, was als Zitat wörtlich im Text steht und die Menge trägt. Der Kunde kommt nie von der KI |
 | `modules/25_pseudonym.js` | **Sage-Modul 25 byte-1:1** (über Workflow-Needs, Sage `df54f0c`), SHA in `tests/kern.mjs`. Nie hier abwandeln |
 | `assets/kern/pruefer-mail.js` | **byte-1:1 aus Workflow-PDF** (dort aus dem Auslieferungsprüfer, gleich in Mein-WorkFloh), SHA in `tests/kern.mjs`. Nie hier abwandeln |
-| `assets/kern/unterlagen.js` | **Unterlagen am Angebot** (2026-10-13): je Position Entwurf / fertiges Produkt (Bilder, Ansichten), Dateien (Corel, PSD, AI, PDF …, ≤ 50 MB, Byte für Byte) und Links; „angenommen“ am gestellten Angebot; an WorkFloh mit (Klaus' Ja), nie aufs Kundenblatt; „★ als Beispiel in die Vorlage“ |
+| `assets/kern/unterlagen.js` | **Unterlagen am Angebot** (2026-10-12): je Position Entwurf / fertiges Produkt (Bilder, Ansichten), Dateien (Corel, PSD, AI, PDF …, ≤ 50 MB, Byte für Byte) und Links; „angenommen“ am gestellten Angebot; an WorkFloh mit (Klaus' Ja), nie aufs Kundenblatt; „★ als Beispiel in die Vorlage“ |
 | `assets/kern/nachkalk.js` | **Nachkalkulation** (Stufe 3): Plan gegen Ist am gestellten Angebot, Faktor je Vorlage, Übernahme ins Zeit-Muster (einmal je Befund) |
 | `assets/daten/werbetechnik.js` | Startkatalog — **alle Zahlen Platzhalter** (`platzhalter: true`); registriert `WC.STARTKATALOGE` |
 | `assets/daten/stickerei.js` · `dienstleistung.js` | weitere Arbeitsgebiete (Stufe 3), Platzhalter; Stickerei rechnet nach **Stichzahl** (`stiche`, Einheit `tsd_stiche`) |
-| `assets/daten/handelsware.js` | **Handelsware** (2026-10-13): Arbeitsgebiet mit Einkaufsprodukten (Kulis 500, Visitenkarten 250/500/1000, Preise Platzhalter), **keine** Lieferanten eingetragen; `WC.LIEFERANTEN_VORSCHLAEGE` = per Websuche gefundene Kandidaten, erst Klaus' „✓ geprüft“ trägt sie ein |
-| `assets/daten/laser.js` | **Lasergravur** (2026-10-13): Einzelstücke mit Namen, drei Laser-Stufen (Diode 10 W · CO2 60 W · Faser 30 W) mit der **technischen Regel**, welches Material welcher Laser kann (`verfahrenWahl`); `vorhanden` = Gerät in der Werkstatt (Annahme: nur CO2); zu jeder Vorlage ein Zwilling „— Lohngravur (Zukauf)“ (`fremdVorlage`) |
+| `assets/daten/handelsware.js` | **Handelsware** (2026-10-12): Arbeitsgebiet mit Einkaufsprodukten (Kulis 500, Visitenkarten 250/500/1000, Preise Platzhalter), **keine** Lieferanten eingetragen; `WC.LIEFERANTEN_VORSCHLAEGE` = per Websuche gefundene Kandidaten, erst Klaus' „✓ geprüft“ trägt sie ein |
+| `assets/daten/laser.js` | **Lasergravur** (2026-10-12): Einzelstücke mit Namen, drei Laser-Stufen (Diode 10 W · CO2 60 W · Faser 30 W) mit der **technischen Regel**, welches Material welcher Laser kann (`verfahrenWahl`); `vorhanden` = Gerät in der Werkstatt (Annahme: nur CO2); zu jeder Vorlage ein Zwilling „— Lohngravur (Zukauf)“ (`fremdVorlage`) |
 | `assets/daten/beispiel-angebote.js` | 5 Beispiel-Angebote (Verein, Firmenstart, Fahrzeug, Firmenjubiläum, Hochzeit), 15 Positionen, alle drei Gebiete — Kunden erfunden; holt fehlende Gebiete mit |
 | `assets/daten/bilder.js` | Beispielbilder als **Zeichnungen** (SVG), mehrere Ansichten je Beispiel |
 | `assets/app.js` · `app.css` | Oberfläche (Schrittleiste, Preis nachbessern, Lernen, Markt, Katalog-Editor, Rechner) |
@@ -42,15 +42,15 @@ unterscheiden), Violett = intern wie dort.
 localStorage `workflowcalculate_katalog`, `_einstellungen`, `_thema`, `_aktiv`, `_reiter`, `_sicherung_zuletzt`, `_ki_<FACH>` (KI-Schlüssel, nur verschlüsselt über `WERKSTATT_SCHLUESSEL.einlegen`) ·
 sessionStorage `workflowcalculate_sicherung_spaeter`. Am Angebot: `fassung`, `vorgaenger`, `ersetztDurch`, `anlass` (Stufe 2) · `ist = {pos:{"P-n":{minuten, materialCent, maschinenH}}, versandCent, datum}`,
 `beispiel` (Stufe 3). An der Position: `stiche`. An der Vorlage: `einheitText`, `stiche`, `sticheVorgabe`; im Verlauf `nk` (Schlüssel der Nachkalkulation).
-Handelsware (2026-10-13): im Katalog `lieferanten = [{id, name, url, fuer: wiederverkaeufer|privat|beides, anmeldung, notiz, geprueftAm}]` (darf fehlen),
+Handelsware (2026-10-12): im Katalog `lieferanten = [{id, name, url, fuer: wiederverkaeufer|privat|beides, anmeldung, notiz, geprueftAm}]` (darf fehlen),
 an der Vorlage `einkaufsprodukt: true` und `einkauf = [{menge, gesamtCent, lieferant, url, datum}]` (Komplettpreis je Menge **inkl. Versand**),
 im Ist `pos["P-n"].einkaufCent`. Die Seite hat die Adresse `#handel` (kein eigener Speicher).
-Unterlagen (2026-10-13): an der Position `unterlagen = [{id "U-n", art entwurf|fertig|datei|link, name, typ, groesse, datei "D-…", url, datum, notiz}]`
+Unterlagen (2026-10-12): an der Position `unterlagen = [{id "U-n", art entwurf|fertig|datei|link, name, typ, groesse, datei "D-…", url, datum, notiz}]`
 (Blob unverändert im Store `bilder`, also in der Sicherung), am Angebot `angenommen = {datum}`, am Vorlagen-Beispiel `quelle = "AN-…:P-n"`.
-Anfrage (2026-10-13): am Kunden `nr` (Kundennummer), `email`; am Angebot `anfrage = {von, betreff, datum, kundennr}` (nur intern, nie hinaus).
-Kleinmengenzuschlag (2026-10-13): im Katalog `kleinmenge = {grenze, cent, text}` (fehlt er, ergänzt die App die Vorgabe 10 Stk. / 12,00 € —
-Klaus' Wert, bestätigt 2026-10-13 — nur im LIVE-Katalog), am Angebot `kleinmengeAus` (für dieses Angebot weggelassen).
-Fremdfertigung (2026-10-13): am Verfahren `vorhanden` (fehlt = da), an der Vorlage `fremdVorlage`, `titelVorgabe` (was der Kunde liest), `herstellung` (intern).
+Anfrage (2026-10-12): am Kunden `nr` (Kundennummer), `email`; am Angebot `anfrage = {von, betreff, datum, kundennr}` (nur intern, nie hinaus).
+Kleinmengenzuschlag (2026-10-12): im Katalog `kleinmenge = {grenze, cent, text}` (fehlt er, ergänzt die App die Vorgabe 10 Stk. / 12,00 € —
+Klaus' Wert, bestätigt 2026-10-12 — nur im LIVE-Katalog), am Angebot `kleinmengeAus` (für dieses Angebot weggelassen).
+Fremdfertigung (2026-10-12): am Verfahren `vorhanden` (fehlt = da), an der Vorlage `fremdVorlage`, `titelVorgabe` (was der Kunde liest), `herstellung` (intern).
 
 ## Was hier leicht kaputtgeht
 
@@ -74,7 +74,7 @@ Fremdfertigung (2026-10-13): am Verfahren `vorhanden` (fehlt = da), an der Vorla
   Funde stehen `ungeprueft` in `vorlage.markt` (mit `quelle`, `zitat`, `notiz`) und zählen im Vergleich erst nach ✓.
   Hinaus geht nur `auftragsInfo` (Produkt, Menge, Maße, Farben, Stiche, Verfahren, Material) — nie Kunde/Titel/Beschreibung/Preise.
   Der Schlüssel liegt nur im Speicher der Sitzung, gemerkt nur verschlüsselt. Die Proben stellen die Gegenseite (`tests/daten/ki-antwort.mjs`).
-- **🛒 Handelsware** (Klaus 2026-10-13): eigene Seite `#handel` (Kopfknopf 🛒, auch als Lesezeichen/neuer Tab). Eine Vorlage mit
+- **🛒 Handelsware** (Klaus 2026-10-12): eigene Seite `#handel` (Kopfknopf 🛒, auch als Lesezeichen/neuer Tab). Eine Vorlage mit
   `einkaufsprodukt` steht **nur** dort — nicht in der Produktwahl und nicht unter Katalog → Produktvorlagen (Löschen/Kopieren dort
   arbeitet trotzdem auf der GANZEN Liste). Rechnung: `WC.kalk.position` → `handelPosition` = `handel()` auf den Einkauf (Handlungskosten,
   Gewinn, Kundenklasse); **kein Versandposten** (`angebot.rechne` überspringt Einkaufsprodukte), Skonto/Rabatt wirken hier nicht.
@@ -82,24 +82,24 @@ Fremdfertigung (2026-10-13): am Verfahren `vorhanden` (fehlt = da), an der Vorla
   der günstigste zählt. Lieferant, Link, Einkaufspreis gehen nie hinaus (Prüfwert `LIEFERANT-PRUEFWORT`, 123,45 €).
   ⚠ **Halbe Einkaufszeilen gehören in `katalog.hinweise`, nie in `pruefe`**: ein Katalog, der `pruefe` nicht besteht, wird beim Laden
   still durch den Startkatalog ersetzt. Links nur über `katalog.sichereAdresse` (nur https).
-  **Fremdfertigung** (Klaus 2026-10-13: „alles, was wir anbieten … entweder von uns selber oder von anderen“): steht ein Verfahren
+  **Fremdfertigung** (Klaus 2026-10-12: „alles, was wir anbieten … entweder von uns selber oder von anderen“): steht ein Verfahren
   mit `vorhanden: false`, rechnet die Eigenfertigung nicht (offen, nie geschätzt) und nennt den Zwilling; „→ Fremdfertigung nehmen“
   tauscht die Vorlage, **die Menge bleibt** (fehlt dafür ein Einkauf, sagt die Position das). **Kunden-Titel** kommt aus `titelVorgabe` —
   der interne Name („… (Zukauf)“, „Lohngravur“) geht nie aufs Blatt (Probe sucht Zukauf/Lohngravur/Laser/Hersteller).
-  **📎 Unterlagen** (Klaus 2026-10-13): ändern keinen Preis, darum auch am GESTELLTEN Angebot erlaubt. Dateien werden nie verkleinert
+  **📎 Unterlagen** (Klaus 2026-10-12): ändern keinen Preis, darum auch am GESTELLTEN Angebot erlaubt. Dateien werden nie verkleinert
   (anders als „📷 Bild dazu“); Dateityp aus der Endung, wenn der Browser `application/octet-stream` meldet (Corel!). Gehen nicht über
   die Whitelist, also nie aufs Blatt; an WorkFloh hängt `uebergeben` sie an (Links als Text). „⧉ für anderen Kunden“ nimmt sie mit.
   Ein Beispiel aus Unterlagen trägt keinen Preis — die Galerie rechnet ihn frisch.
-  **📥 Anfrage → Entwurf** (Klaus 2026-10-13): offline, nichts geraten — was nicht erkannt ist, steht als „Nicht erkannt“ da; ein Mengenwort
+  **📥 Anfrage → Entwurf** (Klaus 2026-10-12): offline, nichts geraten — was nicht erkannt ist, steht als „Nicht erkannt“ da; ein Mengenwort
   ohne passende Vorlage wird benannt. Eine Zahl ist nur eine **Menge**, wenn ein Stück-Wort oder ein Warenwort (Katalog + `WARENWORT`)
   dahinter steht — „in 2 Wochen“ nicht; Datum, PLZ, Telefon, Preis, Jahr werden vorher entfernt. Der Entwurf ist IMMER ein Entwurf
   (nie gestellt), das alte Angebot bleibt unberührt. Freemail-Domains zählen nicht als Firma. Proben nur mit erfundenen Mails
   (`tests/daten/anfragen/`). ⚠ Gewichte 45/30/20/5 und Schwelle 40 % sind gewählt, nicht gemessen.
-  **Kleinmengenzuschlag** (Klaus 2026-10-13: „als eigene Zeile, unter 10 Stück“): `angebot.rechne` → `r.kleinmenge`; EINE Zeile je
+  **Kleinmengenzuschlag** (Klaus 2026-10-12: „als eigene Zeile, unter 10 Stück“): `angebot.rechne` → `r.kleinmenge`; EINE Zeile je
   Angebot, sobald eine kalkulierte Stück-Position unter der Grenze liegt; Std./km/Montage (Dienstleistung ohne Versand) zählen nicht.
   Er geht über die Whitelist (`kleinmenge`) aufs Blatt, in WorkFloh und als Position an BookLedgerPro. Ein eingefrorener Stand ohne
   `kleinmenge` bleibt ohne Zuschlag — gestellte Angebote ändern sich nicht.
-  **Vollbild auch hier** (Klaus 2026-10-13): Seite so breit wie das Fenster auf Handy hoch/quer, Tablet, großem Schirm; die Spalten
+  **Vollbild auch hier** (Klaus 2026-10-12): Seite so breit wie das Fenster auf Handy hoch/quer, Tablet, großem Schirm; die Spalten
   „Menge + ins Angebot“ und „Verkauf“ stehen vorn, damit sie am Handy ohne Wischen da sind; ab 1024 px passt die ganze Tabelle.
 - **← Zurück** (Klaus 2026-10-12: „die App schließt automatisch … einen Button wie bei meinem Rezeptbuch, mehrmals zurück“):
   jeder Wechsel der Ansicht (Reiter, Katalog-Reiter, aufgeklappter Katalog-Eintrag, offenes Angebot) legt EINEN Eintrag in den

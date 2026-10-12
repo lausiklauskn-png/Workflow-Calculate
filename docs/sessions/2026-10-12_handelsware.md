@@ -1,4 +1,4 @@
-# Sitzung 2026-10-13 — Handelsware (Einkauf und Wiederverkauf)
+# Sitzung 2026-10-12 — Handelsware (Einkauf und Wiederverkauf)
 
 Brief: `BRIEF_2026-10-13_handelsware.md`.
 
