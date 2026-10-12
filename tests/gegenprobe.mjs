@@ -202,6 +202,25 @@ const FAELLE = [
     an: [["assets/app.css", ".handel-knopf{padding:6px 10px;font-weight:600;font-size:.85rem}", ".handel-knopf{padding:6px 10px;font-weight:600;font-size:.85rem}[data-handel-produkt]{max-width:600px}"]] },
   { name: "HANDEL-SEITE: Tabelle sprengt das Handy", probe: B, erwartet: "HANDY: die Seite Handelsware passt",
     an: [["assets/app.js", 'karte.append(h("div", { class: "tabelle-huelle" }, t));', "karte.append(t);"]] },
+  /* ── Lasergravur, Fremdfertigung (Klaus 2026-10-13) ── */
+  { name: "FREMD: fehlendes Gerät wird ignoriert", probe: K, erwartet: "FREMD: Gerät fehlt (Faserlaser)",
+    an: [["assets/kern/kalkulation.js", 'if (verfahren && verfahren.vorhanden === false) offen.push(', "if (false) offen.push("]] },
+  { name: "FREMD: kein Feld „vorhanden“ heißt „fehlt“", probe: K, erwartet: "FREMD: ohne Feld „vorhanden“",
+    an: [["assets/kern/kalkulation.js", 'if (verfahren && verfahren.vorhanden === false) offen.push(', "if (verfahren && verfahren.vorhanden !== true) offen.push("]] },
+  { name: "LASER: Glas auf dem Diodenlaser", probe: K, erwartet: "LASER: technische Regel",
+    an: [["assets/daten/laser.js", '"roh_sektglas", "Glas", ["laser_co2"], 3,', '"roh_sektglas", "Glas", ["laser_co2", "laser_diode"], 3,']] },
+  { name: "LASER: Edelstahl auf dem CO2-Laser", probe: K, erwartet: "LASER: technische Regel",
+    an: [["assets/daten/laser.js", '"roh_oeffner", "Flaschenöffner", ["laser_faser"], 1.5,', '"roh_oeffner", "Flaschenöffner", ["laser_co2", "laser_faser"], 1.5,']] },
+  { name: "LASER: Zeit je Name fehlt", probe: K, erwartet: "LASER: Einzelstück mit Namen rechnet",
+    an: [["assets/daten/laser.js", 'ruestMin: 0, minJeStueck: minJeName, minJeM2: 0 }];', "ruestMin: 0, minJeStueck: 0, minJeM2: 0 }];"]] },
+  { name: "WHITELIST: Kunden-Titel ist der interne Name", probe: K, erwartet: "WHITELIST: Kunden-Titel ohne Zukauf",
+    an: [["assets/kern/angebot.js", 'titel: v ? v.titelVorgabe || v.name : "",', 'titel: v ? v.name : "",']] },
+  { name: "BILDER: Laser-Zeichnungen fehlen", probe: K, erwartet: "BILDER: jede Laser-Vorlage",
+    an: [["assets/daten/bilder.js", '["kuli", "karte", "schiefer", "glas", "leder", "oeffner", "acryl"].forEach(', '[].forEach(']] },
+  { name: "LASER-SEITE: Fremdfertigung setzt still eine andere Menge", probe: B, erwartet: "LASER-SEITE: Fremdfertigung genommen — Menge bleibt 60",
+    an: [["assets/app.js", "p.staffeln = em.concat([p.menge]).filter(", "p.menge = em[0] || p.menge; p.staffeln = em.concat([p.menge]).filter("]] },
+  { name: "LASER-SEITE: kein Knopf zur Fremdfertigung", probe: B, erwartet: "LASER-SEITE: Flaschenöffner (Faserlaser fehlt)",
+    an: [["assets/app.js", "if (fv && !ro) karte.append(", "if (false) karte.append("]] },
 ];
 
 function vorkommen(text, teil) { let n = 0, i = 0; while ((i = text.indexOf(teil, i)) >= 0) { n++; i += teil.length; } return n; }

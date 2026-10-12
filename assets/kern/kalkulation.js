@@ -161,6 +161,10 @@
     var offen = [], weg = [];
     var verfahren = finde(kat.verfahren, pos.verfahren || vorlage.verfahrenVorgabe);
     if ((vorlage.verfahrenWahl || []).length && !verfahren) offen.push("Verfahren fehlt");
+    /* Kein eigenes Gerät (Klaus 2026-10-13: „wenn wir den Laser selber nicht haben, lassen wir die herstellen“) — nicht schätzen,
+       sondern die Fremdfertigung nennen: dasselbe Produkt als Einkaufsprodukt (vorlage.fremdVorlage) */
+    var fremd = vorlage.fremdVorlage ? finde(kat.vorlagen, vorlage.fremdVorlage) : null;
+    if (verfahren && verfahren.vorhanden === false) offen.push(verfahren.name + ": kein eigenes Gerät — fremd fertigen lassen" + (fremd ? " („" + fremd.name + "“, Seite Handelsware)" : ""));
     var farbenMax = Math.max(1, +vorlage.farbenMax || 1);
     var farben = Math.min(farbenMax, Math.max(1, Math.round(+pos.farben || 1)));
     var regel = verfahren ? verfahren.farbregel || "je_farbe" : "ein";
@@ -237,7 +241,7 @@
     var netto = eigen != null ? eigen : sch.listenpreis;
     var platzhalter = !!(sf.gebiet.platzhalter || material.some(function (m) { return m.platzhalter; }) || (verfahren && verfahren.platzhalter));
     return {
-      ok: offen.length === 0, offen: offen, vorlage: vorlage.id, menge: menge, farben: farben, farbFaktor: ff, stiche: stiche,
+      ok: offen.length === 0, offen: offen, vorlage: vorlage.id, menge: menge, farben: farben, fremd: fremd && verfahren && verfahren.vorhanden === false ? fremd.id : "", farbFaktor: ff, stiche: stiche,
       material: material, zeiten: zeiten, minuten: Math.round(minuten * 100) / 100, maschinenH: Math.round(maschinenH * 1000) / 1000,
       gewichtG: Math.round(gewichtG), m2Motiv: m2Motiv,
       fek: fek, maschine: maschine, mek: mek, maschinensatzCent: verfahren ? zahl(verfahren.maschinensatzCent) : null,

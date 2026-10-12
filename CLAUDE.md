@@ -25,6 +25,7 @@ unterscheiden), Violett = intern wie dort.
 | `assets/daten/werbetechnik.js` | Startkatalog — **alle Zahlen Platzhalter** (`platzhalter: true`); registriert `WC.STARTKATALOGE` |
 | `assets/daten/stickerei.js` · `dienstleistung.js` | weitere Arbeitsgebiete (Stufe 3), Platzhalter; Stickerei rechnet nach **Stichzahl** (`stiche`, Einheit `tsd_stiche`) |
 | `assets/daten/handelsware.js` | **Handelsware** (2026-10-13): Arbeitsgebiet mit Einkaufsprodukten (Kulis 500, Visitenkarten 250/500/1000, Preise Platzhalter), **keine** Lieferanten eingetragen; `WC.LIEFERANTEN_VORSCHLAEGE` = per Websuche gefundene Kandidaten, erst Klaus' „✓ geprüft“ trägt sie ein |
+| `assets/daten/laser.js` | **Lasergravur** (2026-10-13): Einzelstücke mit Namen, drei Laser-Stufen (Diode 10 W · CO2 60 W · Faser 30 W) mit der **technischen Regel**, welches Material welcher Laser kann (`verfahrenWahl`); `vorhanden` = Gerät in der Werkstatt (Annahme: nur CO2); zu jeder Vorlage ein Zwilling „— Lohngravur (Zukauf)“ (`fremdVorlage`) |
 | `assets/daten/beispiel-angebote.js` | 5 Beispiel-Angebote (Verein, Firmenstart, Fahrzeug, Firmenjubiläum, Hochzeit), 15 Positionen, alle drei Gebiete — Kunden erfunden; holt fehlende Gebiete mit |
 | `assets/daten/bilder.js` | Beispielbilder als **Zeichnungen** (SVG), mehrere Ansichten je Beispiel |
 | `assets/app.js` · `app.css` | Oberfläche (Schrittleiste, Preis nachbessern, Lernen, Markt, Katalog-Editor, Rechner) |
@@ -38,6 +39,7 @@ sessionStorage `workflowcalculate_sicherung_spaeter`. Am Angebot: `fassung`, `vo
 Handelsware (2026-10-13): im Katalog `lieferanten = [{id, name, url, fuer: wiederverkaeufer|privat|beides, anmeldung, notiz, geprueftAm}]` (darf fehlen),
 an der Vorlage `einkaufsprodukt: true` und `einkauf = [{menge, gesamtCent, lieferant, url, datum}]` (Komplettpreis je Menge **inkl. Versand**),
 im Ist `pos["P-n"].einkaufCent`. Die Seite hat die Adresse `#handel` (kein eigener Speicher).
+Fremdfertigung (2026-10-13): am Verfahren `vorhanden` (fehlt = da), an der Vorlage `fremdVorlage`, `titelVorgabe` (was der Kunde liest), `herstellung` (intern).
 
 ## Was hier leicht kaputtgeht
 
@@ -69,6 +71,10 @@ im Ist `pos["P-n"].einkaufCent`. Die Seite hat die Adresse `#handel` (kein eigen
   der günstigste zählt. Lieferant, Link, Einkaufspreis gehen nie hinaus (Prüfwert `LIEFERANT-PRUEFWORT`, 123,45 €).
   ⚠ **Halbe Einkaufszeilen gehören in `katalog.hinweise`, nie in `pruefe`**: ein Katalog, der `pruefe` nicht besteht, wird beim Laden
   still durch den Startkatalog ersetzt. Links nur über `katalog.sichereAdresse` (nur https).
+  **Fremdfertigung** (Klaus 2026-10-13: „alles, was wir anbieten … entweder von uns selber oder von anderen“): steht ein Verfahren
+  mit `vorhanden: false`, rechnet die Eigenfertigung nicht (offen, nie geschätzt) und nennt den Zwilling; „→ Fremdfertigung nehmen“
+  tauscht die Vorlage, **die Menge bleibt** (fehlt dafür ein Einkauf, sagt die Position das). **Kunden-Titel** kommt aus `titelVorgabe` —
+  der interne Name („… (Zukauf)“, „Lohngravur“) geht nie aufs Blatt (Probe sucht Zukauf/Lohngravur/Laser/Hersteller).
   **Vollbild auch hier** (Klaus 2026-10-13): Seite so breit wie das Fenster auf Handy hoch/quer, Tablet, großem Schirm; die Spalten
   „Menge + ins Angebot“ und „Verkauf“ stehen vorn, damit sie am Handy ohne Wischen da sind; ab 1024 px passt die ganze Tabelle.
 - **Vollbild** (Klaus 2026-10-12): `main` hat keine Höchstbreite, die Vorschau füllt den Schirm; nur das Papier-Blatt bleibt A4-breit.

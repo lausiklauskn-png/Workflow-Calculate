@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const WURZEL = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const KERN = ["assets/kern/geld.js", "assets/kern/mengen.js", "assets/kern/kalkulation.js", "assets/kern/versand.js", "assets/kern/markt.js",
-  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/kern/nachkalk.js", "assets/kern/recherche.js", "assets/daten/werbetechnik.js", "assets/daten/stickerei.js", "assets/daten/dienstleistung.js", "assets/daten/handelsware.js", "assets/daten/beispiel-angebote.js", "assets/daten/bilder.js"];
+  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/kern/nachkalk.js", "assets/kern/recherche.js", "assets/daten/werbetechnik.js", "assets/daten/stickerei.js", "assets/daten/dienstleistung.js", "assets/daten/handelsware.js", "assets/daten/laser.js", "assets/daten/beispiel-angebote.js", "assets/daten/bilder.js"];
 for (const f of KERN) require(join(WURZEL, f));
 const WC = globalThis.WC, K = WC.kalk, M = WC.mengen, A = WC.angebot, V = WC.versand, MK = WC.markt;
 
@@ -437,7 +437,7 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
     WC.STARTKATALOGE.handelsware.lieferanten.length === 0 && WC.STARTKATALOGE.handelsware.vorlagen.every((v) => v.einkauf.every((e) => !e.lieferant && !e.url)));
   ok("LIEFERANT: Vorschläge haben eine https-Adresse und KEIN Prüfdatum", WC.LIEFERANTEN_VORSCHLAEGE.length >= 5 && WC.LIEFERANTEN_VORSCHLAEGE.every((x) => /^https:\/\//.test(x.url) && !x.geprueftAm && ["wiederverkaeufer", "privat", "beides"].includes(x.fuer) && typeof x.anmeldung === "boolean"));
   ok("LIEFERANT: javascript:- oder http-Adresse wird nicht zum Link", KA.sichereAdresse("javascript:alert(1)") === "" && KA.sichereAdresse("http://x.example/") === "" && KA.sichereAdresse(" https://x.example/a ") === "https://x.example/a");
-  ok("HANDEL: Einkaufsprodukte stehen nicht unter den selbst gefertigten", KA.eigenfertigung(kat).every((v) => !v.einkaufsprodukt) && KA.handelsware(kat).map((v) => v.id).join() === "kuli_zukauf,visitenkarten_zukauf");
+  ok("HANDEL: Einkaufsprodukte stehen nicht unter den selbst gefertigten", KA.eigenfertigung(kat).every((v) => !v.einkaufsprodukt) && ["kuli_zukauf", "visitenkarten_zukauf", "tasse_sublimation_zukauf", "pin_emaille_zukauf"].every((id) => KA.handelsware(kat).some((v) => v.id === id)));
 
   /* Handrechnung aus dem Brief: 500 Kulis 120,00 € inkl. Versand, 25 % Handlungskosten, 20 % Gewinn → 180,00 € netto */
   const a = A.neu([], "2026-10-13"), p = A.neuePosition(a, kat, "kuli_zukauf");
@@ -502,6 +502,39 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   ok("UEBERGABE: Handelsware — nichts davon in der Auftragsdatei für WorkFloh", !verbot.test(jb), jb.match(verbot));
   const ad = WC.uebergabe.blpAdresse(d), jn = JSON.stringify(ad.nutzlast);
   ok("BLP: Handelsware — nichts davon in der Nutzlast an BookLedgerPro", ad.ok && !verbot.test(jn) && !verbot.test(decodeURIComponent(ad.url)), jn.match(verbot));
+}
+
+/* ── LASERGRAVUR in drei Stufen, Fremdfertigung wenn das Gerät fehlt (Klaus 2026-10-13) ── */
+{
+  const KA = WC.katalog, kat = kopie(WC.START); KA.gebietHinzufuegen(kat, WC.STARTKATALOGE.laser);
+  ok("LASER: Gebiet fehlerfrei, drei Laser-Stufen", KA.pruefe(kat).length === 0 && ["laser_diode", "laser_co2", "laser_faser"].every((id) => K.finde(kat.verfahren, id)), KA.pruefe(kat));
+  const eigen = kat.vorlagen.filter((v) => v.gebiet === "laser" && !v.einkaufsprodukt), wahl = (id) => K.finde(kat.vorlagen, id).verfahrenWahl;
+  ok("LASER: technische Regel — klares Glas und Acryl nur CO2, blanker Edelstahl nur Faser, Holz und Leder nie Faser",
+    wahl("name_sektglas").join() === "laser_co2" && wahl("name_acryl").join() === "laser_co2" && wahl("name_oeffner").join() === "laser_faser" && wahl("name_kuli_edelstahl").join() === "laser_faser" &&
+    !wahl("name_karte_holz").includes("laser_faser") && !wahl("name_leder").includes("laser_faser") &&
+    eigen.every((v) => !(v.verfahrenWahl.includes("laser_diode") && /glas|acryl|edelstahl|oeffner/.test(v.id))), eigen.map((v) => [v.id, v.verfahrenWahl]));
+  const pos1 = (id, m) => { const a = A.neu([], "2026-10-13"), p = A.neuePosition(a, kat, id); p.menge = m; return { a, p, e: K.position(kat, p, {}) }; };
+  const k1 = pos1("name_karte_holz", 1).e, k60 = pos1("name_karte_holz", 60).e;
+  ok("LASER: Einzelstück mit Namen rechnet (CO2 in der Werkstatt), 60 Namen sind je Stück günstiger", k1.ok && k60.ok && k60.stueckCent < k1.stueckCent && k60.minuten > k1.minuten, [k1.netto, k60.stueckCent, k1.minuten, k60.minuten]);
+  const o = pos1("name_oeffner", 1).e;
+  ok("FREMD: Gerät fehlt (Faserlaser) — nicht kalkuliert, nicht geschätzt, die Fremdfertigung steht dabei", !o.ok && /Faserlaser 30 W: kein eigenes Gerät — fremd fertigen lassen/.test(o.offen.join()) && o.fremd === "name_oeffner_zukauf", o.offen);
+  const k2 = kopie(kat); K.finde(k2.verfahren, "laser_faser").vorhanden = true;
+  const o2 = K.position(k2, pos1("name_oeffner", 1).p, {});
+  ok("FREMD: Haken „Gerät in der Werkstatt“ gesetzt — dann rechnet die Eigenfertigung", o2.ok && !o2.fremd, o2.offen);
+  ok("FREMD: ohne Feld „vorhanden“ (ältere Kataloge) gilt das Gerät als da", K.position(kat, pos(kat, "tasse", { menge: 10 }), {}).ok);
+  ok("FREMD: jede Laser-Vorlage hat ihre Fremdfertigung als Einkaufsprodukt mit Einkauf ab 1 Stück",
+    eigen.length === 8 && eigen.every((v) => { const z = K.finde(kat.vorlagen, v.fremdVorlage); return z && z.einkaufsprodukt && K.einkaufsMengen(z)[0] === 1 && z.titelVorgabe === v.titelVorgabe; }));
+  ok("BILDER: jede Laser-Vorlage hat Beispiele mit zwei Zeichnungen", eigen.every((v) => v.beispiele.length && v.beispiele.every((b) => b.ansichten.length >= 2 && b.ansichten.every((x) => WC.bildUrl(x[1]).startsWith("data:image/svg+xml")))));
+
+  /* Kundenblatt: der Kunde liest den Kunden-Titel — nie „Zukauf“, „Lohngravur“, den Laser oder die Herstellung */
+  KA.gebietHinzufuegen(kat, WC.STARTKATALOGE.handelsware);
+  const a = A.neu([], "2026-10-13"); a.kunde = { name: "Brautpaar Beispiel", anschrift: "", klasse: "C" };
+  A.neuePosition(a, kat, "name_oeffner_zukauf"); A.neuePosition(a, kat, "name_sektglas"); A.neuePosition(a, kat, "kuli_zukauf"); A.neuePosition(a, kat, "tasse_sublimation_zukauf");
+  const r = A.rechne(a, kat, a.kunde, false), d = WC.aussen.angebotExtern(a, r, {}, false), j = JSON.stringify(d);
+  const intern = /Zukauf|Lohngravur|Hersteller|herstellung|Faserlaser|CO2|Sublimation|Tampondruck/i;
+  ok("WHITELIST: Kunden-Titel ohne Zukauf, Lohngravur, Laser oder Herstellungsweg", d.positionen.length === 4 && !intern.test(j) && d.positionen.some((x) => x.titel === "Flaschenöffner mit Namensgravur"), j.match(intern));
+  const jb = JSON.stringify(WC.uebergabe.auftrag(d, "2026-10-13T10:00:00Z")) + JSON.stringify(WC.uebergabe.blpNutzlast(d));
+  ok("UEBERGABE: auch WorkFloh und BookLedgerPro sehen keinen Herstellungsweg", !intern.test(jb), jb.match(intern));
 }
 
 /* ── STUFE 2: Klaus' Symbol ── */

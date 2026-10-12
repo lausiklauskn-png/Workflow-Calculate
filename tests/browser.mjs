@@ -397,7 +397,7 @@ try {
     /* Katalog: Einkaufsprodukte nicht unter Produktvorlagen; der Haken lenkt eine Vorlage auf die Seite */
     await tippe(q, '[data-reiter="katalog"]', "Reiter Katalog");
     await tippe(q, '[data-kat-reiter="vorlagen"]', "Katalog Produktvorlagen");
-    ok("HANDEL-SEITE: im Katalog stehen die Einkaufsprodukte nicht unter den Produktvorlagen", await q.locator('[data-kat-eintrag="kuli_zukauf"]').count() === 0 && await q.getAttribute("[data-kat-handel]", "data-kat-handel").catch(() => "") === "2");
+    ok("HANDEL-SEITE: im Katalog stehen die Einkaufsprodukte nicht unter den Produktvorlagen", await q.locator('[data-kat-eintrag="kuli_zukauf"]').count() === 0 && await q.getAttribute("[data-kat-handel]", "data-kat-handel").catch(() => "") === "7");
     await tippe(q, '[data-kat-eintrag="tasse"]', "Vorlage Tasse");
     await q.locator('[data-kat-id="tasse"] [data-kat-feld="einkaufsprodukt"]').click();
     ok("HANDEL-SEITE: Haken „Einkaufsprodukt“ nimmt die Vorlage aus der Liste", await q.locator('[data-kat-eintrag="tasse"]').count() === 0);
@@ -412,8 +412,35 @@ try {
     const s8 = await seite(380), hq = s8.p;
     await hq.goto(url + "#handel"); await hq.waitForSelector("body[data-bereit]");
     await tippe(hq, "[data-handel-start]", "Beispiele Handelsware holen (Handy)");
-    ok("HANDY: die Seite Handelsware passt auf 380 px (Tabelle rollt in sich)", await hq.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1) && await hq.locator("[data-handel-tabelle]").count() === 2);
+    ok("HANDY: die Seite Handelsware passt auf 380 px (Tabelle rollt in sich)", await hq.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1) && await hq.locator("[data-handel-tabelle]").count() === 7);
     await s8.ctx.close();
+  }
+
+  /* ── Lasergravur: Einzelstück mit Namen, Fremdfertigung wenn das Gerät fehlt ── */
+  {
+    const s9 = await seite(1200), q = s9.p;
+    await q.goto(url + "#handel"); await q.waitForSelector("body[data-bereit]");
+    await tippe(q, '[data-handel-start-paket="laser"]', "Lasergravur holen");
+    ok("LASER-SEITE: die Lohngravuren stehen gruppiert auf der Seite Handelsware", await q.locator('[data-handel-gruppe="laser"]').count() === 1 &&
+      await q.locator('[data-handel-produkt="name_oeffner_zukauf"] [data-herstellung]').count() === 1);
+    await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
+    await tippe(q, "#neues-angebot", "Neues Angebot");
+    await q.selectOption("#vorlage-wahl", "name_karte_holz");
+    ok("LASER-SEITE: die Holzkarte zeigt Beispiele mit Zeichnung und Preis (1 Name, 60 Namen)", await q.locator('[data-galerie="name_karte_holz"] [data-beispiel-preis]').count() === 2 &&
+      await q.locator('[data-galerie="name_karte_holz"] img.gross').count() === 2);
+    await q.selectOption("#vorlage-wahl", "name_oeffner");
+    await tippe(q, "#position-leer", "Leere Position");
+    await q.locator('[data-position="P-1"] [data-feld="menge"]').fill("60"); await q.locator('[data-position="P-1"] [data-feld="menge"]').press("Tab");
+    ok("LASER-SEITE: Flaschenöffner (Faserlaser fehlt) — nicht kalkuliert, mit Knopf zur Fremdfertigung", /kein eigenes Gerät/.test(await q.textContent('[data-position="P-1"] [data-nicht-kalkuliert]').catch(() => "")) &&
+      await q.locator('[data-fremd-nehmen="name_oeffner_zukauf"]').count() === 1);
+    await tippe(q, '[data-fremd-nehmen="name_oeffner_zukauf"]', "Fremdfertigung nehmen");
+    ok("LASER-SEITE: Fremdfertigung genommen — Menge bleibt 60, und die Position sagt, dass für 60 kein Einkauf eingetragen ist",
+      await q.inputValue('[data-position="P-1"] [data-feld="menge"]').catch(() => "") === "60" && /für 60 Stk\. ist kein Einkauf eingetragen/.test(await q.textContent('[data-position="P-1"]').catch(() => "")));
+    await q.locator('[data-position="P-1"] [data-feld="menge"]').fill("50"); await q.locator('[data-position="P-1"] [data-feld="menge"]').press("Tab");
+    ok("LASER-SEITE: bei 50 Stück rechnet die Fremdfertigung (Einkauf + Aufschlag)", (await netto(q, "P-1")) > 0 && await q.locator('[data-position="P-1"] [data-handel-hinweis]').count() === 1);
+    const bl = await druck(q, "#druck-angebot");
+    ok("LASER-SEITE: Kundenblatt sagt „Flaschenöffner mit Namensgravur“ — ohne Zukauf, Lohngravur, Laser", /Flaschenöffner mit Namensgravur/.test(bl.text) && !/Zukauf|Lohngravur|Faserlaser|Hersteller/i.test(bl.html), bl.text.slice(0, 300));
+    await s9.ctx.close();
   }
 
   /* ── Vollbild: die Arbeitsfläche nutzt jede Breite (Klaus 2026-10-12) ── */

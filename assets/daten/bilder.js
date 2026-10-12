@@ -131,6 +131,23 @@
     for (var i = 0; i < n; i++) t += '<rect x="' + (50 + i * 110) + '" y="80" width="90" height="120" rx="6" fill="#fff" stroke="#9aa7b4" stroke-width="3"/>' + logo(95 + i * 110, 130, 34, i + 1);
     return rahmen(t + '<text x="200" y="240" font-family="Arial" font-size="13" text-anchor="middle" fill="#4b5560">' + n + " Entwürfe zur Auswahl</text>");
   }
+  /* Lasergravur (2026-10-13): Gegenstand mit eingraviertem Namen — Gravur dunkel/hell je Material */
+  function gravurText(x, y, gr, farbe) { return '<text x="' + x + '" y="' + y + '" font-family="Georgia,serif" font-style="italic" font-size="' + gr + '" fill="' + farbe + '" text-anchor="middle">Anna</text>'; }
+  function laser(art, detail) {
+    var F = {
+      kuli: ['<g transform="rotate(-15 200 150)"><rect x="40" y="135" width="300" height="30" rx="15" fill="#6d8fb3" stroke="#3d5670" stroke-width="3"/><path d="M340 140 l35 10 l-35 10z" fill="#9aa7b4"/>' + gravurText(200, 157, 20, "#e8eef4") + '</g>', '#e8eef4'],
+      karte: ['<rect x="90" y="70" width="220" height="140" rx="8" fill="#e8c99a" stroke="#a9834f" stroke-width="3"/>' + gravurText(200, 150, 40, "#5a3b17"), '#5a3b17'],
+      schiefer: ['<rect x="110" y="60" width="180" height="180" rx="10" fill="#3c4148" stroke="#22262b" stroke-width="3"/>' + gravurText(200, 160, 40, "#c9ced6"), '#c9ced6'],
+      glas: ['<path d="M170 50 h60 l-8 120 q-22 20 -44 0z" fill="#eaf4fb" stroke="#8fb3cc" stroke-width="3"/><rect x="196" y="180" width="8" height="60" fill="#8fb3cc"/><ellipse cx="200" cy="245" rx="40" ry="8" fill="#8fb3cc"/>' + gravurText(200, 120, 18, "#7d93a6"), '#7d93a6'],
+      leder: ['<rect x="130" y="90" width="140" height="80" rx="30" fill="#8a5a32" stroke="#5c3a1e" stroke-width="3"/><circle cx="150" cy="130" r="8" fill="#eef3f8"/><circle cx="150" cy="130" r="20" fill="none" stroke="#9aa7b4" stroke-width="4" transform="translate(-35 0)"/>' + gravurText(215, 140, 26, "#3a2210"), '#3a2210'],
+      oeffner: ['<rect x="80" y="125" width="240" height="50" rx="25" fill="#c9cfd6" stroke="#7c8792" stroke-width="3"/><circle cx="115" cy="150" r="14" fill="#eef3f8" stroke="#7c8792" stroke-width="3"/>' + gravurText(220, 160, 24, "#2b3036"), '#2b3036'],
+      acryl: ['<rect x="100" y="90" width="200" height="100" rx="6" fill="#ffffff" fill-opacity=".55" stroke="#9fb6c8" stroke-width="3"/><rect x="100" y="190" width="200" height="12" fill="#c7d0da"/>' + gravurText(200, 155, 40, "#b8c9d6"), '#b8c9d6'],
+    }[art];
+    if (!detail) return rahmen(F[0]);
+    return rahmen('<rect x="60" y="80" width="280" height="120" rx="10" fill="#fff" stroke="#9aa7b4" stroke-width="2" stroke-dasharray="6 4"/>' + gravurText(200, 160, 64, F[1] === "#e8eef4" ? "#3d5670" : F[1]) +
+      '<text x="200" y="230" font-family="Arial" font-size="13" text-anchor="middle" fill="#4b5560">Gravurfeld · ein Name je Stück</text>');
+  }
+  ["kuli", "karte", "schiefer", "glas", "leder", "oeffner", "acryl"].forEach(function (a) { WC.BILDER["laser-" + a] = laser(a, false); WC.BILDER["laser-" + a + "-detail"] = laser(a, true); });
   Object.assign(WC.BILDER, {
     "polo-vorne": polo(false, 2), "polo-detail": polo(true, 2), "polo-vorne-4": polo(false, 4), "polo-detail-4": polo(true, 4),
     "cap-vorne": cap(false), "cap-seite": cap(true),

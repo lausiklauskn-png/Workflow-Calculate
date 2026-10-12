@@ -23,7 +23,7 @@
   function neuePosition(a, kat, vorlageId) {
     var v = K().finde(kat.vorlagen, vorlageId);
     a.zaehler = (a.zaehler || 0) + 1;
-    var p = { id: "P-" + a.zaehler, vorlage: vorlageId, titel: v ? v.name : "", beschreibung: v ? v.beschreibungVorgabe || "" : "",
+    var p = { id: "P-" + a.zaehler, vorlage: vorlageId, titel: v ? v.titelVorgabe || v.name : "", beschreibung: v ? v.beschreibungVorgabe || "" : "",
       menge: v && v.staffelVorgabe ? v.staffelVorgabe[0] : 1, staffeln: v && v.staffelVorgabe ? v.staffelVorgabe.slice() : [1],
       breiteMm: v ? v.breiteVorgabe || "" : "", hoeheMm: v ? v.hoeheVorgabe || "" : "", farben: 1, verfahren: v ? v.verfahrenVorgabe || "" : "",
       wahl: {}, zeiten: {}, saetze: {}, eigen: {}, bilder: [] };
