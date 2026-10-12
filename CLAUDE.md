@@ -24,6 +24,7 @@ unterscheiden), Violett = intern wie dort.
 | `assets/kern/nachkalk.js` | **Nachkalkulation** (Stufe 3): Plan gegen Ist am gestellten Angebot, Faktor je Vorlage, Übernahme ins Zeit-Muster (einmal je Befund) |
 | `assets/daten/werbetechnik.js` | Startkatalog — **alle Zahlen Platzhalter** (`platzhalter: true`); registriert `WC.STARTKATALOGE` |
 | `assets/daten/stickerei.js` · `dienstleistung.js` | weitere Arbeitsgebiete (Stufe 3), Platzhalter; Stickerei rechnet nach **Stichzahl** (`stiche`, Einheit `tsd_stiche`) |
+| `assets/daten/handelsware.js` | **Handelsware** (2026-10-13): Arbeitsgebiet mit Einkaufsprodukten (Kulis 500, Visitenkarten 250/500/1000, Preise Platzhalter), **keine** Lieferanten eingetragen; `WC.LIEFERANTEN_VORSCHLAEGE` = per Websuche gefundene Kandidaten, erst Klaus' „✓ geprüft“ trägt sie ein |
 | `assets/daten/beispiel-angebote.js` | 5 Beispiel-Angebote (Verein, Firmenstart, Fahrzeug, Firmenjubiläum, Hochzeit), 15 Positionen, alle drei Gebiete — Kunden erfunden; holt fehlende Gebiete mit |
 | `assets/daten/bilder.js` | Beispielbilder als **Zeichnungen** (SVG), mehrere Ansichten je Beispiel |
 | `assets/app.js` · `app.css` | Oberfläche (Schrittleiste, Preis nachbessern, Lernen, Markt, Katalog-Editor, Rechner) |
@@ -34,6 +35,9 @@ unterscheiden), Violett = intern wie dort.
 localStorage `workflowcalculate_katalog`, `_einstellungen`, `_thema`, `_aktiv`, `_reiter`, `_sicherung_zuletzt`, `_ki_<FACH>` (KI-Schlüssel, nur verschlüsselt über `WERKSTATT_SCHLUESSEL.einlegen`) ·
 sessionStorage `workflowcalculate_sicherung_spaeter`. Am Angebot: `fassung`, `vorgaenger`, `ersetztDurch`, `anlass` (Stufe 2) · `ist = {pos:{"P-n":{minuten, materialCent, maschinenH}}, versandCent, datum}`,
 `beispiel` (Stufe 3). An der Position: `stiche`. An der Vorlage: `einheitText`, `stiche`, `sticheVorgabe`; im Verlauf `nk` (Schlüssel der Nachkalkulation).
+Handelsware (2026-10-13): im Katalog `lieferanten = [{id, name, url, fuer: wiederverkaeufer|privat|beides, anmeldung, notiz, geprueftAm}]` (darf fehlen),
+an der Vorlage `einkaufsprodukt: true` und `einkauf = [{menge, gesamtCent, lieferant, url, datum}]` (Komplettpreis je Menge **inkl. Versand**),
+im Ist `pos["P-n"].einkaufCent`. Die Seite hat die Adresse `#handel` (kein eigener Speicher).
 
 ## Was hier leicht kaputtgeht
 
@@ -57,6 +61,16 @@ sessionStorage `workflowcalculate_sicherung_spaeter`. Am Angebot: `fassung`, `vo
   Funde stehen `ungeprueft` in `vorlage.markt` (mit `quelle`, `zitat`, `notiz`) und zählen im Vergleich erst nach ✓.
   Hinaus geht nur `auftragsInfo` (Produkt, Menge, Maße, Farben, Stiche, Verfahren, Material) — nie Kunde/Titel/Beschreibung/Preise.
   Der Schlüssel liegt nur im Speicher der Sitzung, gemerkt nur verschlüsselt. Die Proben stellen die Gegenseite (`tests/daten/ki-antwort.mjs`).
+- **🛒 Handelsware** (Klaus 2026-10-13): eigene Seite `#handel` (Kopfknopf 🛒, auch als Lesezeichen/neuer Tab). Eine Vorlage mit
+  `einkaufsprodukt` steht **nur** dort — nicht in der Produktwahl und nicht unter Katalog → Produktvorlagen (Löschen/Kopieren dort
+  arbeitet trotzdem auf der GANZEN Liste). Rechnung: `WC.kalk.position` → `handelPosition` = `handel()` auf den Einkauf (Handlungskosten,
+  Gewinn, Kundenklasse); **kein Versandposten** (`angebot.rechne` überspringt Einkaufsprodukte), Skonto/Rabatt wirken hier nicht.
+  **Zwischenmengen werden nicht geschätzt** — ohne Einkauf für genau diese Menge ist die Position offen. Mehrere Einkäufe je Menge:
+  der günstigste zählt. Lieferant, Link, Einkaufspreis gehen nie hinaus (Prüfwert `LIEFERANT-PRUEFWORT`, 123,45 €).
+  ⚠ **Halbe Einkaufszeilen gehören in `katalog.hinweise`, nie in `pruefe`**: ein Katalog, der `pruefe` nicht besteht, wird beim Laden
+  still durch den Startkatalog ersetzt. Links nur über `katalog.sichereAdresse` (nur https).
+  **Vollbild auch hier** (Klaus 2026-10-13): Seite so breit wie das Fenster auf Handy hoch/quer, Tablet, großem Schirm; die Spalten
+  „Menge + ins Angebot“ und „Verkauf“ stehen vorn, damit sie am Handy ohne Wischen da sind; ab 1024 px passt die ganze Tabelle.
 - **Vollbild** (Klaus 2026-10-12): `main` hat keine Höchstbreite, die Vorschau füllt den Schirm; nur das Papier-Blatt bleibt A4-breit.
 - **Mengen-Einheit** (`einheitText`: Stk., Std., km) geht über die Whitelist (`einheit`) aufs Blatt, in WorkFloh und BLP-Texte.
 - **Die Gegenprobe gibt Klon-Pfade weiter** (`BLP_KLON`, `WORKFLOH_KLON`, `TOMYS_KLON`) — ohne sie wären Parser- und
@@ -83,6 +97,9 @@ sessionStorage `workflowcalculate_sicherung_spaeter`. Am Angebot: `fassung`, `vo
 - Die Import-Probe gegen Mein WorkFloh / Tomys WorkFloh läuft nur, wenn die Klone daneben liegen (sonst Hinweis, übersprungen).
 - ⚠ Nicht gemessen: Tablet, echtes Drucken/„Als PDF speichern“, Import der Auftragsdatei in WorkFloh am Gerät,
   der Sprung nach BookLedgerPro mit Entsperren, Download/Dateiwahl der Sicherung am Tablet.
+- Handelsware: **kein Lieferant ist geprüft eingetragen** — die Seiten waren aus dem Behälter nicht abrufbar (Proxy 403, Abruf-Werkzeug
+  ohne Namensauflösung); die Vorschläge stammen aus der Websuche. KI-Recherche der Einkaufspreise (Brief Punkt 8, optional) **nicht gebaut**.
+  Offen bei Klaus: Handlungskosten-Satz, Zwischenmengen, eigener Tab oder Ansicht (gebaut: Ansicht mit eigener Adresse), Lieferanten mit Konto.
 - Die Parser-Probe gegen BookLedgerPro läuft nur, wenn der Klon daneben liegt (`BLP_KLON` oder `../BookLedgerPro`).
 
 ## Prüfen

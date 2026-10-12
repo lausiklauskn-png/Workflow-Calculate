@@ -37,6 +37,7 @@ async function druck(p, sel) {
   await p.click(sel);
   return p.evaluate(() => ({ text: document.getElementById("druck").textContent, html: document.getElementById("druck").innerHTML, n: window.__gedruckt || 0 }));
 }
+const K_kuli = (k) => ((k && k.vorlagen) || []).find((v) => v.id === "kuli_zukauf") || { einkauf: [{}] };
 const netto = (p, id) => p.evaluate((id) => Number((document.querySelector('[data-position="' + id + '"] [data-pos-netto]') || {}).dataset ? document.querySelector('[data-position="' + id + '"] [data-pos-netto]').dataset.posNetto : NaN), id);
 
 try {
@@ -341,6 +342,80 @@ try {
     await s6.ctx.close();
   }
 
+  /* ── 🛒 Handelsware: eigene Seite #handel, Lieferanten, ins Angebot, nichts Internes hinaus ── */
+  {
+    const s7 = await seite(1200), q = s7.p;
+    await q.goto(url + "#handel");
+    await q.waitForSelector("body[data-bereit]");
+    ok("HANDEL-SEITE: #handel öffnet die Seite direkt (Lesezeichen, neuer Tab)", await q.locator("[data-handel-seite]").count() === 1 && /\bon\b/.test(await q.getAttribute("#handel-knopf", "class")));
+    ok("HANDEL-SEITE: der Knopf „↗ in neuem Tab“ führt auf #handel", await q.getAttribute("[data-neuer-tab]", "href") === "#handel" && await q.getAttribute("[data-neuer-tab]", "target") === "_blank");
+    await tippe(q, "[data-handel-start]", "Beispiele Handelsware holen");
+    ok("HANDEL-SEITE: Kulis und Visitenkarten (250/500/1000) stehen da", await q.locator('[data-handel-produkt="kuli_zukauf"]').count() === 1 &&
+      await q.locator('[data-handel-produkt="visitenkarten_zukauf"] [data-handel-zeile]').count() === 3);
+    const z500 = q.locator('[data-handel-produkt="kuli_zukauf"] [data-handel-zeile="500"]');
+    ok("HANDEL-SEITE: 500 Kulis, Einkauf 120,00 € → Verkauf 180,00 €, Spanne 60,00 €", await z500.getAttribute("data-einkauf").catch(() => "") === "12000" &&
+      await z500.getAttribute("data-verkauf").catch(() => "") === "18000" && await z500.locator("[data-spanne]").getAttribute("data-spanne").catch(() => "") === "6000" && /50 %/.test(await z500.locator("[data-aufschlag]").textContent().catch(() => "")));
+    await q.selectOption("[data-handel-klasse]", "C");
+    ok("HANDEL-SEITE: Kundenklasse C rechnet mit +10 % Gewinn (195,00 €)", await z500.getAttribute("data-verkauf").catch(() => "") === "19500");
+    await q.selectOption("[data-handel-klasse]", "B");
+    const katLS = () => q.evaluate(() => JSON.parse(localStorage.getItem("workflowcalculate_katalog") || "null"));
+    ok("HANDEL-SEITE: Vorschläge stehen da — eingetragen ist noch kein Lieferant", await q.locator("[data-vorschlag]").count() >= 5 && ((await katLS()) || {}).lieferanten.length === 0);
+    await q.locator("[data-vorschlaege] summary").click();
+    await tippe(q, '[data-vorschlag-uebernehmen="saxoprint"]', "Vorschlag SAXOPRINT übernehmen");
+    const lf = ((await katLS()) || { lieferanten: [] }).lieferanten;
+    ok("HANDEL-SEITE: „✓ geprüft“ trägt genau diesen Lieferanten ein, mit dem Datum des Tipps", lf.length === 1 && lf[0].id === "saxoprint" && /^\d{4}-\d\d-\d\d$/.test(lf[0].geprueftAm || "") &&
+      await q.locator('[data-lieferant="saxoprint"] [data-lieferant-link]').getAttribute("href").catch(() => "") === "https://www.saxoprint.de/", lf);
+
+    /* Eigener Einkauf mit Prüfwerten */
+    await tippe(q, '[data-handel-bearbeiten="kuli_zukauf"]', "Einkauf bearbeiten");
+    const zeile = q.locator('[data-handel-editor="kuli_zukauf"] [data-einkauf-zeile="0"]');
+    await zeile.locator('[data-kat-feld="url"]').fill("javascript:alert(1)"); await zeile.locator('[data-kat-feld="url"]').press("Tab");
+    ok("HANDEL-SEITE: eine javascript:-Adresse wird abgewiesen", /https:\/\//.test(await q.textContent("[data-meldung]").catch(() => "")) && !(K_kuli(await katLS()).einkauf[0].url));
+    await zeile.locator('[data-kat-feld="gesamtCent"]').fill("123,45"); await zeile.locator('[data-kat-feld="gesamtCent"]').press("Tab");
+    await q.locator('[data-handel-editor="kuli_zukauf"] [data-einkauf-zeile="0"] [data-kat-feld="lieferant"]').selectOption("saxoprint");
+    const z2 = q.locator('[data-handel-editor="kuli_zukauf"] [data-einkauf-zeile="0"]');
+    await z2.locator('[data-kat-feld="url"]').fill("https://lieferant-pruefwort.example/kuli-4711"); await z2.locator('[data-kat-feld="url"]').press("Tab");
+    ok("HANDEL-SEITE: eigener Einkaufspreis rechnet sofort neu (123,45 € → 185,17 €)", await z500.getAttribute("data-verkauf").catch(() => "") === "18517", await z500.getAttribute("data-verkauf").catch(() => ""));
+    ok("HANDEL-SEITE: eigener Einkaufspreis nimmt die Platzhalter-Marke des Einkaufs weg (die Sätze bleiben markiert)", await q.locator('[data-handel-produkt="kuli_zukauf"] [data-einkauf-platzhalter]').count() === 0 &&
+      await q.locator('[data-handel-produkt="kuli_zukauf"] [data-saetze-platzhalter]').count() === 1 && await q.locator('[data-handel-produkt="visitenkarten_zukauf"] [data-einkauf-platzhalter]').count() === 1);
+    ok("HANDEL-SEITE: Lieferant und Link stehen in der Zeile", /SAXOPRINT/.test(await z500.textContent().catch(() => "")) && await z500.locator("[data-lieferant-link]").getAttribute("href").catch(() => "") === "https://lieferant-pruefwort.example/kuli-4711");
+
+    await tippe(q, '[data-ins-angebot="kuli_zukauf:500"]', "ins Angebot");
+    ok("HANDEL-SEITE: „ins Angebot“ legt die Position an (185,17 €) und verlässt #handel", await netto(q, "P-1") === 18517 && await q.evaluate(() => location.hash) === "" && /neu angelegt/.test(await q.textContent("[data-meldung]").catch(() => "")));
+    ok("HANDEL-SEITE: kein eigener Versandposten im Angebot", /Nichts zu versenden/.test(await q.textContent("[data-versand]").catch(() => "")));
+    ok("HANDEL-SEITE: die Position sagt, dass es ein Einkaufsprodukt ist", await q.locator('[data-position="P-1"] [data-handel-hinweis]').count() === 1);
+    const opts = await q.locator("#vorlage-wahl option").evaluateAll((l) => l.map((o) => o.value));
+    ok("HANDEL-SEITE: Einkaufsprodukte stehen nicht in der Produktwahl der Eigenfertigung", opts.includes("tasse") && !opts.includes("kuli_zukauf") && !opts.includes("visitenkarten_zukauf") && await q.locator("[data-handel-verweis]").count() === 1, opts);
+    const bl = await druck(q, "#druck-angebot");
+    ok("HANDEL-SEITE: Kundenblatt trägt den Verkauf (185,17 €), aber keinen Lieferanten, Link oder Einkauf", /185,17/.test(bl.text) && !/SAXOPRINT|saxoprint|pruefwort|kuli-4711|123,45|Einkauf|Handlungsk/i.test(bl.html), bl.text.slice(0, 300));
+    await q.evaluate(() => { window.__wcUebergabe = null; });
+    await tippe(q, "#uebergabe", "An WorkFloh übergeben");
+    await q.waitForFunction(() => !!window.__wcUebergabe, null, { timeout: 5000 }).catch(() => {});
+    const datei = await q.evaluate(() => window.__wcUebergabe || "");
+    ok("HANDEL-SEITE: Auftragsdatei für WorkFloh ohne Lieferant, Link, Einkauf", datei.length > 50 && /185,17/.test(datei) && !/SAXOPRINT|saxoprint|pruefwort|kuli-4711|123,45/i.test(datei), datei.slice(0, 200));
+
+    /* Katalog: Einkaufsprodukte nicht unter Produktvorlagen; der Haken lenkt eine Vorlage auf die Seite */
+    await tippe(q, '[data-reiter="katalog"]', "Reiter Katalog");
+    await tippe(q, '[data-kat-reiter="vorlagen"]', "Katalog Produktvorlagen");
+    ok("HANDEL-SEITE: im Katalog stehen die Einkaufsprodukte nicht unter den Produktvorlagen", await q.locator('[data-kat-eintrag="kuli_zukauf"]').count() === 0 && await q.getAttribute("[data-kat-handel]", "data-kat-handel").catch(() => "") === "2");
+    await tippe(q, '[data-kat-eintrag="tasse"]', "Vorlage Tasse");
+    await q.locator('[data-kat-id="tasse"] [data-kat-feld="einkaufsprodukt"]').click();
+    ok("HANDEL-SEITE: Haken „Einkaufsprodukt“ nimmt die Vorlage aus der Liste", await q.locator('[data-kat-eintrag="tasse"]').count() === 0);
+    await tippe(q, "#handel-knopf", "Knopf Handelsware");
+    ok("HANDEL-SEITE: … und sie steht auf der Seite Handelsware, ohne geschätzten Preis", await q.locator('[data-handel-produkt="tasse"]').count() === 1 && await q.locator('[data-handel-produkt="tasse"] [data-handel-zeile]').count() === 0 &&
+      await q.evaluate(() => location.hash) === "#handel");
+    await tippe(q, '[data-reiter="katalog"]', "Reiter Katalog");
+    await tippe(q, '[data-kat-reiter="lieferanten"]', "Katalog Lieferanten");
+    ok("HANDEL-SEITE: der Katalog hat den Reiter „Lieferanten“ mit dem geprüften Eintrag", await q.locator('[data-kat-eintrag="saxoprint"]').count() === 1);
+    await s7.ctx.close();
+
+    const s8 = await seite(380), hq = s8.p;
+    await hq.goto(url + "#handel"); await hq.waitForSelector("body[data-bereit]");
+    await tippe(hq, "[data-handel-start]", "Beispiele Handelsware holen (Handy)");
+    ok("HANDY: die Seite Handelsware passt auf 380 px (Tabelle rollt in sich)", await hq.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1) && await hq.locator("[data-handel-tabelle]").count() === 2);
+    await s8.ctx.close();
+  }
+
   /* ── Vollbild: die Arbeitsfläche nutzt jede Breite (Klaus 2026-10-12) ── */
   {
     const v = await seite(1920), q = v.p;
@@ -355,6 +430,26 @@ try {
     await tippe(q, "#vorschau-angebot", "Vorschau");
     const dlg = await q.evaluate(() => { const r = document.getElementById("vorschau").getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), window.innerWidth, window.innerHeight]; });
     ok("VOLLBILD: die Vorschau füllt den ganzen Schirm", Math.abs(dlg[0] - dlg[2]) <= 1 && Math.abs(dlg[1] - dlg[3]) <= 1, dlg);
+    /* Die Seite Handelsware: Vollbild auf jedem Gerät (Klaus 2026-10-13) — Verkauf und „ins Angebot“ ohne Wischen */
+    await q.keyboard.press("Escape").catch(() => {});
+    await q.goto(url + "#handel"); await q.waitForSelector("[data-handel-seite]");
+    await tippe(q, "[data-handel-start]", "Beispiele Handelsware holen (Vollbild)");
+    const hm = [];
+    for (const [b, hh, name] of [[360, 740, "Handy hoch"], [740, 360, "Handy quer"], [1024, 768, "Tablet"], [1920, 1080, "großer Schirm"]]) {
+      await q.setViewportSize({ width: b, height: hh });
+      hm.push(await q.evaluate((name) => {
+        const w = document.documentElement.clientWidth, m = document.querySelector("main").getBoundingClientRect();
+        const karten = [...document.querySelectorAll("[data-handel-produkt]")].map((k) => k.getBoundingClientRect().width);
+        const knopf = document.querySelector('[data-ins-angebot="visitenkarten_zukauf:1000"]').getBoundingClientRect();
+        const verkauf = document.querySelector('[data-handel-produkt="visitenkarten_zukauf"] [data-handel-zeile="1000"] td:nth-child(2)').getBoundingClientRect();
+        const huelle = document.querySelector('[data-handel-produkt="visitenkarten_zukauf"] .tabelle-huelle');
+        return { name, w, main: Math.round(m.width), karteVoll: karten.every((x) => x >= m.width - 40), seiteRollt: document.documentElement.scrollWidth > w + 1,
+          sichtbar: knopf.right <= w && verkauf.right <= w, tabellePasst: huelle.scrollWidth <= huelle.clientWidth + 1 };
+      }, name));
+    }
+    ok("VOLLBILD: die Seite Handelsware ist auf Handy hoch/quer, Tablet und großem Schirm so breit wie das Fenster, die Karten füllen sie", hm.every((x) => Math.abs(x.main - x.w) <= 1 && x.karteVoll && !x.seiteRollt), hm);
+    ok("VOLLBILD: Handelsware — Verkauf und „ins Angebot“ stehen auf jedem Gerät ohne Wischen da", hm.every((x) => x.sichtbar), hm);
+    ok("VOLLBILD: Handelsware — ab Tablet passt die ganze Tabelle, ohne Rollen", hm.filter((x) => x.w >= 1024).every((x) => x.tabellePasst), hm);
     await v.ctx.close();
   }
 

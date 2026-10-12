@@ -277,3 +277,9 @@ details.weg-details summary{cursor:pointer;color:var(--intern)}
 .schritte{padding:10px 14px}
 .schritte .btn.chip.fertig{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 55%,transparent)}
 .schritte p{margin:8px 0 0}
+/* 🛒 Handelsware (Klaus 2026-10-13): eigener Knopf in der Kopfleiste, am Handy nur das Symbol */
+.handel-knopf{padding:6px 10px;font-weight:600;font-size:.85rem}
+@media (max-width:520px){.handel-knopf .lang{display:none}}
+.handel-tab td,.handel-tab th{padding:5px 6px;white-space:nowrap}
+.handel-tab tr.gedaempft td{opacity:.7}
+.handel-tab td.handel-menge{display:flex;flex-direction:column;align-items:flex-start;gap:4px}

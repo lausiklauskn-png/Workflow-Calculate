@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const WURZEL = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const KERN = ["assets/kern/geld.js", "assets/kern/mengen.js", "assets/kern/kalkulation.js", "assets/kern/versand.js", "assets/kern/markt.js",
-  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/kern/nachkalk.js", "assets/kern/recherche.js", "assets/daten/werbetechnik.js", "assets/daten/stickerei.js", "assets/daten/dienstleistung.js", "assets/daten/beispiel-angebote.js", "assets/daten/bilder.js"];
+  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/kern/nachkalk.js", "assets/kern/recherche.js", "assets/daten/werbetechnik.js", "assets/daten/stickerei.js", "assets/daten/dienstleistung.js", "assets/daten/handelsware.js", "assets/daten/beispiel-angebote.js", "assets/daten/bilder.js"];
 for (const f of KERN) require(join(WURZEL, f));
 const WC = globalThis.WC, K = WC.kalk, M = WC.mengen, A = WC.angebot, V = WC.versand, MK = WC.markt;
 
@@ -425,6 +425,83 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   ok("RECHERCHE: abgewiesener Schlüssel → Fehler mit Grund, nichts übernommen", /invalid x-api-key/.test(fehl));
   const abl = await R.rufen("sk-ant-x", info, stell([{ stop_reason: "refusal", content: [] }])).then(() => "", (e) => e.message);
   ok("RECHERCHE: Ablehnung (refusal) wird gemeldet, nicht als leeres Ergebnis", /abgelehnt/.test(abl));
+}
+
+/* ── HANDELSWARE (Klaus 2026-10-13): fertig eingekauft, mit Aufschlag weiterverkauft ── */
+{
+  const KA = WC.katalog, kat = kopie(WC.START);
+  ok("KATALOG: ein Katalog ohne Lieferanten-Liste (von vor der Handelsware) ist fehlerfrei", KA.pruefe(kat).length === 0 && kat.lieferanten === undefined);
+  KA.gebietHinzufuegen(kat, WC.STARTKATALOGE.handelsware);
+  ok("KATALOG: Handelsware dazu — fehlerfrei, Lieferanten-Liste angelegt", KA.pruefe(kat).length === 0 && Array.isArray(kat.lieferanten), KA.pruefe(kat));
+  ok("LIEFERANT: die Startliste trägt nichts Ungeprüftes ein (keine Lieferanten, Einkäufe ohne Lieferant)",
+    WC.STARTKATALOGE.handelsware.lieferanten.length === 0 && WC.STARTKATALOGE.handelsware.vorlagen.every((v) => v.einkauf.every((e) => !e.lieferant && !e.url)));
+  ok("LIEFERANT: Vorschläge haben eine https-Adresse und KEIN Prüfdatum", WC.LIEFERANTEN_VORSCHLAEGE.length >= 5 && WC.LIEFERANTEN_VORSCHLAEGE.every((x) => /^https:\/\//.test(x.url) && !x.geprueftAm && ["wiederverkaeufer", "privat", "beides"].includes(x.fuer) && typeof x.anmeldung === "boolean"));
+  ok("LIEFERANT: javascript:- oder http-Adresse wird nicht zum Link", KA.sichereAdresse("javascript:alert(1)") === "" && KA.sichereAdresse("http://x.example/") === "" && KA.sichereAdresse(" https://x.example/a ") === "https://x.example/a");
+  ok("HANDEL: Einkaufsprodukte stehen nicht unter den selbst gefertigten", KA.eigenfertigung(kat).every((v) => !v.einkaufsprodukt) && KA.handelsware(kat).map((v) => v.id).join() === "kuli_zukauf,visitenkarten_zukauf");
+
+  /* Handrechnung aus dem Brief: 500 Kulis 120,00 € inkl. Versand, 25 % Handlungskosten, 20 % Gewinn → 180,00 € netto */
+  const a = A.neu([], "2026-10-13"), p = A.neuePosition(a, kat, "kuli_zukauf");
+  const r = A.rechne(a, kat, null, false), e = r.positionen[0].erg;
+  ok("HANDEL: Handrechnung — 120,00 + 25 % = 150,00 + 20 % = 180,00 € netto", e.ok && e.handel.bezugspreis === 12000 && e.handel.handlungskosten === 3000 && e.selbstkosten === 15000 && e.handel.gewinn === 3000 && e.netto === 18000 && e.stueckCent === 36, e);
+  ok("HANDEL: kein eigener Versandposten — der Versand steckt in Einkauf und Verkauf", r.versand.leer === true && r.summen.netto === 18000, r.versand);
+  ok("HANDEL: der Rechenweg nennt die Handelskalkulation Zeile für Zeile", e.schema.zeilen.length === 5 && /inkl\. Versand/.test(e.schema.zeilen[0].text) && e.schema.listenpreis === 18000);
+  ok("HANDEL: Platzhalter-Preis wird als Platzhalter gemeldet", e.platzhalter === true);
+  const c = K.position(kat, p, { kunde: { klasse: "C" } });
+  ok("HANDEL: C-Kunde — Gewinn 20 % + 10 % → 195,00 €", c.netto === 19500, c.netto);
+
+  const v = K.finde(kat.vorlagen, "visitenkarten_zukauf"), pv = A.neuePosition(a, kat, "visitenkarten_zukauf");
+  ok("HANDEL: Staffel aus den eingetragenen Einkaufsmengen (250, 500, 1000)", pv.staffeln.join() === "250,500,1000" && pv.menge === 250);
+  pv.menge = 300;
+  const z = K.position(kat, pv, {});
+  ok("HANDEL: Zwischenmenge (300) wird NICHT geschätzt — nicht kalkuliert, mit den eingetragenen Mengen", !z.ok && /300 Stk\. ist kein Einkauf eingetragen \(eingetragen: 250, 500, 1000\)/.test(z.offen[0]), z.offen);
+  ok("HANDEL: die nicht kalkulierte Zwischenmenge zählt nicht in die Summe", A.rechne(a, kat, null, false).summen.offen === 1);
+  pv.menge = 500;
+  v.einkauf.push({ menge: 500, gesamtCent: 2500, lieferant: "", url: "", datum: "2026-10-13" }, { menge: 500, gesamtCent: 3500, lieferant: "", url: "", datum: "2026-10-13" });
+  const g = K.position(kat, pv, {});
+  ok("HANDEL: mehrere Einkäufe für dieselbe Menge — der günstigste zählt, und es steht dabei", g.handel.bezugspreis === 2500 && g.weg.some((w) => /3 Einkäufe/.test(w)), g.weg);
+  v.einkauf.push({ menge: 2000, gesamtCent: null });
+  const f = K.position(kat, Object.assign(kopie(pv), { menge: 2000 }), {});
+  ok("HANDEL: fehlender Einkaufspreis → nicht kalkuliert, nicht 0", !f.ok && /Einkaufspreis für 2000 Stk\. fehlt/.test(f.offen[0]), f.offen);
+  const halb = kopie(kat); K.finde(halb.vorlagen, "kuli_zukauf").einkauf.push({ menge: null, gesamtCent: null, lieferant: "gibt_es_nicht", url: "" });
+  ok("KATALOG: halb ausgefüllte Einkaufszeile hält den Katalog nicht auf (nur ein Hinweis)", KA.pruefe(halb).length === 0 && KA.hinweise(halb).length === 2, [KA.pruefe(halb), KA.hinweise(halb)]);
+
+  /* Eine eigene Vorlage (Tasse: Versand „stueck“, eigene Staffel) wird per Haken zum Einkaufsprodukt —
+     die Beispiele oben tragen schon versandArt „keiner“ und passende Staffeln und könnten das nicht zeigen */
+  const tv = K.finde(kat.vorlagen, "tasse"); tv.einkaufsprodukt = true; tv.einkauf = [{ menge: 50, gesamtCent: 20000 }, { menge: 100, gesamtCent: 36000 }];
+  const ta = A.neu([], "2026-10-13"), tp = A.neuePosition(ta, kat, "tasse"), tr = A.rechne(ta, kat, null, false);
+  ok("HANDEL: per Haken umgestellte Vorlage — kein eigener Versandposten (Tasse, sonst Versand „stueck“)", tv.versandArt !== "keiner" && tr.versand.leer === true && tr.summen.netto === 30000, tr.versand);
+  ok("HANDEL: per Haken umgestellte Vorlage — Staffel aus den Einkaufsmengen statt der alten Staffel", tp.staffeln.join() === "50,100" && tp.menge === 50 && tv.staffelVorgabe.join() !== "50,100", [tp.staffeln, tv.staffelVorgabe]);
+
+  /* Einfrieren: der Einkauf gehört zum Stand */
+  const b = A.neu([], "2026-10-13"); A.neuePosition(b, kat, "kuli_zukauf"); A.stellen(b, kat);
+  K.finde(kat.vorlagen, "kuli_zukauf").einkauf[0].gesamtCent = 50000;
+  ok("HANDEL: gestelltes Angebot behält den Einkauf von damals", A.rechne(b, kat, null, false).summen.netto === 18000);
+
+  /* Nachkalkulation: Ist-Einkauf gegen Plan */
+  const nk0 = WC.nachkalk.angebot(b, A.rechne(b, kat, null, false));
+  ok("NK-HANDEL: ohne Ist zählt der Plan, und das wird gesagt", nk0.summe.ausPlan === 1 && nk0.positionen[0].handel && nk0.positionen[0].dbIst === 3000);
+  b.ist = { pos: { "P-1": { einkaufCent: 13000 } } };
+  const nk = WC.nachkalk.angebot(b, A.rechne(b, kat, null, false)).positionen[0];
+  ok("NK-HANDEL: Einkauf 130,00 statt 120,00 → Selbstkosten 162,50, Deckungsbeitrag 17,50", nk.erfasst && nk.ist.einkauf === 13000 && nk.einkaufDiff === 1000 && nk.ist.selbstkosten === 16250 && nk.dbIst === 1750, nk);
+}
+
+/* ── WHITELIST HANDELSWARE: Lieferant, Link und Einkaufspreis gehen nie hinaus ── */
+{
+  const kat = kopie(WC.START); WC.katalog.gebietHinzufuegen(kat, WC.STARTKATALOGE.handelsware);
+  kat.lieferanten.push({ id: "lf_pruef", name: "LIEFERANT-PRUEFWORT", url: "https://lieferant-pruefwort.example/", fuer: "wiederverkaeufer", anmeldung: true, geprueftAm: "2026-10-13" });
+  K.finde(kat.vorlagen, "kuli_zukauf").einkauf = [{ menge: 500, gesamtCent: 12345, lieferant: "lf_pruef", url: "https://lieferant-pruefwort.example/kuli-4711", datum: "2026-10-13" }];
+  const a = A.neu([], "2026-10-13"); a.kunde = { name: "Kunde Beispiel", anschrift: "", klasse: "B" };
+  A.neuePosition(a, kat, "kuli_zukauf"); A.neuePosition(a, kat, "tasse").menge = 50;
+  const r = A.rechne(a, kat, a.kunde, false);
+  ok("WHITELIST: Handelsware — der Prüfwert wird wirklich gerechnet (Einkauf 123,45 € → 185,17 €)", r.positionen[0].erg.ok && r.positionen[0].erg.netto === 18517 && /LIEFERANT-PRUEFWORT/.test(r.positionen[0].erg.weg.join(" ")));
+  const d = WC.aussen.angebotExtern(a, r, { name: "Firma" }, false), j = JSON.stringify(d);
+  const verbot = /PRUEFWORT|pruefwort|kuli-4711|lf_pruef|12345|123,45|lieferant|einkauf|bezugspreis|handlungskosten/i;
+  ok("WHITELIST: Handelsware — kein Lieferant, kein Link, kein Einkaufspreis im Kundenblatt", !verbot.test(j), j.match(verbot));
+  ok("WHITELIST: Handelsware — die Position steht da (Verkauf 185,17 €)", d.positionen.some((x) => x.gesamtCent === 18517 && x.menge === 500));
+  const jb = JSON.stringify(WC.uebergabe.buendel([WC.uebergabe.auftrag(d, "2026-10-13T10:00:00Z")], "2026-10-13T10:00:00Z"));
+  ok("UEBERGABE: Handelsware — nichts davon in der Auftragsdatei für WorkFloh", !verbot.test(jb), jb.match(verbot));
+  const ad = WC.uebergabe.blpAdresse(d), jn = JSON.stringify(ad.nutzlast);
+  ok("BLP: Handelsware — nichts davon in der Nutzlast an BookLedgerPro", ad.ok && !verbot.test(jn) && !verbot.test(decodeURIComponent(ad.url)), jn.match(verbot));
 }
 
 /* ── STUFE 2: Klaus' Symbol ── */

@@ -5,6 +5,9 @@
   "use strict";
   var WC = g.WC = g.WC || {};
   var LISTEN = ["gebiete", "materialien", "verfahren", "vorlagen", "verpackungen", "versand"];
+  /* Darf fehlen (Kataloge von vor der Handelsware) — fehlt sie, heißt das „keine Lieferanten“, kein Fehler */
+  var ZUSATZ = ["lieferanten"];
+  var FUER = ["wiederverkaeufer", "privat", "beides"];
   var EINHEITEN = ["m2", "lfm", "stueck", "platte", "tsd_stiche"];
   var FARBREGELN = ["ein", "je_farbe", "digital"];
 
@@ -17,6 +20,16 @@
     if (!kat || typeof kat !== "object") return ["kein Katalog"];
     LISTEN.forEach(function (l) {
       if (!Array.isArray(kat[l])) { f.push("Liste „" + l + "“ fehlt"); return; }
+      var gesehen = {};
+      kat[l].forEach(function (x) {
+        if (!x || !x.id) f.push(l + ": Eintrag ohne Kennung");
+        else if (gesehen[x.id]) f.push(l + ": Kennung „" + x.id + "“ doppelt");
+        else gesehen[x.id] = 1;
+      });
+    });
+    ZUSATZ.forEach(function (l) {
+      if (kat[l] == null) return;
+      if (!Array.isArray(kat[l])) { f.push("Liste „" + l + "“ ist keine Liste"); return; }
       var gesehen = {};
       kat[l].forEach(function (x) {
         if (!x || !x.id) f.push(l + ": Eintrag ohne Kennung");
@@ -64,7 +77,8 @@
      Fügt nur hinzu, was es dort noch nicht gibt (gleiche Kennung = bleibt, wie es ist) — eigene Zahlen werden nie überschrieben. */
   function gebietHinzufuegen(kat, paket) {
     var neu = {}, schonDa = 0;
-    LISTEN.forEach(function (l) {
+    LISTEN.concat(ZUSATZ).forEach(function (l) {
+      if (!paket[l] && LISTEN.indexOf(l) < 0) { neu[l] = 0; return; }
       neu[l] = 0; kat[l] = kat[l] || [];
       (paket[l] || []).forEach(function (x) {
         if (kat[l].some(function (y) { return y.id === x.id; })) { schonDa++; return; }
@@ -75,6 +89,31 @@
   }
   function gebietDa(kat, id) { return (kat.gebiete || []).some(function (g) { return g.id === id; }); }
 
-  WC.katalog = { gebietHinzufuegen: gebietHinzufuegen, gebietDa: gebietDa, LISTEN: LISTEN, EINHEITEN: EINHEITEN, FARBREGELN: FARBREGELN, pruefe: pruefe, platzhalter: platzhalter,
+  /* Hinweise zur Handelsware — sie halten nichts auf. ⚠ Bewusst NICHT in pruefe(): ein Katalog, der pruefe() nicht
+     besteht, wird beim Laden durch den Startkatalog ersetzt — eine halb ausgefüllte Einkaufszeile darf das nie auslösen. */
+  function hinweise(kat) {
+    var f = [];
+    (kat.lieferanten || []).forEach(function (x) {
+      if (x.fuer && FUER.indexOf(x.fuer) < 0) f.push("Lieferant „" + x.id + "“: „für“ = „" + x.fuer + "“ unbekannt");
+      if (x.url && !/^https:\/\//.test(x.url)) f.push("Lieferant „" + x.id + "“: Adresse muss mit https:// beginnen");
+    });
+    var lie = ids(kat.lieferanten);
+    kat.vorlagen.forEach(function (v) {
+      if (!v.einkaufsprodukt || !Array.isArray(v.einkauf)) return;
+      (v.einkauf || []).forEach(function (e, i) {
+        if (!(Math.round(+e.menge) > 0)) f.push("Vorlage „" + v.id + "“, Einkauf " + (i + 1) + ": Menge fehlt");
+        if (e.lieferant && lie.indexOf(e.lieferant) < 0) f.push("Vorlage „" + v.id + "“, Einkauf " + (i + 1) + ": Lieferant „" + e.lieferant + "“ fehlt");
+        if (e.url && !/^https:\/\//.test(e.url)) f.push("Vorlage „" + v.id + "“, Einkauf " + (i + 1) + ": Adresse muss mit https:// beginnen");
+      });
+    });
+    return f;
+  }
+  function sichereAdresse(u) { u = String(u || "").trim(); return /^https:\/\/[^\s"<>]+$/.test(u) ? u : ""; }
+
+  /* Einkaufsprodukte stehen nur auf der Seite „🛒 Handelsware“, nicht unter den selbst gefertigten */
+  function eigenfertigung(kat) { return (kat.vorlagen || []).filter(function (v) { return !v.einkaufsprodukt; }); }
+  function handelsware(kat) { return (kat.vorlagen || []).filter(function (v) { return !!v.einkaufsprodukt; }); }
+
+  WC.katalog = { gebietHinzufuegen: gebietHinzufuegen, gebietDa: gebietDa, LISTEN: LISTEN, ZUSATZ: ZUSATZ, FUER: FUER, eigenfertigung: eigenfertigung, handelsware: handelsware, hinweise: hinweise, sichereAdresse: sichereAdresse, EINHEITEN: EINHEITEN, FARBREGELN: FARBREGELN, pruefe: pruefe, platzhalter: platzhalter,
     exportieren: exportieren, importieren: importieren, neueKennung: neueKennung, kopie: kopie };
 })(typeof window !== "undefined" ? window : globalThis);

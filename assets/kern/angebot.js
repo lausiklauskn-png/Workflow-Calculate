@@ -28,6 +28,7 @@
       breiteMm: v ? v.breiteVorgabe || "" : "", hoeheMm: v ? v.hoeheVorgabe || "" : "", farben: 1, verfahren: v ? v.verfahrenVorgabe || "" : "",
       wahl: {}, zeiten: {}, saetze: {}, eigen: {}, bilder: [] };
     (v && v.slots || []).forEach(function (s) { p.wahl[s.id] = s.vorgabe || ""; });
+    if (v && v.einkaufsprodukt) { var em = K().einkaufsMengen(v); if (em.length) { p.staffeln = em; p.menge = em[0]; } }
     a.positionen.push(p);
     return p;
   }
@@ -89,7 +90,8 @@
     pos.forEach(function (x) {
       if (!x.erg.ok) return;
       var v = K().finde(kat.vorlagen, x.pos.vorlage);
-      if (v.versandArt === "keiner") return;
+      /* Handelsware: der Einkauf ist inkl. Versand und der Verkauf auch — ein eigener Versandposten zählte ihn doppelt */
+      if (v.versandArt === "keiner" || v.einkaufsprodukt) return;
       teile.push(versandTeil(v, x.pos, x.erg));
       lohn = lohn || x.erg.effektiv.lohnCent;
     });
