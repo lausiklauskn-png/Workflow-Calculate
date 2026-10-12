@@ -70,6 +70,23 @@ const FAELLE = [
     an: [["assets/app.js", "vorher(a); p.eigen = Object.assign({}, p.eigen); delete p.eigen[e.menge]; merken(a);", "vorher(a); merken(a);"]] },
   { name: "VERLUST: keine Warnung unter den Kosten", probe: B, erwartet: "VERLUST:",
     an: [["assets/app.js", "if (lageText) karte.append(", "if (false) karte.append("]] },
+  { name: "BLP: Stückpreis statt glatter Summe (Cent-Abweichung)", probe: K, erwartet: "BLP: menge × Einzelpreis",
+    an: [["assets/kern/uebergabe.js", "var glatt = p.menge > 0 && p.gesamtCent % p.menge === 0;", "var glatt = p.menge > 0;"],
+         ["assets/kern/uebergabe.js", "einzelpreisCent: p.gesamtCent / p.menge, ustSatz: p.ustSatz }", "einzelpreisCent: p.stueckCent, ustSatz: p.ustSatz }"]] },
+  { name: "BLP: Versand fehlt in der Übergabe", probe: K, erwartet: "BLP: menge × Einzelpreis",
+    an: [["assets/kern/uebergabe.js", "    if (d.versand) pos.push(", "    if (false) pos.push("]] },
+  { name: "BLP: Knopf übergibt nichts", probe: B, erwartet: "BLP: der Knopf springt",
+    an: [["assets/app.js", "if (window.__wcSprungAbfangen) { window.__wcSprung = ad.url; return; }", 'if (window.__wcSprungAbfangen) { window.__wcSprung = ad.url.replace("?uebernahme=", "?x="); return; }']] },
+  { name: "FASSUNG: neue Fassung überschreibt die alte", probe: K, erwartet: "FASSUNG: gestellt → Fassung 2",
+    an: [["assets/kern/angebot.js", 'n.fassung = f; n.id = a.nummer + "-F" + f;', "n.fassung = f; n.id = a.id;"]] },
+  { name: "FASSUNG: kein Vergleich mit der alten Fassung", probe: B, erwartet: "FASSUNG: Vergleich",
+    an: [["assets/app.js", "if (a.vorgaenger) { var vk = vergleichKarte(a); if (vk) main.append(vk); }", ""]] },
+  { name: "SICHERUNG: Zurückholen überschreibt Vorhandenes", probe: K, erwartet: "SICHERUNG: Zurückholen fügt hinzu",
+    an: [["assets/kern/sicherung.js", "if (!x || !x.id || da[x.id]) return false;", "if (!x || !x.id) return false;"]] },
+  { name: "SICHERUNG: Klartext neben dem Paket", probe: K, erwartet: "SICHERUNG: kein Klartext",
+    an: [["assets/kern/sicherung.js", "return { art: ART, fassung: FASSUNG, erstellt: erstellt, paket: paket };", "return { art: ART, fassung: FASSUNG, erstellt: erstellt, paket: paket, vorschau: inhalt.angebote };"]] },
+  { name: "SICHERUNG: Katalog kommt nicht mit zurück", probe: B, erwartet: "SICHERUNG: der eigene Katalog",
+    an: [["assets/app.js", "if (!lsGet(LS.katalog) && o.speicher.katalog) { lsSet(LS.katalog, o.speicher.katalog); katalogLaden(); }", ""]] },
 ];
 
 function vorkommen(text, teil) { let n = 0, i = 0; while ((i = text.indexOf(teil, i)) >= 0) { n++; i += teil.length; } return n; }

@@ -2,7 +2,8 @@
    Versand, Marktvergleich, Whitelist, Übergabe, Pins. node tests/kern.mjs · 0 = grün, 1 = rot.
    Jede Zusicherung hat einen eigenen Namen; die Gegenprobe (tests/gegenprobe.mjs) sucht genau diese. */
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const WURZEL = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const KERN = ["assets/kern/geld.js", "assets/kern/mengen.js", "assets/kern/kalkulation.js", "assets/kern/versand.js", "assets/kern/markt.js",
-  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/daten/werbetechnik.js", "assets/daten/bilder.js"];
+  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/daten/werbetechnik.js", "assets/daten/bilder.js"];
 for (const f of KERN) require(join(WURZEL, f));
 const WC = globalThis.WC, K = WC.kalk, M = WC.mengen, A = WC.angebot, V = WC.versand, MK = WC.markt;
 
@@ -210,6 +211,75 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   ok("PAGES: .gitignore sperrt node_modules (ohne Schrägstrich, auch als Verweis)", /^node_modules$/m.test(lies(".gitignore")));
   ok("SCHALE: kein fremder Abruf (nur der Such-Link auf Tipp)", !/src="https?:|fetch\(\s*["']https?:/.test(idx + lies("assets/app.js")));
 }
+
+/* ── STUFE 2: Fassungen ── */
+{
+  const kat = kopie(WC.START), alle = [];
+  const a = A.neu(alle, "2026-10-12"); alle.push(a); const p = A.neuePosition(a, kat, "tasse"); p.menge = 50;
+  ok("FASSUNG: ein Entwurf bekommt keine neue Fassung", !A.neueFassung(alle, a, "x").ok);
+  A.stellen(a, kat);
+  const r = A.neueFassung(alle, a, "Kunde will 100 Stück", "2026-10-13");
+  ok("FASSUNG: gestellt → Fassung 2 mit derselben Nummer, eigener Kennung, als Entwurf", r.ok && r.angebot.fassung === 2 && r.angebot.nummer === a.nummer && r.angebot.id === a.nummer + "-F2" && r.angebot.status === "entwurf" && r.angebot.stand === null);
+  ok("FASSUNG: die alte bleibt gestellt und nennt die neue", a.status === "gestellt" && a.ersetztDurch === r.angebot.id && !A.neueFassung(alle, a, "y").ok);
+  const n = r.angebot; n.positionen[0].menge = 100;
+  const v = A.vergleich(A.rechne(a, kat, null, false), A.rechne(n, kat, null, false));
+  ok("FASSUNG: Vergleich zeigt die geänderte Position und die Differenz", v.zeilen[0].art === "geaendert" && v.summe.diff === v.summe.neu - v.summe.alt && v.summe.diff > 0, v);
+  const d = WC.aussen.angebotExtern(n, A.rechne(n, kat, null, false), {}, false);
+  ok("FASSUNG: Kundenblatt und Übergaben tragen die Fassung", d.fassung === 2 && WC.uebergabe.auftrag(d).nr === a.nummer + "-F2" && WC.uebergabe.blpNutzlast(d).angebotsNr === a.nummer + "-F2");
+  ok("NUMMER: eine neue Fassung zieht keine neue Nummer", A.naechsteNummer([a, n], "2026-10-12") === "AN-2026-0002");
+}
+
+/* ── STUFE 2: An BookLedgerPro (Datenvertrag v1) ── */
+{
+  const kat = kopie(WC.START), a = A.neu([], "2026-10-12"); a.kunde = { name: "Kunde Beispiel", anschrift: "", klasse: "C" };
+  K.finde(kat.materialien, "tasse_11").ekCent = 731;
+  const p1 = A.neuePosition(a, kat, "tasse"); p1.menge = 50; const p2 = A.neuePosition(a, kat, "kuli"); p2.menge = 250;
+  const r = A.rechne(a, kat, a.kunde, false), d = WC.aussen.angebotExtern(a, r, {}, false);
+  const n = WC.uebergabe.blpNutzlast(d);
+  ok("BLP: Nutzlast v1, quelle workflow-calculate, modus angebot", n.v === 1 && n.quelle === "workflow-calculate" && n.modus === "angebot" && n.kundeName === "Kunde Beispiel");
+  const summe = n.positionen.reduce((s, x) => s + x.menge * x.einzelpreisCent, 0);
+  ok("BLP: menge × Einzelpreis ergibt genau die Netto-Summe (Versand als eigene Position)", summe === d.summen.netto && n.positionen.some((x) => x.beschreibung === "Verpackung & Versand"), [summe, d.summen.netto]);
+  ok("BLP: nur ganze Cent, USt 0/7/19, Texte ≤ 140", n.positionen.every((x) => Number.isInteger(x.einzelpreisCent) && [0, 7, 19].includes(x.ustSatz) && x.beschreibung.length <= 140));
+  ok("BLP: nichts Internes in der Nutzlast", !/731|7,31|selbstkost|klasse|saetze/i.test(JSON.stringify(n)));
+  const ad = WC.uebergabe.blpAdresse(d);
+  ok("BLP: Adresse auf BookLedgerPro mit ?uebernahme=", ad.ok && ad.url.startsWith("https://lausiklauskn-png.github.io/BookLedgerPro/?uebernahme=") && ad.url.length < 20100);
+  const viel = Object.assign({}, d, { positionen: Array.from({ length: 21 }, () => d.positionen[0]) });
+  ok("BLP: mehr als 20 Positionen werden abgewiesen, mit Grund", !WC.uebergabe.blpAdresse(viel).ok && /höchstens 20/.test(WC.uebergabe.blpAdresse(viel).grund));
+  /* Gegen BookLedgerPros echten Parser — nur wenn der Klon daneben liegt */
+  const blp = process.env.BLP_KLON || join(WURZEL, "..", "BookLedgerPro");
+  const parser = join(blp, "src/domain/uebernahmeExtern.js");
+  if (existsSync(parser)) {
+    const { parseUebernahmeParam, UEBERNAHME_QUELLEN } = await import(pathToFileURL(parser).href);
+    if (UEBERNAHME_QUELLEN.includes("workflow-calculate")) {
+      const g = parseUebernahmeParam(new URL(ad.url).search);
+      ok("BLP: BookLedgerPros Parser liest die Nutzlast unverändert", g && g.quelle === "workflow-calculate" && g.positionen.length === n.positionen.length &&
+        g.positionen.reduce((s, x) => s + x.menge * x.einzelpreisCent, 0) === d.summen.netto && g.kundeName === "Kunde Beispiel", g);
+    } else console.log("hinweis: BookLedgerPro-Klon kennt workflow-calculate noch nicht (PR offen) — Parser-Probe übersprungen");
+  } else console.log("hinweis: kein BookLedgerPro-Klon daneben — Parser-Probe übersprungen");
+}
+
+/* ── STUFE 2: Sicherung ── */
+{
+  const SI = WC.sicherung;
+  ok("PIN: schluesseltresor.js ist byte-gleich mit Workflow-Needs", sha("assets/schluesseltresor.js") === "eaed30e8f3921835a3f58b69f89d9b008831f69f164ad1dfec630fa43161f666");
+  const bild = new Blob([new Uint8Array([1, 2, 3, 250])], { type: "image/jpeg" });
+  const inhalt = { angebote: [{ id: "AN-2026-0001", nummer: "AN-2026-0001", kunde: { name: "GEHEIM-KUNDE" }, positionen: [] }], kunden: [{ id: "K-1", name: "GEHEIM-KUNDE" }],
+    bilder: [{ id: "B-1", name: "x.jpg", blob: bild }], speicher: { katalog: "{}", einstellungen: null } };
+  ok("SICHERUNG: zu kurzes Passwort wird abgewiesen", await SI.verschliessen("kurz", inhalt).then(() => false, (e) => e.message === "kurz"));
+  const d = await SI.verschliessen("ein-langes-passwort", inhalt, "2026-10-12T10:00:00Z");
+  const t = JSON.stringify(d);
+  ok("SICHERUNG: kein Klartext in der Datei", d.art === SI.ART && !/GEHEIM|AN-2026|K-1/.test(t));
+  ok("SICHERUNG: falsches Passwort → „passwort“", await SI.oeffnen("falsches-passwort", d).then(() => false, (e) => e.message === "passwort"));
+  const o = await SI.oeffnen("ein-langes-passwort", d);
+  const bytes = new Uint8Array(await o.bilder[0].blob.arrayBuffer());
+  ok("SICHERUNG: Angebote, Kunden und Bilder Byte für Byte zurück", o.angebote[0].kunde.name === "GEHEIM-KUNDE" && o.kunden.length === 1 && bytes.join() === "1,2,3,250" && o.bilder[0].blob.type === "image/jpeg");
+  const z = SI.zusammenfuehren({ angebote: [{ id: "AN-2026-0001" }], kunden: [], bilder: [] }, o);
+  ok("SICHERUNG: Zurückholen fügt hinzu, überschreibt nie", z.angebote.length === 0 && z.schonDa === 1 && z.kunden.length === 1 && z.bilder.length === 1);
+  ok("SICHERUNG: Erinnerung ab 14 Tagen, nur mit Angeboten", SI.erinnernNoetig([{}], "2026-09-01T00:00:00Z", Date.parse("2026-10-12")) && !SI.erinnernNoetig([{}], "2026-10-10T00:00:00Z", Date.parse("2026-10-12")) && !SI.erinnernNoetig([], null));
+}
+
+/* ── STUFE 2: Klaus' Symbol ── */
+ok("ICON: App-Symbole sind aus Klaus' Vorlage gebaut (Grundfarbe rot)", existsSync(join(WURZEL, "icons/quelle/icon-klaus.png")) && /icon-klaus\.png/.test(lies("tools/icons-bauen.py")));
 
 console.log(`kern: ${gruen} grün · ${rot} ROT`);
 process.exit(rot ? 1 : 0);

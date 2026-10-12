@@ -28,7 +28,7 @@
     });
     var v = r.versand;
     return {
-      nummer: s(a.nummer), datum: s(a.datum), gueltigBis: s(a.gueltigBis), titel: s(a.titel),
+      nummer: s(a.nummer), fassung: Number(a.fassung) || 1, datum: s(a.datum), gueltigBis: s(a.gueltigBis), titel: s(a.titel),
       firma: firmaExtern(firma), kunde: kundeExtern(a.kunde),
       positionen: positionen,
       versand: v && v.ok && !v.leer ? { text: "Verpackung & Versand", nettoCent: c(v.cent) } : null,

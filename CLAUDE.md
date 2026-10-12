@@ -16,15 +16,19 @@ unterscheiden), Violett = intern wie dort.
 | `assets/kern/markt.js` | Marktvergleich: drei Klassen mit Mengengrenze, nur eingetragene Preise |
 | `assets/kern/angebot.js` | Angebot: Nummer `AN-JJJJ-NNNN`, Positionen, Versandposten, Summen, Einfrieren (`stand`) |
 | `assets/kern/aussen.js` | **Whitelist** fürs Kundenblatt (Muster BookLedgerPro `externesAngebot`) |
-| `assets/kern/uebergabe.js` | Weiterleitungs-Bündel für Mein WorkFloh / Tomys WorkFloh (Format wie Workflow-Needs), nur aus der Whitelist |
+| `assets/kern/uebergabe.js` | Weiterleitungs-Bündel für Mein WorkFloh / Tomys WorkFloh (Format wie Workflow-Needs) **und** `?uebernahme=` an BookLedgerPro (Datenvertrag v1, `quelle: "workflow-calculate"`), beides nur aus der Whitelist |
+| `assets/kern/sicherung.js` | verschlüsselte Sicherung (Angebote, Kunden, Bilder, Katalog, Einstellungen), Zurückholen fügt hinzu |
+| `assets/schluesseltresor.js` | **byte-1:1 aus Workflow-Needs** (dort aus kim-hub-company), SHA in `tests/kern.mjs` — nie hier abwandeln |
 | `assets/kern/katalog.js` | Katalog prüfen, ex-/importieren, Platzhalter zählen |
 | `assets/daten/werbetechnik.js` | Startkatalog — **alle Zahlen Platzhalter** (`platzhalter: true`) |
 | `assets/daten/bilder.js` | Beispielbilder als **Zeichnungen** (SVG), mehrere Ansichten je Beispiel |
 | `assets/app.js` · `app.css` | Oberfläche (Schrittleiste, Preis nachbessern, Lernen, Markt, Katalog-Editor, Rechner) |
 | `assets/installieren.js` | byte-1:1 aus Sage (über Workflow-Needs), SHA in `tests/kern.mjs` |
+| `icons/quelle/icon-klaus.png` | Klaus' App-Symbol (2026-10-12, rot: Zahnrad, Rechenzeichen, Pfeil) → `python3 tools/icons-bauen.py`, danach Cache erhöhen |
 
 **Speicher (nie ändern):** IndexedDB `WorkflowCalculate1` mit `angebote`, `kunden`, `bilder` (Blobs) ·
-localStorage `workflowcalculate_katalog`, `_einstellungen`, `_thema`, `_aktiv`, `_reiter`.
+localStorage `workflowcalculate_katalog`, `_einstellungen`, `_thema`, `_aktiv`, `_reiter`, `_sicherung_zuletzt` ·
+sessionStorage `workflowcalculate_sicherung_spaeter`. Am Angebot: `fassung`, `vorgaenger`, `ersetztDurch`, `anlass` (Stufe 2).
 
 ## Was hier leicht kaputtgeht
 
@@ -35,6 +39,12 @@ localStorage `workflowcalculate_katalog`, `_einstellungen`, `_thema`, `_aktiv`, 
   wo Position/Angebot nichts setzen.
 - **„Nicht kalkuliert“ ist nicht 0:** fehlt ein EK oder Maschinensatz, zählt die Position nicht mit und sagt warum.
 - **Gestellt = eingefroren** (`a.stand` = Kopie des Katalogs). Lernen ändert nur den Live-Katalog.
+  Ändern heißt **neue Fassung** (`A.neueFassung`): dieselbe Nummer, Kennung `AN-…-F2`, Entwurf mit aktuellem
+  Katalog, die alte bleibt gestellt und trägt `ersetztDurch`. Vergleich je Position oben im Angebot.
+  ⚠ Tafel-Evolution: „Zurück zum Entwurf“ (Stufe 1) ist durch die Fassungen ersetzt.
+- **BookLedgerPro rechnet menge × einzelpreisCent.** Geht der Betrag nicht glatt durch die Menge, geht die
+  Position als 1 × Gesamt mit „N Stk.“ im Text — sonst wiche die Summe um Cent ab. Versand ist eine eigene
+  Position, höchstens 20 Positionen. BLP kennt die Quelle seit BookLedgerPro #324.
 - **Rückrechnung** (Gewinn %, Stundensatz, Zeit-Faktor) per Halbierungssuche — trifft den Zielpreis auf
   den Cent oder sagt die Rundungsdifferenz. Jede Übernahme steht im Verlauf der Vorlage, rücknehmbar.
 - **Der Preis eines Beispiels wird immer frisch gerechnet**, nie gespeichert.
@@ -49,9 +59,10 @@ localStorage `workflowcalculate_katalog`, `_einstellungen`, `_thema`, `_aktiv`, 
 - Alle Startwerte (Sätze, EK, Tarife, Zeiten) sind **Platzhalter**; die App sagt das, bis eigene da sind.
 - Versandtarife aus einer eigenen Tabelle, keine Live-Abfrage (Klaus' Wahl).
 - Marktpreise trägt man ein; die App liest keine fremden Seiten. „🔎 Bei Mitbewerbern nachsehen“ ist ein Link.
-- Nicht gebaut (Stufe 2/3 laut Plan): Übergabe an BookLedgerPro (`?uebernahme=`), verschlüsselte
-  Sicherung, Nachkalkulation, weitere Arbeitsgebiete mit eigenem Startkatalog, KI-Recherche.
-- ⚠ Nicht gemessen: Tablet, echtes Drucken/„Als PDF speichern“, Import der Auftragsdatei in WorkFloh am Gerät.
+- Nicht gebaut (Stufe 3 laut Plan): Nachkalkulation, weitere Arbeitsgebiete mit eigenem Startkatalog, KI-Recherche.
+- ⚠ Nicht gemessen: Tablet, echtes Drucken/„Als PDF speichern“, Import der Auftragsdatei in WorkFloh am Gerät,
+  der Sprung nach BookLedgerPro mit Entsperren, Download/Dateiwahl der Sicherung am Tablet.
+- Die Parser-Probe gegen BookLedgerPro läuft nur, wenn der Klon daneben liegt (`BLP_KLON` oder `../BookLedgerPro`).
 
 ## Prüfen
 

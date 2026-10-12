@@ -14,7 +14,11 @@ Adresse: <https://lausiklauskn-png.github.io/Workflow-Calculate/> · offline, oh
 3. **Maße, Menge, Material, Farben** eintragen
 4. **Preis prüfen** — „💶 Preis nachbessern“ zeigt jede Alternative mit ihrer Wirkung, bevor sie gilt
 5. **Verpackung & Versand** — automatisch, oder von Hand
-6. **Angebot** drucken / als PDF, oder als Auftrag an Mein WorkFloh bzw. Tomys WorkFloh übergeben
+6. **Angebot** drucken / als PDF, als Auftrag an Mein WorkFloh bzw. Tomys WorkFloh übergeben,
+   oder mit „🧾 An BookLedgerPro“ als vorbefülltes Angebot in die Buchhaltung
+
+Ändern nach dem Stellen ergibt eine **neue Fassung** (dieselbe Nummer, Vergleich mit der alten).
+**🔐 Sicherung** (Einstellungen): alles in einer verschlüsselten Datei, Zurückholen fügt hinzu.
 
 Abkürzen: ein Angebot „⧉ als neues Angebot“ übernehmen, oder eine Position aus einem früheren Angebot.
 

@@ -5,13 +5,15 @@
   "use strict";
   var WC = window.WC, G = WC.geld, K = WC.kalk, A = WC.angebot, KAT = WC.katalog, MK = WC.markt;
   var LS = { katalog: "workflowcalculate_katalog", einst: "workflowcalculate_einstellungen", thema: "workflowcalculate_thema",
-    aktiv: "workflowcalculate_aktiv", reiter: "workflowcalculate_reiter" };
+    aktiv: "workflowcalculate_aktiv", reiter: "workflowcalculate_reiter", sicherung: "workflowcalculate_sicherung_zuletzt" };
   var DB_NAME = "WorkflowCalculate1", STORES = ["angebote", "kunden", "bilder"];
 
   function lsGet(k) { try { return localStorage.getItem(k); } catch (_e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (_e) {} }
   function lsJson(k, d) { try { var x = JSON.parse(lsGet(k) || "null"); return x == null ? d : x; } catch (_e) { return d; } }
   function kopie(x) { return JSON.parse(JSON.stringify(x)); }
+  function ssGet(k) { try { return sessionStorage.getItem(k); } catch (_e) { return null; } }
+  function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch (_e) {} }
 
   /* ── Zustand ── */
   var S = {
@@ -159,7 +161,7 @@
   function zeichneKopf() {
     var a = aktivesAngebot(), sub = document.getElementById("app-unter");
     if (sub) {
-      var text = a ? ((kundeVon(a) || {}).name || "ohne Kunde") + " · " + a.nummer + (a.status === "gestellt" ? " · gestellt" : " · Entwurf") + (a.titel ? " · " + a.titel : "") : "kein Angebot offen";
+      var text = a ? ((kundeVon(a) || {}).name || "ohne Kunde") + " · " + a.nummer + (A.fassungVon(a) > 1 ? " · Fassung " + A.fassungVon(a) : "") + (a.status === "gestellt" ? " · gestellt" : " · Entwurf") + (a.titel ? " · " + a.titel : "") : "kein Angebot offen";
       sub.textContent = text; sub.title = text;
     }
     var th = document.getElementById("thema");
@@ -190,6 +192,7 @@
     var a = A.neu(S.angebote);
     ["titel", "kundeId", "kunde", "saetze", "versand", "zaehler", "notiz"].forEach(function (k) { a[k] = kopie(alt[k]); });
     a.positionen = kopie(alt.positionen);
+    a.fassung = 1; delete a.vorgaenger; delete a.ersetztDurch;
     a.notiz = "Übernommen aus " + alt.nummer;
     S.angebote.unshift(a); S.aktiv = a.id; lsSet(LS.aktiv, a.id); merken(a);
     S.reiter = "angebot"; lsSet(LS.reiter, "angebot");
@@ -204,6 +207,11 @@
     if (ph.anzahl) main.append(h("div", { class: "hinweis warn", "data-platzhalter-hinweis": "" },
       "Der Katalog trägt noch " + ph.anzahl + " Platzhalter-Werte (Sätze, Einkaufspreise, Tarife) — nicht aus deinen Zahlen. Im Reiter „Katalog“ und „Einstellungen“ eigene eintragen.", " ",
       knopf("Zum Katalog", function () { S.reiter = "katalog"; zeichne(); }, "klein")));
+    if (WC.sicherung.erinnernNoetig(S.angebote, lsGet(LS.sicherung)) && !ssGet("workflowcalculate_sicherung_spaeter")) main.append(h("div", { class: "hinweis warn", "data-sicherung-erinnerung": "" },
+      lsGet(LS.sicherung) ? "Die letzte Sicherung ist " + Math.floor(WC.sicherung.tageSeit(lsGet(LS.sicherung))) + " Tage alt." : "Es gibt noch keine Sicherung deiner Angebote.",
+      " Löschst du die Browserdaten oder wechselst das Gerät, sind sie sonst weg. ",
+      knopf("🔐 Jetzt sichern", function () { S.reiter = "einstellungen"; zeichne(); var k = document.getElementById("sicherung-kasten"); if (k) k.scrollIntoView(); }, "klein pri"), " ",
+      knopf("Später", function () { ssSet("workflowcalculate_sicherung_spaeter", "1"); zeichne(); }, "klein")));
     main.append(h("div", { class: "band", style: "margin-bottom:12px" }, knopf("＋ Neues Angebot", neuesAngebot, "pri", { id: "neues-angebot" })));
     if (!S.angebote.length) { main.append(h("p", { class: "gedaempft", text: "Noch kein Angebot." })); return; }
     var kat = S.katalog;
@@ -212,8 +220,8 @@
     S.angebote.forEach(function (a) {
       var r = A.rechne(a, kat, kundeVon(a), S.einst.kleinunternehmer);
       tb.append(h("tr", { "data-angebot-zeile": a.id, style: "cursor:pointer", onclick: function () { S.aktiv = a.id; lsSet(LS.aktiv, a.id); S.reiter = "angebot"; zeichne(); } },
-        h("td", { text: a.nummer }), h("td", { text: (kundeVon(a) || {}).name || "—" }), h("td", { text: a.titel || "" }),
-        h("td", { text: a.status === "gestellt" ? "gestellt 🔒" : "Entwurf" }), h("td", { class: "r", text: euro(r.summen.netto) }),
+        h("td", { text: a.nummer + (A.fassungVon(a) > 1 ? " · F" + A.fassungVon(a) : "") }), h("td", { text: (kundeVon(a) || {}).name || "—" }), h("td", { text: a.titel || "" }),
+        h("td", { text: a.ersetztDurch ? "ersetzt" : a.status === "gestellt" ? "gestellt 🔒" : "Entwurf" }), h("td", { class: "r", text: euro(r.summen.netto) }),
         h("td", null, knopf("⧉ als neues Angebot", function (ev) { ev.stopPropagation(); angebotKopieren(a); }, "klein", { "data-kopieren": a.id, title: "Kalkulation übernehmen und anpassen" }))));
     });
     t.append(tb);
@@ -234,21 +242,23 @@
     var kundenWahl = h("select", { id: "kunde-wahl", disabled: ro, onchange: function () { vorher(a); a.kundeId = this.value; var k = S.kunden.filter(function (x) { return x.id === a.kundeId; })[0]; if (k) a.kunde = { name: k.name, anschrift: k.anschrift, klasse: k.klasse }; merken(a); zeichne(); } },
       h("option", { value: "", text: "— Kunde wählen —" }), S.kunden.map(function (k) { return h("option", { value: k.id, text: k.name + " (" + (k.klasse || "B") + ")", selected: k.id === a.kundeId }); }));
     main.append(h("div", { class: "karte", "data-schritt-ziel": "kunde" },
-      h("div", { class: "position-kopf" }, h("h2", { text: "Angebot " + a.nummer }),
+      h("div", { class: "position-kopf" }, h("h2", { text: "Angebot " + a.nummer + (A.fassungVon(a) > 1 ? " · Fassung " + A.fassungVon(a) : "") }),
         h("div", { class: "band" },
           knopf("↶ Zurück" + (ZURUECK[a.id] && ZURUECK[a.id].length ? " (" + ZURUECK[a.id].length + ")" : ""), function () { zurueck(a); }, "klein", { id: "zurueck", disabled: ro || !(ZURUECK[a.id] && ZURUECK[a.id].length) }),
           knopf("👁 Vorschau", function () { vorschau(a); }, "klein", { id: "vorschau-angebot" }),
           knopf("🖨 Drucken / PDF", function () { drucke(a); }, "pri klein", { id: "druck-angebot" }),
           knopf("📤 An WorkFloh übergeben", function () { uebergeben(a); }, "klein", { id: "uebergabe" }),
-          ro ? knopf("✎ Zurück zum Entwurf", function () { if (confirm("Zurück zum Entwurf? Dann gelten wieder die aktuellen Katalogwerte.")) { A.zurueckZumEntwurf(a); merken(a); zeichne(); } }, "klein", { id: "entwurf" })
-            : knopf("🔒 Angebot stellen", function () { A.stellen(a, S.katalog); merken(a); melde("Angebot gestellt — Sätze und Einkaufspreise sind jetzt eingefroren.", ""); }, "klein", { id: "stellen" }))),
-      ro ? h("div", { class: "hinweis warn", "data-nur-lesen": "" }, "Gestellt und eingefroren — nur lesen. Spätere Katalogänderungen verschieben dieses Angebot nicht.") : null,
+          knopf("🧾 An BookLedgerPro", function () { anBlp(a); }, "klein", { id: "an-blp" }),
+          ro ? null : knopf("🔒 Angebot stellen", function () { A.stellen(a, S.katalog); merken(a); melde("Angebot gestellt — Sätze und Einkaufspreise sind jetzt eingefroren. Änderungen ergeben eine neue Fassung.", ""); }, "klein", { id: "stellen" }))),
+      ro ? nurLesenBanner(a) : null,
       h("div", { class: "feldgitter" },
         feld("Titel", h("input", { value: a.titel, "data-key": "titel", disabled: ro, oninput: function () { a.titel = this.value; merken(a); zeichneKopf(); } })),
         feld("Kunde", kundenWahl),
         feld("Datum", h("input", { type: "date", value: a.datum, disabled: ro, onchange: function () { a.datum = this.value; merken(a); } })),
         feld("gültig bis", h("input", { type: "date", value: a.gueltigBis, disabled: ro, onchange: function () { a.gueltigBis = this.value; merken(a); } }))),
       ro ? null : kundeSchnell(a)));
+
+    if (a.vorgaenger) { var vk = vergleichKarte(a); if (vk) main.append(vk); }
 
     /* Preisleiste (intern) */
     var s = r.summen;
@@ -281,7 +291,52 @@
     main.append(h("div", { class: "karte", "data-schritt-ziel": "angebot" }, h("h3", { text: "Summe" }), t,
       h("div", { class: "band", style: "margin-top:10px" }, knopf("👁 Vorschau", function () { vorschau(a); }, "klein"), knopf("🖨 Drucken / PDF", function () { drucke(a); }, "pri klein"),
         knopf("📤 An WorkFloh übergeben", function () { uebergeben(a); }, "klein"),
-        h("span", { class: "gedaempft klein", text: "Die Datei liest Mein WorkFloh oder Tomys WorkFloh mit „📥 Importieren“ ein — dort wird daraus ein Auftrag." }))));
+        knopf("🧾 An BookLedgerPro", function () { anBlp(a); }, "klein"),
+        h("span", { class: "gedaempft klein", text: "WorkFloh: die Datei mit „📥 Importieren“ einlesen — daraus wird ein Auftrag. BookLedgerPro öffnet sich mit dem vorbefüllten Angebot; gespeichert wird dort erst auf Klick." }))));
+  }
+
+  /* ── Gestellt: nur lesen, Weg zur neuen Fassung (wie Workflow-Needs) ── */
+  function nurLesenBanner(a) {
+    var box = h("div", { class: "hinweis warn", "data-nur-lesen": "" }, "Gestellt und eingefroren — nur lesen. Spätere Katalogänderungen verschieben dieses Angebot nicht.");
+    if (a.ersetztDurch) {
+      box.append(" ", h("span", { "data-ersetzt": a.ersetztDurch }, "Ersetzt durch Fassung " + (A.fassungVon(a) + 1) + "."), " ",
+        knopf("Zur neuen Fassung", function () { S.aktiv = a.ersetztDurch; lsSet(LS.aktiv, S.aktiv); zeichne(); }, "klein"));
+      return box;
+    }
+    var anl = h("input", { value: "Änderungswunsch des Kunden", id: "anlass-fassung", "data-key": "anlass-fassung", style: "flex:1 1 220px" });
+    box.append(h("div", { class: "zeile", "data-neue-fassung": "" }, anl, knopf("✎ Neue Fassung zum Ändern", function () {
+      var r = A.neueFassung(S.angebote, a, anl.value);
+      if (!r.ok) { melde(r.grund, "warn"); return; }
+      S.angebote.unshift(r.angebot); merken(a); merken(r.angebot); S.aktiv = r.angebot.id; lsSet(LS.aktiv, S.aktiv);
+      melde("Fassung " + r.angebot.fassung + " angelegt — Fassung " + A.fassungVon(a) + " bleibt gestellt, wie sie ist.", "");
+    }, "pri klein", { id: "neue-fassung" })));
+    return box;
+  }
+  /* Vergleich mit der vorigen Fassung */
+  function vergleichKarte(a) {
+    var alt = S.angebote.filter(function (x) { return x.id === a.vorgaenger; })[0];
+    if (!alt) return null;
+    var v = A.vergleich(A.rechne(alt, S.katalog, kundeVon(alt), S.einst.kleinunternehmer), A.rechne(a, S.katalog, kundeVon(a), S.einst.kleinunternehmer));
+    var t = h("table", { "data-vergleich": "" }, h("tr", null, ["Position", "Fassung " + A.fassungVon(alt), "Fassung " + A.fassungVon(a), ""].map(function (x, i) { return h("th", { class: i && i < 3 ? "r" : "", text: x }); })));
+    var ART = { neu: ["neu", "status-neu"], entfallen: ["entfällt", "status-entfallen"], geaendert: ["geändert", "status-geaendert"], gleich: ["gleich", "status-gleich"] };
+    v.zeilen.forEach(function (z) { t.append(h("tr", { "data-vergleich-zeile": z.art }, h("td", { text: z.id + " " + z.titel }), h("td", { class: "r", text: z.alt == null ? "—" : euro(z.alt) }),
+      h("td", { class: "r", text: z.neu == null ? "—" : euro(z.neu) }), h("td", { class: ART[z.art][1], text: ART[z.art][0] }))); });
+    t.append(h("tr", null, h("td", { text: "Verpackung & Versand" }), h("td", { class: "r", text: euro(v.versand.alt) }), h("td", { class: "r", text: euro(v.versand.neu) }), h("td")));
+    t.append(h("tr", null, h("td", null, h("b", { text: "Summe netto" })), h("td", { class: "r", text: euro(v.summe.alt) }), h("td", { class: "r" }, h("b", { text: euro(v.summe.neu) })),
+      h("td", { class: v.summe.diff > 0 ? "plus" : v.summe.diff < 0 ? "minus" : "", "data-vergleich-diff": String(v.summe.diff), text: delta(v.summe.alt, v.summe.neu) })));
+    return h("details", { class: "karte", open: true, "data-vergleich-karte": "" }, h("summary", { text: "Vergleich mit Fassung " + A.fassungVon(alt) + (a.anlass ? " — Anlass: " + a.anlass : "") }),
+      h("div", { class: "tabelle-huelle" }, t));
+  }
+
+  /* ── An BookLedgerPro: gleicher Origin, ?uebernahme= (Datenvertrag v1) ── */
+  function anBlp(a) {
+    var r = A.rechne(a, S.katalog, kundeVon(a), S.einst.kleinunternehmer);
+    var ad = WC.uebergabe.blpAdresse(WC.aussen.angebotExtern(a, r, S.einst.firma, S.einst.kleinunternehmer));
+    if (!ad.ok) { melde("Nicht an BookLedgerPro übergeben: " + ad.grund + ".", "warn"); return; }
+    jetztSpeichern().then(function () {
+      if (window.__wcSprungAbfangen) { window.__wcSprung = ad.url; return; }
+      location.assign(ad.url);
+    });
   }
 
   /* ── Schritte ── */
@@ -723,7 +778,7 @@
     var b = h("article", { class: "blatt", "data-blatt": "angebot" });
     var abs = h("div", { class: "absender" }, d.firma.logo ? h("img", { src: d.firma.logo, alt: "" }) : null, h("div", { text: [d.firma.name, d.firma.anschrift, d.firma.kontakt].filter(Boolean).join("\n") }));
     b.append(h("div", { class: "kopfzeile" }, h("div", { class: "meta" }, h("div", { text: d.kunde.name }), h("div", { style: "white-space:pre-line", text: d.kunde.anschrift })), abs));
-    b.append(h("h1", { text: "Angebot " + d.nummer }));
+    b.append(h("h1", { text: "Angebot " + d.nummer + (d.fassung > 1 ? " · Fassung " + d.fassung : "") }));
     b.append(h("p", { class: "meta", text: "Datum: " + datumDe(d.datum) + " · gültig bis " + datumDe(d.gueltigBis) + (d.titel ? " · " + d.titel : "") }));
     var t = h("table", null, h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { text: "Leistung" }), h("th", { class: "r", text: "Menge" }), h("th", { class: "r", text: "je Stück" }), h("th", { class: "r", text: "Gesamt netto" }))));
     var tb = h("tbody");
@@ -940,6 +995,7 @@
         return feld(lab, h(k === "anschrift" ? "textarea" : "input", { value: f[k] || "", "data-firma": k, "data-key": "firma-" + k, oninput: function () { f[k] = this.value; einstSpeichern(); } }));
       })),
       h("label", { class: "schalter" }, h("input", { type: "checkbox", checked: !!S.einst.kleinunternehmer, id: "kleinunternehmer", onchange: function () { S.einst.kleinunternehmer = this.checked; einstSpeichern(); } }), "Kleinunternehmer (§ 19 UStG, keine USt)")));
+    main.append(sicherungKarte());
     S.katalog.gebiete.forEach(function (gb) {
       var s = gb.saetze = gb.saetze || {};
       function sp() { delete gb.platzhalter; katalogSpeichern(); }
@@ -969,6 +1025,63 @@
       main.append(karte);
     });
   }
+  /* ── Verschlüsselte Sicherung (Muster Workflow-Needs) — Rechnen in assets/kern/sicherung.js ── */
+  var SI = WC.sicherung, gewaehlt = null;
+  var SI_GRUND = { kurz: "Das Passwort braucht mindestens " + SI.MIN_PW + " Zeichen.", passwort: "Das Passwort passt nicht zu dieser Sicherung.",
+    fassung: "Diese Sicherung stammt aus einer anderen Fassung der App.", "keine-sicherung": "Das ist keine Sicherungsdatei von Workflow Calculate.",
+    "schloss-fehlt": "Das Schloss (Verschlüsselung) ist nicht geladen — bitte ⟳ neu laden." };
+  function siMelde(id, text, gut) { var el = document.getElementById(id); if (!el) return; el.hidden = false; el.className = "hinweis " + (gut ? "" : "bad"); el.textContent = text; }
+  function sicherungKarte() {
+    var z = lsGet(LS.sicherung);
+    var pw = h("input", { type: "password", id: "sicherung-pw", autocomplete: "new-password" }), pw2 = h("input", { type: "password", id: "sicherung-pw2", autocomplete: "new-password" });
+    var pwz = h("input", { type: "password", id: "sicherung-pw-zurueck", autocomplete: "current-password" });
+    return h("div", { class: "karte", id: "sicherung-kasten", "data-sicherung": "" }, h("h2", { text: "🔐 Sicherung" }),
+      h("p", { class: "klein", id: "sicherung-stand", text: z ? "Letzte Sicherung auf diesem Gerät: " + datumDe(z.slice(0, 10)) : "Auf diesem Gerät wurde noch keine Sicherung angelegt." }),
+      h("p", { class: "gedaempft klein", text: "Eine Datei mit allen Angeboten, Kunden, Bildern, dem Katalog und den Einstellungen — verschlüsselt mit deinem Passwort (AES-256)." }),
+      h("div", { class: "feldgitter" }, feld("Passwort (mind. " + SI.MIN_PW + " Zeichen)", pw), feld("Passwort wiederholen", pw2)),
+      h("p", { class: "hinweis warn klein", text: "Das Passwort wird nirgends gespeichert. Ist es vergessen, lässt sich die Sicherung nicht mehr öffnen — von niemandem." }),
+      knopf("🔐 Sicherung speichern", function () {
+        if (pw.value.length < SI.MIN_PW) return siMelde("sicherung-meldung", SI_GRUND.kurz, false);
+        if (pw.value !== pw2.value) return siMelde("sicherung-meldung", "Die beiden Passwörter sind nicht gleich.", false);
+        siMelde("sicherung-meldung", "Wird verschlüsselt …", true);
+        jetztSpeichern().then(function () { return Promise.all([dbAlle("angebote"), dbAlle("kunden"), dbAlle("bilder")]); }).then(function (l) {
+          return SI.verschliessen(pw.value, { angebote: l[0], kunden: l[1], bilder: l[2], speicher: { katalog: lsGet(LS.katalog), einstellungen: lsGet(LS.einst) } });
+        }).then(function (d) {
+          var name = "Workflow-Calculate-Sicherung-" + d.erstellt.slice(0, 10) + ".json", text = JSON.stringify(d);
+          window.__wcSicherung = text; herunterladen(name, text, "application/json");
+          lsSet(LS.sicherung, d.erstellt); pw.value = ""; pw2.value = "";
+          siMelde("sicherung-meldung", "✓ " + S.angebote.length + " Angebote gesichert in „" + name + "“. Lege die Datei an einen zweiten Ort (Stick, Cloud, Mail an dich selbst).", true);
+        }, function (e) { siMelde("sicherung-meldung", SI_GRUND[e && e.message] || "Die Sicherung ist nicht gelungen.", false); });
+      }, "pri", { id: "sicherung-machen" }),
+      h("p", { id: "sicherung-meldung", role: "status", hidden: true }),
+      h("h3", { text: "Zurückholen", style: "margin-top:12px" }),
+      h("p", { class: "gedaempft klein", text: "Fügt hinzu, überschreibt nie: was mit derselben Nummer schon da ist, bleibt. Katalog und Einstellungen kommen nur, wo hier noch keine eigenen stehen." }),
+      h("div", { class: "zeile" }, h("label", { class: "btn" }, "📂 Sicherung wählen …", h("input", { type: "file", accept: ".json,application/json", hidden: true, id: "sicherung-datei", onchange: function () {
+          var f = this.files && this.files[0]; if (!f) return;
+          f.text().then(function (t) { var j = null; try { j = JSON.parse(t); } catch (_e) {}
+            if (!SI.istSicherung(j)) { gewaehlt = null; siMelde("sicherung-zurueck-meldung", SI_GRUND["keine-sicherung"], false); return; }
+            gewaehlt = j; siMelde("sicherung-zurueck-meldung", "Sicherung vom " + datumDe(String(j.erstellt).slice(0, 10)) + " gewählt — jetzt das Passwort eingeben.", true); pwz.focus(); });
+        } })), feld("Passwort der Sicherung", pwz),
+        knopf("Zurückholen", function () {
+          if (!gewaehlt) return siMelde("sicherung-zurueck-meldung", "Erst eine Sicherungsdatei wählen.", false);
+          SI.oeffnen(pwz.value, gewaehlt).then(function (o) {
+            return dbAlle("bilder").then(function (bl) {
+              var neu = SI.zusammenfuehren({ angebote: S.angebote, kunden: S.kunden, bilder: bl }, o);
+              return Promise.all(neu.angebote.map(function (a) { return dbPut("angebote", a); }).concat(neu.kunden.map(function (k) { return dbPut("kunden", k); }))
+                .concat(neu.bilder.map(function (b) { return dbPut("bilder", b); }))).then(function () {
+                  if (!lsGet(LS.katalog) && o.speicher.katalog) { lsSet(LS.katalog, o.speicher.katalog); katalogLaden(); }
+                  if (!lsGet(LS.einst) && o.speicher.einstellungen) { lsSet(LS.einst, o.speicher.einstellungen); S.einst = Object.assign(S.einst, lsJson(LS.einst, {})); }
+                  S.angebote = S.angebote.concat(neu.angebote).sort(function (x, y) { return x.id < y.id ? 1 : -1; }); S.kunden = S.kunden.concat(neu.kunden);
+                  neu.bilder.forEach(function (b) { bildUrls[b.id] = URL.createObjectURL(b.blob); });
+                  gewaehlt = null; pwz.value = "";
+                  melde("Zurückgeholt: " + neu.angebote.length + " Angebote, " + neu.kunden.length + " Kunden, " + neu.bilder.length + " Bilder" + (neu.schonDa ? " · " + neu.schonDa + " Angebote waren schon da und bleiben unverändert" : "") + ".", "");
+                });
+            });
+          }, function (e) { siMelde("sicherung-zurueck-meldung", SI_GRUND[e && e.message] || "Zurückholen ist nicht gelungen.", false); });
+        }, "", { id: "sicherung-zurueck" })),
+      h("p", { id: "sicherung-zurueck-meldung", role: "status", hidden: true }));
+  }
+
   function rechnerKarte(gb) {
     var s = gb.saetze, box = h("div");
     var R1 = S.rechner1 = S.rechner1 || { lohnJahrCent: null, lohnnebenPct: 21, gemeinkostenJahrCent: null, gewinnJahrCent: null, produktiveStunden: 1400 };
