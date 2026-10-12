@@ -1,0 +1,278 @@
+/* Workflow Calculate — Gestaltung. Übernommen aus Workflow-Needs (assets/app.css, Stand c46c753),
+   Klaus 2026-10-12: „das Layout kannst du so übernehmen … nicht mit Orange, mit einer anderen Farbe,
+   sodass man das unterscheiden kann auf Anhieb“. Akzent Blau/Petrol statt Messing/Kupfer;
+   Violett für „intern“ bleibt gleich, damit „intern“ in beiden Apps gleich aussieht.
+   Druck: schlicht schwarz auf weiß, nur #druck. */
+:root{
+  --bg:#0d1218;--bg2:#121a23;--surface:#18222d;--surface-2:#1f2b38;--line:#2c3b4b;--line-2:#3a4d61;
+  --ink:#e8edf2;--ink-2:#a9b6c3;--ink-3:#7d8b99;
+  --accent:#4a9fe0;--accent2:#2fb39a;--accent3:#7cc7ff;
+  --ok:#5cc28a;--warn:#e7c35a;--bad:#ef7a6a;--intern:#b48cf0;
+  --glow:0 0 0 1px color-mix(in srgb,var(--accent) 45%,transparent),0 0 22px color-mix(in srgb,var(--accent) 30%,transparent);
+  --radius:14px;--font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg:#f4f1ea;--bg2:#ece7dc;--surface:#fffdf8;--surface-2:#f6f1e6;--line:#d9d0bf;--line-2:#c7bba5;
+  --ink:#1d232a;--ink-2:#4b5560;--ink-3:#6f7882;
+  --accent:#1f6fb2;--accent2:#17806d;--accent3:#145b94;--ok:#24804f;--warn:#9a7410;--bad:#b4402f;--intern:#6d45b0;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:radial-gradient(1200px 600px at 10% -10%,color-mix(in srgb,var(--accent) 9%,transparent),transparent 60%),var(--bg);
+  color:var(--ink);font:15px/1.45 var(--font);min-height:100dvh;overflow-x:hidden}
+.num,input[type=number],.zahl{font-variant-numeric:tabular-nums}
+a{color:var(--accent3)}
+h1,h2,h3{margin:0;line-height:1.2}
+h2{font-size:1.15rem}h3{font-size:1rem}
+.gedaempft{color:var(--ink-2)}.klein{font-size:.85rem}
+[hidden]{display:none!important}
+
+/* ── Kopfleiste ── */
+.kopf{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:8px 16px;
+  background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.marke{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.marke img{width:34px;height:34px;border-radius:9px;flex:none}
+.marke b{font-size:1.02rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.marke small{display:block;color:var(--ink-3);font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kopf-knoepfe{display:flex;gap:6px;align-items:center;flex:none}
+.reiter{position:sticky;top:51px;z-index:19;display:flex;gap:6px;padding:8px 16px;overflow-x:auto;scrollbar-width:thin;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.reiter button{flex:none}
+main{padding:16px;max-width:1400px;margin:0 auto}
+.band{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.spalten{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,420px);gap:16px;align-items:start}
+@media (max-width:980px){.spalten{grid-template-columns:minmax(0,1fr)}}
+.karte{background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px;margin:0 0 14px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.karte>h2,.karte>h3{margin-bottom:10px}
+.karte.intern,.eintrag.intern{border-style:dashed;border-color:color-mix(in srgb,var(--intern) 70%,transparent)}
+.zeile{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.zeile>label{min-width:0}
+label.feld{display:flex;flex-direction:column;gap:4px;font-size:.85rem;color:var(--ink-2);min-width:0;flex:1 1 180px}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg2);border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;min-width:0;max-width:100%}
+textarea{width:100%;resize:vertical;min-height:60px}
+input:focus,select:focus,textarea:focus{outline:2px solid color-mix(in srgb,var(--accent) 70%,transparent);outline-offset:1px}
+input:disabled,select:disabled,textarea:disabled{opacity:.7}
+input.kurz{width:6.5em}input.mittel{width:10em}
+[data-manuell="1"]{border-color:var(--warn)!important;box-shadow:0 0 0 1px var(--warn) inset}
+.hinweis{border-left:3px solid var(--accent3);padding:8px 10px;background:color-mix(in srgb,var(--accent3) 8%,transparent);border-radius:8px;margin:8px 0;font-size:.9rem}
+.hinweis.warn{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent)}
+.hinweis.bad{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,transparent)}
+.hinweis.intern{border-color:var(--intern);background:color-mix(in srgb,var(--intern) 9%,transparent)}
+.badge{display:inline-flex;align-items:center;gap:4px;font:600 .78rem/1 var(--font);padding:4px 7px;border-radius:999px;
+  border:1px solid var(--line-2);color:var(--ink-2);background:var(--bg2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.badge.kennung{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.badge.gelb{color:#211a05;background:var(--warn);border-color:var(--warn)}
+.badge.intern{color:var(--intern);border-color:var(--intern)}
+.badge.ok{color:var(--ok);border-color:var(--ok)}
+
+/* ── Glas-Knöpfe (nach tomy-ui/theme.css .btn) ── */
+.btn{position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;gap:7px;font-weight:700;
+  border-radius:12px;padding:9px 14px;font-size:.92rem;cursor:pointer;border:1px solid transparent;overflow:hidden;
+  text-decoration:none;line-height:1.2;color:var(--ink);white-space:nowrap;
+  background:linear-gradient(180deg,var(--surface-2),var(--surface));border-color:var(--line-2);
+  transform:perspective(640px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform .14s ease,box-shadow .2s ease,border-color .2s;
+  box-shadow:inset 0 2px 1px rgba(255,255,255,.18),inset 0 -5px 9px rgba(0,0,0,.32),inset 11px 0 17px rgba(255,255,255,.04),
+    inset -11px 0 19px rgba(0,0,0,.2),inset 0 0 0 1px rgba(255,255,255,.06),0 8px 18px rgba(0,0,0,.22),0 2px 5px rgba(0,0,0,.18)}
+.btn::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(90px 60px at var(--mx,50%) var(--my,24%),rgba(255,255,255,.55),transparent 56%),
+    linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0) 46%),
+    linear-gradient(115deg,transparent 26%,color-mix(in srgb,var(--accent3) 50%,transparent) 43%,color-mix(in srgb,var(--accent) 50%,transparent) 51%,color-mix(in srgb,var(--accent2) 50%,transparent) 60%,transparent 76%);
+  background-size:auto,auto,240% 100%;background-position:0 0,0 0,var(--mx,50%) 0;mix-blend-mode:screen;opacity:.28;transition:opacity .22s}
+.btn::after{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(60% 140% at var(--mx,50%) -10%,rgba(255,255,255,.4),transparent 40%);mix-blend-mode:screen;opacity:0;transition:opacity .22s}
+.btn:hover::before,.btn:focus-visible::before{opacity:.9}.btn:hover::after,.btn:focus-visible::after{opacity:.7}
+.btn:hover{border-color:var(--accent)}
+.btn:active{transform:perspective(640px) scale(.97)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.pri{background:linear-gradient(135deg,var(--accent),var(--accent2) 70%,color-mix(in srgb,var(--accent2) 55%,#04203a));color:#06121d;border-color:transparent;
+  text-shadow:0 1px 0 rgba(255,255,255,.35)}
+.btn.pri:hover{box-shadow:inset 0 2px 1px rgba(255,255,255,.7),inset 0 -5px 9px rgba(0,0,0,.45),0 14px 28px rgba(0,0,0,.35),var(--glow)}
+.btn.on{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 85%,#000),var(--accent2));color:#06121d;border-color:var(--accent)}
+.btn.rund{width:38px;height:38px;padding:0;border-radius:50%;font-size:1.1rem}
+#installieren.btn.rund{width:auto;border-radius:999px;padding:0 12px;font-size:.88rem}
+.btn.klein{padding:5px 9px;font-size:.82rem;border-radius:9px}
+.btn.gefahr{color:var(--bad)}
+.btn.chip{padding:6px 10px;border-radius:999px;font-weight:600;font-size:.85rem}
+@media (prefers-reduced-motion:reduce){.btn{transform:none!important;transition:none}}
+
+/* ── Zähler (mechanisch) und Schalter ── */
+.zaehler{display:inline-flex;align-items:stretch;border-radius:11px;overflow:hidden;border:1px solid var(--line-2);
+  box-shadow:inset 0 2px 4px rgba(0,0,0,.35)}
+.zaehler button{width:34px;border:0;background:linear-gradient(180deg,var(--surface-2),var(--surface));color:var(--ink);font-size:1.1rem;cursor:pointer}
+.zaehler button:active{background:var(--bg2);box-shadow:inset 0 2px 5px rgba(0,0,0,.5)}
+.zaehler output{min-width:3ch;padding:6px 8px;text-align:center;background:#06090d;color:var(--accent);font:700 1rem/1.4 ui-monospace,Menlo,Consolas,monospace;
+  font-variant-numeric:tabular-nums;border-inline:1px solid var(--line-2)}
+:root[data-theme="light"] .zaehler output{background:#1d232a}
+.schalter{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:.86rem;color:var(--ink-2)}
+.schalter input{appearance:none;width:42px;height:24px;border-radius:999px;background:var(--bg2);border:1px solid var(--line-2);position:relative;
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.45);cursor:pointer;flex:none;padding:0;transition:background .2s}
+.schalter input::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+  background:linear-gradient(180deg,#fff,#c9cfd6);box-shadow:0 2px 4px rgba(0,0,0,.4);transition:left .18s}
+.schalter input:checked{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.schalter input:checked::after{left:20px}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:11px;overflow:hidden}
+.seg button{border:0;background:var(--bg2);color:var(--ink-2);padding:6px 10px;font:600 .84rem var(--font);cursor:pointer}
+.seg button+button{border-left:1px solid var(--line-2)}
+.seg button.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d}
+.seg button:disabled{cursor:not-allowed}
+
+.held{display:flex;gap:16px;align-items:center}
+.held img{width:120px;height:120px;border-radius:16px;object-fit:cover;flex:none;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+@media (max-width:640px){.held img{width:76px;height:76px;border-radius:12px}}
+/* ── Bedarf ── */
+.fortschritt{height:10px;border-radius:999px;background:var(--bg2);border:1px solid var(--line);overflow:hidden;box-shadow:inset 0 2px 4px rgba(0,0,0,.35)}
+.fortschritt i{display:block;height:100%;background:linear-gradient(90deg,var(--accent3),var(--accent))}
+.bereich-kopf{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.eintrag{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:11px;margin:6px 0;background:var(--bg2)}
+.eintrag>div{min-width:0;overflow-wrap:anywhere}
+.eintrag .mehr{grid-column:2/4;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.eintrag input.text{width:100%}
+.intern-satz{color:var(--intern);font-size:.8rem}
+
+/* ── Umfang ── */
+.baustein{border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0;background:var(--bg2)}
+.baustein.offen{border-color:var(--warn);box-shadow:0 0 0 1px color-mix(in srgb,var(--warn) 40%,transparent) inset}
+.ergebnis{position:sticky;top:110px}
+.gross-zahl{font:800 2rem/1.1 var(--font);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.mittel-zahl{font:700 1.2rem/1.2 var(--font);font-variant-numeric:tabular-nums}
+.spanne{position:relative;height:16px;border-radius:999px;background:var(--bg2);border:1px solid var(--line);margin:10px 0 4px}
+.spanne i{position:absolute;top:2px;bottom:2px;border-radius:999px;background:linear-gradient(90deg,var(--accent3),var(--accent))}
+.spanne b{position:absolute;top:-3px;bottom:-3px;border:1px dashed var(--ink-3);border-radius:6px}
+.weg{font-size:.82rem;color:var(--ink-2);margin:6px 0 0;padding-left:18px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.8rem;color:var(--ink-3);font-weight:600}
+td.r,th.r{text-align:right;white-space:nowrap}
+tr.grenze td{border-top:2px solid var(--bad)}
+tr.unter td{opacity:.62}
+.tabelle-huelle{overflow-x:auto;max-width:100%}
+.status-neu{color:var(--ok)}.status-entfallen{color:var(--bad)}.status-geaendert{color:var(--warn)}.status-gleich{color:var(--ink-3)}
+svg.kurve{width:100%;height:auto;display:block}
+pre.md{white-space:pre-wrap;word-break:break-word;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:.8rem;max-height:340px;overflow:auto}
+
+/* ── Vorschau (Bildschirm) ── */
+dialog#vorschau{width:min(900px,96vw);max-height:92dvh;border:1px solid var(--line-2);border-radius:16px;padding:0;background:var(--surface);color:var(--ink)}
+dialog#vorschau::backdrop{background:rgba(0,0,0,.55)}
+.vorschau-kopf{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line)}
+.vorschau-papier{background:#7d858d;padding:14px;overflow:auto;max-height:calc(92dvh - 70px)}
+.blatt{background:#fff;color:#000;max-width:794px;margin:0 auto;padding:44px 48px;font:11pt/1.42 Georgia,"Times New Roman",serif;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+.blatt h1{font:700 18pt/1.2 Arial,Helvetica,sans-serif;margin:0 0 4px}
+.blatt h2{font:700 12pt/1.3 Arial,Helvetica,sans-serif;margin:16px 0 6px;border-bottom:1px solid #000;padding-bottom:2px}
+.blatt .absender{font:9pt/1.35 Arial,Helvetica,sans-serif;text-align:right;white-space:pre-line}
+.blatt .absender img{max-height:48px;max-width:180px}
+.blatt .kopfzeile{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:18px}
+.blatt .meta{font:9.5pt/1.4 Arial,Helvetica,sans-serif}
+.blatt table{font:10pt/1.35 Arial,Helvetica,sans-serif}
+.blatt th,.blatt td{border-bottom:1px solid #999;color:#000;padding:4px 6px}
+.blatt th{color:#000;font-weight:700}
+.blatt .kenn{font:9pt Arial,Helvetica,sans-serif;color:#000;white-space:nowrap}
+.blatt ul{margin:4px 0 6px;padding-left:18px}
+.blatt .unterschriften{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-top:40px;font:9pt Arial,Helvetica,sans-serif;break-inside:avoid}
+.blatt .unterschriften div{border-top:1px solid #000;padding-top:4px;min-height:60px}
+.blatt .fuss{margin-top:28px;font:8pt/1.3 Arial,Helvetica,sans-serif;border-top:1px solid #000;padding-top:6px;white-space:pre-line}
+.blatt .intern-titel{border:2px solid #000;padding:6px 8px;font:700 10pt Arial,Helvetica,sans-serif;margin:6px 0 12px}
+.blatt .klein{font-size:9pt}
+#druck{display:none}
+
+@media print{
+  @page{size:A4;margin:14mm 14mm 16mm}
+  body{background:#fff!important;color:#000}
+  body>*:not(#druck){display:none!important}
+  #druck{display:block!important}
+  #druck .blatt{box-shadow:none;padding:0;max-width:none}
+}
+
+/* ── Schmal ── */
+@media (max-width:640px){
+  main{padding:12px}
+  .kopf{padding:8px 12px;gap:6px}
+  .marke small{font-size:.68rem}
+  .marke b{font-size:.92rem}
+  .btn.rund{width:34px;height:34px}
+  #installieren .t{display:none}
+  .reiter{padding:6px 12px;top:51px}
+  .eintrag{grid-template-columns:minmax(0,1fr) auto}
+  .eintrag>.badge{grid-column:1/3;justify-self:start}
+  .eintrag .mehr{grid-column:1/3}
+  .eintrag>.band:last-child{grid-column:1/-1}
+  .gross-zahl{font-size:1.6rem}
+  .blatt{padding:22px 18px}
+  .blatt .unterschriften{grid-template-columns:1fr;gap:20px}
+}
+.anhang-bild{max-width:min(240px,100%);max-height:160px;margin-top:6px;border-radius:8px;border:1px solid var(--line)}
+.app-fuss{text-align:center;padding:18px 16px 28px;font-size:.85rem;color:var(--muted,inherit);opacity:.85}
+.app-fuss a,.recht a{color:inherit}
+.recht h1{margin-bottom:8px}.recht h2{margin:16px 0 6px;font-size:1.05rem}.recht p{margin:6px 0;line-height:1.5;overflow-wrap:anywhere}
+/* Leere Schreiblinie statt Platzhalter, wenn Kundendaten fehlen (Stufe 3 § 1b) */
+.schreiblinie{display:inline-block;min-width:60%;max-width:100%;border-bottom:1px solid currentColor;height:1.1em;vertical-align:bottom}
+/* Unterschrift mit Finger oder Stift (Stufe 3 § 4b) */
+.unterschrift-feld{flex:1 1 260px;display:flex;flex-direction:column;gap:4px;min-width:0}
+canvas.unterschrift{width:100%;max-width:600px;aspect-ratio:4/1;height:auto;background:#fff;border:1px dashed var(--line,#888);border-radius:8px;touch-action:none;cursor:crosshair}
+.blatt .unterschrift-bild{display:block;max-height:60px;max-width:100%}
+/* Rechtsblätter: Parteien im Kopf, Unterschrift ÜBER der Linie, kein Umbruch vor den Unterschriften */
+.blatt .parteien{display:grid;grid-template-columns:1fr 1fr;gap:28px;font:10pt/1.4 Arial,Helvetica,sans-serif;white-space:pre-line;margin:0 0 16px;padding:8px 0;border-top:1px solid #000;border-bottom:1px solid #000}
+.blatt .parteien .schreiblinie{min-width:90%}
+.blatt .unterschriften.mit-strich div{border-top:0;padding-top:0;min-height:0}
+.blatt .unterschriften.mit-strich .strich{min-height:56px;border-bottom:1px solid #000;margin-bottom:4px;display:flex;align-items:flex-end}
+.blatt .schlussblock{break-inside:avoid;page-break-inside:avoid}
+.blatt h2{break-after:avoid;page-break-after:avoid}
+.blatt .abschnitt{break-inside:avoid;page-break-inside:avoid}
+.blatt .sterne-ankreuzen{white-space:nowrap;font-size:11pt}
+.vorschau-kopf .badge{white-space:normal;max-width:100%}
+
+/* Helles Thema: auf den Akzent-Flächen weiße Schrift (wie in Workflow-Needs), Verlauf dunkel genug. */
+:root[data-theme="light"] .btn.pri,
+:root[data-theme="light"] .btn.on,
+:root[data-theme="light"] .seg button.on{background:linear-gradient(135deg,#17599a,#0f6b5c);color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.35)}
+:root[data-theme="light"] .badge.gelb{background:#7a5a0c;border-color:#7a5a0c;color:#fff}
+
+
+/* Erklären an Ort und Stelle — wie in Workflow-Needs */
+button.badge{cursor:pointer}
+.erklaer-chip{text-decoration:underline dotted;text-underline-offset:3px}
+.erklaer-offen{outline:2px solid var(--accent);outline-offset:1px}
+.erklaer-feld{border:1px dashed var(--accent);border-radius:10px;padding:8px 10px;margin:6px 0;background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.erklaer-feld p{margin:4px 0}
+.alt-zeile{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line)}
+.alt-zeile:last-child{border-bottom:0}
+.alt-zeile .wirkung{font-variant-numeric:tabular-nums;color:var(--ink-2);font-size:.86rem}
+.preis-leiste{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:2px 0 10px}
+.preis-leiste.intern{border:1px dashed var(--intern);border-radius:12px;padding:8px 10px;background:color-mix(in srgb,var(--intern) 7%,transparent)}
+.minus{color:var(--bad)}.plus{color:var(--ok)}
+/* Workflow Calculate */
+.position{border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0;background:var(--bg2)}
+.position.offen{border-color:var(--warn)}
+.position-kopf{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.preis-gross{font:800 1.5rem/1.1 var(--font);font-variant-numeric:tabular-nums}
+.verlust{color:var(--bad);font-weight:700}
+.galerie{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin:8px 0}
+.beispiel{border:1px solid var(--line);border-radius:12px;padding:8px;background:var(--surface);display:flex;flex-direction:column;gap:6px;min-width:0}
+.beispiel img.gross{width:100%;aspect-ratio:4/3;object-fit:contain;background:#fff;border-radius:8px}
+.ansichten{display:flex;gap:4px;flex-wrap:wrap}
+.ansichten button{border:1px solid var(--line-2);background:var(--bg2);border-radius:8px;padding:2px;cursor:pointer;line-height:0}
+.ansichten button.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.ansichten img{width:46px;height:34px;object-fit:contain;background:#fff;border-radius:5px}
+.daumen{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.daumen img{width:72px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--line);background:#fff}
+.markt-balken{position:relative;height:22px;border-radius:6px;background:var(--surface);border:1px solid var(--line);margin:6px 0}
+.markt-balken i{position:absolute;top:3px;bottom:3px;border-radius:4px;background:color-mix(in srgb,var(--accent) 40%,transparent)}
+.markt-balken b{position:absolute;top:-4px;bottom:-4px;width:3px;background:var(--ink);border-radius:2px}
+.markt-balken s{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--bad)}
+.markt-klasse.aus{opacity:.55}
+details.weg-details summary{cursor:pointer;color:var(--intern)}
+.schema td{padding:2px 8px}.schema tr.summe td{font-weight:700;border-top:1px solid var(--line-2)}
+.katalog-liste .eintrag-kat{border:1px solid var(--line);border-radius:11px;padding:8px 10px;margin:6px 0;background:var(--bg2)}
+.katalog-liste summary{cursor:pointer;font-weight:600}
+.feldgitter{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin:6px 0}
+.platzhalter-marke{color:var(--warn);font-size:.8rem}
+.blatt .pos-bild{width:70px;height:52px;object-fit:contain}
+.blatt .staffel{font-size:9pt;color:#000}
+.blatt .summen td{border:0;padding:2px 6px}
+.blatt .summen tr.brutto td{font-weight:700;border-top:1px solid #000}
+/* Schrittleiste: was erledigt ist, steht mit ✓; der nächste Schritt leuchtet */
+.schritte{padding:10px 14px}
+.schritte .btn.chip.fertig{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 55%,transparent)}
+.schritte p{margin:8px 0 0}

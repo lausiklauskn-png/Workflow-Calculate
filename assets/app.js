@@ -1,0 +1,1036 @@
+/* Workflow Calculate — die Oberfläche. Rechnen in assets/kern/*, hier nur Anzeige und Eingabe.
+   Aufbau nach Workflow-Needs (assets/app.js, Stand c46c753): Reiter, h()-Helfer, IndexedDB mit
+   verzögertem Schreiben, Druck über #druck, Glanzpunkt der Knöpfe. Alles Sichtbare über textContent. */
+(function () {
+  "use strict";
+  var WC = window.WC, G = WC.geld, K = WC.kalk, A = WC.angebot, KAT = WC.katalog, MK = WC.markt;
+  var LS = { katalog: "workflowcalculate_katalog", einst: "workflowcalculate_einstellungen", thema: "workflowcalculate_thema",
+    aktiv: "workflowcalculate_aktiv", reiter: "workflowcalculate_reiter" };
+  var DB_NAME = "WorkflowCalculate1", STORES = ["angebote", "kunden", "bilder"];
+
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (_e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (_e) {} }
+  function lsJson(k, d) { try { var x = JSON.parse(lsGet(k) || "null"); return x == null ? d : x; } catch (_e) { return d; } }
+  function kopie(x) { return JSON.parse(JSON.stringify(x)); }
+
+  /* ── Zustand ── */
+  var S = {
+    angebote: [], kunden: [], aktiv: lsGet(LS.aktiv), reiter: lsGet(LS.reiter) || "angebote",
+    katalog: null, einst: Object.assign({ firma: { name: "", anschrift: "", kontakt: "", steuer: "", bank: "", logo: "" }, kleinunternehmer: false }, lsJson(LS.einst, {})),
+    meldung: null, offen: {}, katReiter: "vorlagen", katOffen: null, neuPos: null,
+  };
+  function katalogLaden() {
+    var k = lsJson(LS.katalog, null);
+    S.katalog = k && !KAT.pruefe(k).length ? k : kopie(WC.START);
+  }
+  katalogLaden();
+  function katalogSpeichern() { lsSet(LS.katalog, JSON.stringify(S.katalog)); }
+  function einstSpeichern() { lsSet(LS.einst, JSON.stringify(S.einst)); }
+
+  /* ── IndexedDB ── */
+  var dbP = null;
+  function db() {
+    if (dbP) return dbP;
+    dbP = new Promise(function (ok, nein) {
+      if (!window.indexedDB) { nein(new Error("kein IndexedDB")); return; }
+      var r = indexedDB.open(DB_NAME, 1);
+      r.onupgradeneeded = function () { STORES.forEach(function (s) { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: "id" }); }); };
+      r.onsuccess = function () { ok(r.result); };
+      r.onerror = function () { nein(r.error); };
+    });
+    return dbP;
+  }
+  function dbAlle(store) {
+    return db().then(function (d) { return new Promise(function (ok, nein) { var q = d.transaction(store, "readonly").objectStore(store).getAll(); q.onsuccess = function () { ok(q.result || []); }; q.onerror = function () { nein(q.error); }; }); });
+  }
+  function dbPut(store, v) {
+    return db().then(function (d) { return new Promise(function (ok, nein) { var tx = d.transaction(store, "readwrite"); tx.objectStore(store).put(v); tx.oncomplete = function () { ok(); }; tx.onerror = function () { nein(tx.error); }; }); });
+  }
+  function dbGet(store, id) {
+    return db().then(function (d) { return new Promise(function (ok) { var q = d.transaction(store, "readonly").objectStore(store).get(id); q.onsuccess = function () { ok(q.result || null); }; q.onerror = function () { ok(null); }; }); });
+  }
+  function dbDel(store, id) {
+    return db().then(function (d) { return new Promise(function (ok) { var tx = d.transaction(store, "readwrite"); tx.objectStore(store).delete(id); tx.oncomplete = function () { ok(); }; }); });
+  }
+  var schreibUhr = null, offenSchreiben = {};
+  function merken(a) {
+    a = a || aktivesAngebot(); if (!a) return;
+    offenSchreiben[a.id] = a;
+    clearTimeout(schreibUhr); schreibUhr = setTimeout(jetztSpeichern, 250);
+  }
+  function jetztSpeichern() {
+    var l = Object.keys(offenSchreiben).map(function (k) { return offenSchreiben[k]; }); offenSchreiben = {};
+    return Promise.all(l.map(function (a) { return dbPut("angebote", kopie(a)); })).catch(function () {});
+  }
+  window.addEventListener("pagehide", jetztSpeichern);
+
+  /* ── Bilder: verkleinert (≤ 1600 px), als Blob in IndexedDB ── */
+  var bildUrls = {};
+  function bildSpeichern(datei) {
+    return new Promise(function (ok, nein) {
+      var url = URL.createObjectURL(datei), img = new Image();
+      img.onload = function () {
+        var max = 1600, f = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        var c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * f); c.height = Math.round(img.naturalHeight * f);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        c.toBlob(function (b) {
+          if (!b) { nein(new Error("Bild nicht lesbar")); return; }
+          var id = "B-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+          dbPut("bilder", { id: id, blob: b, name: datei.name || "", breite: c.width, hoehe: c.height }).then(function () { bildUrls[id] = URL.createObjectURL(b); ok(id); }, nein);
+        }, "image/jpeg", 0.86);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); nein(new Error("Bild nicht lesbar")); };
+      img.src = url;
+    });
+  }
+  /* Quelle eines Bildes: „svg:…“ (Zeichnung aus dem Startkatalog) oder „img:B-…“ bzw. „B-…“ (eigenes Foto) */
+  function bildQuelle(ref) {
+    ref = String(ref || "");
+    if (ref.indexOf("svg:") === 0) return WC.bildUrl(ref);
+    var id = ref.replace(/^img:/, "");
+    return bildUrls[id] || "";
+  }
+  function bilderVorladen(ids) {
+    return Promise.all(ids.filter(function (id) { return id && !bildUrls[id]; }).map(function (id) {
+      return dbGet("bilder", id).then(function (r) { if (r && r.blob) bildUrls[id] = URL.createObjectURL(r.blob); });
+    }));
+  }
+  function alleBildIds() {
+    var l = [];
+    S.angebote.forEach(function (a) { a.positionen.forEach(function (p) { (p.bilder || []).forEach(function (b) { l.push(b); }); }); });
+    (S.katalog.vorlagen || []).forEach(function (v) { (v.beispiele || []).forEach(function (b) { (b.ansichten || []).forEach(function (x) { if (/^img:/.test(x[1])) l.push(x[1].slice(4)); }); }); });
+    return l;
+  }
+
+  /* ── Hilfen ── */
+  function h(tag, a) {
+    var el = document.createElement(tag);
+    a = a || {};
+    Object.keys(a).forEach(function (k) {
+      var w = a[k];
+      if (w == null || w === false) return;
+      if (k === "text") el.textContent = w;
+      else if (k === "class") el.className = w;
+      else if (k.slice(0, 2) === "on") el.addEventListener(k.slice(2), w);
+      else if (k === "value" || k === "checked" || k === "disabled" || k === "type" || k === "hidden" || k === "multiple") el[k] = w;
+      else el.setAttribute(k, w === true ? "" : w);
+    });
+    for (var i = 2; i < arguments.length; i++) anhaengen(el, arguments[i]);
+    return el;
+  }
+  function anhaengen(el, k) {
+    if (k == null || k === false) return;
+    if (Array.isArray(k)) { k.forEach(function (x) { anhaengen(el, x); }); return; }
+    el.append(k.nodeType ? k : document.createTextNode(String(k)));
+  }
+  function knopf(text, fn, cls, extra) { return h("button", Object.assign({ type: "button", class: "btn " + (cls || ""), text: text, onclick: fn }, extra || {})); }
+  function euro(c) { return G.formatEuro(c); }
+  function zahl(x) { if (x === "" || x == null) return null; var n = Number(String(x).replace(/\./g, "").replace(",", ".")); return Number.isFinite(n) ? n : null; }
+  function zahlPunkt(x) { if (x === "" || x == null) return null; var n = Number(String(x).replace(",", ".")); return Number.isFinite(n) ? n : null; }
+  function deZahl(x) { return x == null || x === "" ? "" : String(Math.round(Number(x) * 1000) / 1000).replace(".", ","); }
+  function finde(l, id) { return K.finde(l, id); }
+  function aktivesAngebot() { return S.angebote.filter(function (a) { return a.id === S.aktiv; })[0] || null; }
+  function kundeVon(a) { return S.kunden.filter(function (k) { return k.id === a.kundeId; })[0] || a.kunde; }
+  function melde(text, art) { S.meldung = { text: text, art: art || "" }; zeichne(); }
+  function bearbeitbar(a) { return a && a.status !== "gestellt"; }
+  function feld(label, input, extra) { return h("label", Object.assign({ class: "feld" }, extra || {}), label, input); }
+  function delta(alt, neu) { var d = neu - alt; return (d > 0 ? "+" : d < 0 ? "−" : "±") + euro(Math.abs(d)); }
+
+  function fokusMerken() { var a = document.activeElement; if (!a || !a.dataset || !a.dataset.key) return null; return { key: a.dataset.key, s: a.selectionStart, e: a.selectionEnd }; }
+  function fokusZurueck(f) {
+    if (!f) return; var el = document.querySelector('[data-key="' + f.key.replace(/"/g, '\\"') + '"]'); if (!el) return;
+    el.focus({ preventScroll: true }); try { if (f.s != null) el.setSelectionRange(f.s, f.e); } catch (_e) {}
+  }
+
+  /* ── ↶ Zurück: bis zu 50 Stände je Angebot, nur im Speicher ── */
+  var ZURUECK = {};
+  function vorher(a) {
+    var st = ZURUECK[a.id] = ZURUECK[a.id] || [];
+    st.push(JSON.stringify({ positionen: a.positionen, versand: a.versand, saetze: a.saetze, kundeId: a.kundeId, kunde: a.kunde, zaehler: a.zaehler }));
+    if (st.length > 50) st.shift();
+  }
+  function zurueck(a) {
+    var st = ZURUECK[a.id]; if (!st || !st.length) return;
+    Object.assign(a, JSON.parse(st.pop())); merken(a); zeichne();
+  }
+
+  /* ── Rahmen ── */
+  var REITER = [["angebote", "Angebote"], ["angebot", "Angebot"], ["katalog", "Katalog"], ["kunden", "Kunden"], ["einstellungen", "Einstellungen"]];
+  function zeichneKopf() {
+    var a = aktivesAngebot(), sub = document.getElementById("app-unter");
+    if (sub) {
+      var text = a ? ((kundeVon(a) || {}).name || "ohne Kunde") + " · " + a.nummer + (a.status === "gestellt" ? " · gestellt" : " · Entwurf") + (a.titel ? " · " + a.titel : "") : "kein Angebot offen";
+      sub.textContent = text; sub.title = text;
+    }
+    var th = document.getElementById("thema");
+    if (th) { var hell = document.documentElement.dataset.theme === "light"; th.textContent = hell ? "🌙" : "☀"; th.title = hell ? "Dunkel" : "Hell"; }
+    var nav = document.getElementById("reiter"); nav.replaceChildren();
+    REITER.forEach(function (r) {
+      nav.append(knopf(r[1], function () { S.reiter = r[0]; lsSet(LS.reiter, r[0]); S.meldung = null; zeichne(); window.scrollTo(0, 0); }, "chip" + (S.reiter === r[0] ? " on" : ""), { "data-reiter": r[0] }));
+    });
+  }
+  function zeichne() {
+    var fk = fokusMerken();
+    zeichneKopf();
+    var main = document.getElementById("inhalt"); main.replaceChildren();
+    if (S.meldung) main.append(h("div", { class: "hinweis " + (S.meldung.art || ""), role: "status", "data-meldung": "" }, S.meldung.text));
+    var fn = { angebote: zAngebote, angebot: zAngebot, katalog: zKatalog, kunden: zKunden, einstellungen: zEinstellungen }[S.reiter] || zAngebote;
+    fn(main);
+    fokusZurueck(fk);
+  }
+
+  /* ════ Angebote (Liste) ════ */
+  function neuesAngebot() {
+    var a = A.neu(S.angebote);
+    S.angebote.unshift(a); S.aktiv = a.id; lsSet(LS.aktiv, a.id); merken(a);
+    S.reiter = "angebot"; lsSet(LS.reiter, "angebot"); S.meldung = null; zeichne();
+  }
+  /* Vorhandene Kalkulation übernehmen (Klaus 2026-10-12: „nachfolgende Kalkulationen abkürzen“) */
+  function angebotKopieren(alt) {
+    var a = A.neu(S.angebote);
+    ["titel", "kundeId", "kunde", "saetze", "versand", "zaehler", "notiz"].forEach(function (k) { a[k] = kopie(alt[k]); });
+    a.positionen = kopie(alt.positionen);
+    a.notiz = "Übernommen aus " + alt.nummer;
+    S.angebote.unshift(a); S.aktiv = a.id; lsSet(LS.aktiv, a.id); merken(a);
+    S.reiter = "angebot"; lsSet(LS.reiter, "angebot");
+    melde("Neues Angebot " + a.nummer + " aus " + alt.nummer + " übernommen — gerechnet wird mit den aktuellen Katalogwerten. Kunde, Mengen, Material anpassen.", "");
+  }
+  function zAngebote(main) {
+    main.append(h("div", { class: "karte held" },
+      h("img", { src: "icons/icon-192.png", alt: "", width: "96", height: "96" }),
+      h("div", null, h("h2", { text: "Workflow Calculate" }),
+        h("p", { class: "gedaempft", text: "Produkt wählen, Material und Menge eingeben — die App rechnet Material, Zeit, Verpackung & Versand und schreibt das Angebot. Die Kalkulation bleibt intern." }))));
+    var ph = KAT.platzhalter(S.katalog);
+    if (ph.anzahl) main.append(h("div", { class: "hinweis warn", "data-platzhalter-hinweis": "" },
+      "Der Katalog trägt noch " + ph.anzahl + " Platzhalter-Werte (Sätze, Einkaufspreise, Tarife) — nicht aus deinen Zahlen. Im Reiter „Katalog“ und „Einstellungen“ eigene eintragen.", " ",
+      knopf("Zum Katalog", function () { S.reiter = "katalog"; zeichne(); }, "klein")));
+    main.append(h("div", { class: "band", style: "margin-bottom:12px" }, knopf("＋ Neues Angebot", neuesAngebot, "pri", { id: "neues-angebot" })));
+    if (!S.angebote.length) { main.append(h("p", { class: "gedaempft", text: "Noch kein Angebot." })); return; }
+    var kat = S.katalog;
+    var t = h("table", null, h("thead", null, h("tr", null, ["Nummer", "Kunde", "Titel", "Status", "netto", ""].map(function (x, i) { return h("th", { class: i === 4 ? "r" : "", text: x }); }))));
+    var tb = h("tbody");
+    S.angebote.forEach(function (a) {
+      var r = A.rechne(a, kat, kundeVon(a), S.einst.kleinunternehmer);
+      tb.append(h("tr", { "data-angebot-zeile": a.id, style: "cursor:pointer", onclick: function () { S.aktiv = a.id; lsSet(LS.aktiv, a.id); S.reiter = "angebot"; zeichne(); } },
+        h("td", { text: a.nummer }), h("td", { text: (kundeVon(a) || {}).name || "—" }), h("td", { text: a.titel || "" }),
+        h("td", { text: a.status === "gestellt" ? "gestellt 🔒" : "Entwurf" }), h("td", { class: "r", text: euro(r.summen.netto) }),
+        h("td", null, knopf("⧉ als neues Angebot", function (ev) { ev.stopPropagation(); angebotKopieren(a); }, "klein", { "data-kopieren": a.id, title: "Kalkulation übernehmen und anpassen" }))));
+    });
+    t.append(tb);
+    main.append(h("div", { class: "karte" }, h("div", { class: "tabelle-huelle" }, t)));
+  }
+
+  /* ════ Angebot ════ */
+  function zAngebot(main) {
+    var a = aktivesAngebot();
+    if (!a) { main.append(h("div", { class: "karte" }, h("p", { text: "Noch kein Angebot offen." }), knopf("＋ Neues Angebot", neuesAngebot, "pri", { id: "neues-angebot" }))); return; }
+    var ro = !bearbeitbar(a), kunde = kundeVon(a);
+    var r = A.rechne(a, S.katalog, kunde, S.einst.kleinunternehmer), kat = r.kat;
+
+    /* Schrittleiste: jeder sieht, was als Nächstes kommt (Klaus 2026-10-12: „nutzerfreundlich, aber nicht simpel … gleich zum Ziel gelenkt“) */
+    main.append(schrittLeiste(a, r, kunde));
+
+    /* Kopf */
+    var kundenWahl = h("select", { id: "kunde-wahl", disabled: ro, onchange: function () { vorher(a); a.kundeId = this.value; var k = S.kunden.filter(function (x) { return x.id === a.kundeId; })[0]; if (k) a.kunde = { name: k.name, anschrift: k.anschrift, klasse: k.klasse }; merken(a); zeichne(); } },
+      h("option", { value: "", text: "— Kunde wählen —" }), S.kunden.map(function (k) { return h("option", { value: k.id, text: k.name + " (" + (k.klasse || "B") + ")", selected: k.id === a.kundeId }); }));
+    main.append(h("div", { class: "karte", "data-schritt-ziel": "kunde" },
+      h("div", { class: "position-kopf" }, h("h2", { text: "Angebot " + a.nummer }),
+        h("div", { class: "band" },
+          knopf("↶ Zurück" + (ZURUECK[a.id] && ZURUECK[a.id].length ? " (" + ZURUECK[a.id].length + ")" : ""), function () { zurueck(a); }, "klein", { id: "zurueck", disabled: ro || !(ZURUECK[a.id] && ZURUECK[a.id].length) }),
+          knopf("👁 Vorschau", function () { vorschau(a); }, "klein", { id: "vorschau-angebot" }),
+          knopf("🖨 Drucken / PDF", function () { drucke(a); }, "pri klein", { id: "druck-angebot" }),
+          knopf("📤 An WorkFloh übergeben", function () { uebergeben(a); }, "klein", { id: "uebergabe" }),
+          ro ? knopf("✎ Zurück zum Entwurf", function () { if (confirm("Zurück zum Entwurf? Dann gelten wieder die aktuellen Katalogwerte.")) { A.zurueckZumEntwurf(a); merken(a); zeichne(); } }, "klein", { id: "entwurf" })
+            : knopf("🔒 Angebot stellen", function () { A.stellen(a, S.katalog); merken(a); melde("Angebot gestellt — Sätze und Einkaufspreise sind jetzt eingefroren.", ""); }, "klein", { id: "stellen" }))),
+      ro ? h("div", { class: "hinweis warn", "data-nur-lesen": "" }, "Gestellt und eingefroren — nur lesen. Spätere Katalogänderungen verschieben dieses Angebot nicht.") : null,
+      h("div", { class: "feldgitter" },
+        feld("Titel", h("input", { value: a.titel, "data-key": "titel", disabled: ro, oninput: function () { a.titel = this.value; merken(a); zeichneKopf(); } })),
+        feld("Kunde", kundenWahl),
+        feld("Datum", h("input", { type: "date", value: a.datum, disabled: ro, onchange: function () { a.datum = this.value; merken(a); } })),
+        feld("gültig bis", h("input", { type: "date", value: a.gueltigBis, disabled: ro, onchange: function () { a.gueltigBis = this.value; merken(a); } }))),
+      ro ? null : kundeSchnell(a)));
+
+    /* Preisleiste (intern) */
+    var s = r.summen;
+    var kl = kunde && kunde.klasse ? kunde.klasse : "";
+    var leiste = h("div", { class: "preis-leiste intern", "data-preis-leiste": "" },
+      h("span", { class: "badge intern", text: "🔒 intern" }),
+      h("span", { class: "badge", "data-leiste-netto": "" }, "Angebot netto ", h("b", { text: euro(s.netto) })),
+      h("span", { class: "badge", "data-leiste-sk": "" }, "Selbstkosten " + euro(s.selbstkosten)),
+      h("span", { class: "badge " + (s.deckungsbeitrag < 0 ? "verlust" : "ok"), "data-leiste-db": "" }, "Deckungsbeitrag " + euro(s.deckungsbeitrag)),
+      kl ? h("span", { class: "badge", "data-leiste-klasse": kl }, kl + "-Kunde") : h("span", { class: "badge", text: "ohne Kundenklasse (B)" }),
+      s.offen ? h("span", { class: "badge gelb", text: s.offen + " Position(en) nicht kalkuliert — zählen nicht mit" }) : null,
+      r.positionen.some(function (x) { return x.erg.platzhalter; }) ? h("span", { class: "badge gelb", "data-leiste-platzhalter": "" }, "Platzhalter-Werte — nicht aus deinen Zahlen") : null);
+    leiste.setAttribute("data-schritt-ziel", "preis");
+    main.append(leiste);
+
+    /* Positionen */
+    r.positionen.forEach(function (x, i) { main.append(positionKarte(a, x, kat, kunde, ro, i)); });
+
+    /* + Position mit Beispielen */
+    if (!ro) main.append(neuePositionKarte(a, kat, kunde));
+
+    /* Versand */
+    main.append(versandKarte(a, r, kat, ro));
+
+    /* Summen */
+    var t = h("table", { class: "summen-tab", "data-summen": "" });
+    t.append(h("tr", null, h("td", { text: "Summe netto" }), h("td", { class: "r", text: euro(s.netto) })));
+    s.perSatz.forEach(function (p) { t.append(h("tr", null, h("td", { text: S.einst.kleinunternehmer ? "keine USt (§ 19 UStG)" : "USt " + p.satz + " % auf " + euro(p.netto) }), h("td", { class: "r", text: euro(p.ust) }))); });
+    t.append(h("tr", null, h("td", null, h("b", { text: "Gesamt brutto" })), h("td", { class: "r" }, h("b", { text: euro(s.brutto) }))));
+    main.append(h("div", { class: "karte", "data-schritt-ziel": "angebot" }, h("h3", { text: "Summe" }), t,
+      h("div", { class: "band", style: "margin-top:10px" }, knopf("👁 Vorschau", function () { vorschau(a); }, "klein"), knopf("🖨 Drucken / PDF", function () { drucke(a); }, "pri klein"),
+        knopf("📤 An WorkFloh übergeben", function () { uebergeben(a); }, "klein"),
+        h("span", { class: "gedaempft klein", text: "Die Datei liest Mein WorkFloh oder Tomys WorkFloh mit „📥 Importieren“ ein — dort wird daraus ein Auftrag." }))));
+  }
+
+  /* ── Schritte ── */
+  function schrittLeiste(a, r, kunde) {
+    var pos = r.positionen, alleOk = pos.length && pos.every(function (x) { return x.erg.ok; });
+    var verlust = pos.some(function (x) { return x.erg.ok && x.erg.lage !== "ok"; });
+    var schritte = [
+      ["kunde", "1 Kunde", !!(kunde && kunde.name), "Kunde wählen oder neu anlegen."],
+      ["produkt", "2 Produkt", pos.length > 0, "Unten bei „＋ Position“ ein Produkt wählen — am schnellsten über ein Beispiel."],
+      ["masse", "3 Maße & Material", !!alleOk, "In der Position Maße, Menge und Material eintragen, bis ein Preis dasteht."],
+      ["preis", "4 Preis prüfen", !!alleOk && !verlust, verlust ? "Ein Preis liegt unter den Kosten — „💶 Preis nachbessern“ öffnen." : "Preis ansehen; bei Bedarf „💶 Preis nachbessern“."],
+      ["versand", "5 Versand", r.versand.ok, r.versand.ok ? "" : "Verpackung & Versand von Hand setzen."],
+      ["angebot", "6 Angebot", a.status === "gestellt", "Vorschau ansehen, drucken oder an WorkFloh übergeben."],
+    ];
+    var naechster = schritte.filter(function (x) { return !x[2]; })[0];
+    return h("div", { class: "karte schritte", "data-schritte": "" },
+      h("div", { class: "band" }, schritte.map(function (x) {
+        return h("button", { type: "button", class: "btn chip" + (x[2] ? " fertig" : naechster === x ? " on" : ""), "data-schritt": x[0], "data-fertig": x[2] ? "1" : "0",
+          onclick: function () { var z = document.querySelector('[data-schritt-ziel="' + x[0] + '"]'); if (z) z.scrollIntoView({ behavior: "smooth", block: "start" }); } }, (x[2] ? "✓ " : "") + x[1]);
+      })),
+      h("p", { class: "klein", "data-naechster": naechster ? naechster[0] : "fertig" }, naechster ? h("b", { text: "Nächster Schritt: " }) : null, naechster ? naechster[3] : "Alles fertig — Angebot ist gestellt."));
+  }
+  function kundeSchnell(a) {
+    var name = h("input", { placeholder: "Neuer Kunde: Name / Firma", "data-key": "kunde-neu", id: "kunde-neu-name", style: "flex:1 1 200px" });
+    var kl = h("select", { id: "kunde-neu-klasse", "aria-label": "Klasse" }, ["A", "B", "C"].map(function (c) { return h("option", { value: c, text: c + "-Kunde", selected: c === "B" }); }));
+    return h("div", { class: "zeile", "data-kunde-schnell": "" }, name, kl, knopf("＋ anlegen", function () {
+      if (!name.value.trim()) { name.focus(); return; }
+      var n = 1; S.kunden.forEach(function (k) { var m = /^K-(\d+)$/.exec(k.id); if (m) n = Math.max(n, +m[1] + 1); });
+      var k = { id: "K-" + n, name: name.value.trim(), anschrift: "", klasse: kl.value };
+      S.kunden.push(k); dbPut("kunden", kopie(k)); vorher(a); a.kundeId = k.id; a.kunde = { name: k.name, anschrift: "", klasse: k.klasse }; merken(a); zeichne();
+    }, "klein", { id: "kunde-neu-anlegen" }));
+  }
+
+  /* ── Übergabe an WorkFloh (Format wie Workflow-Needs) ── */
+  function uebergeben(a) {
+    var r = A.rechne(a, S.katalog, kundeVon(a), S.einst.kleinunternehmer);
+    var d = WC.aussen.angebotExtern(a, r, S.einst.firma, S.einst.kleinunternehmer);
+    if (!d.positionen.length) { melde("Noch keine kalkulierte Position — nichts zu übergeben.", "warn"); return; }
+    var auf = WC.uebergabe.auftrag(d);
+    var ids = []; a.positionen.forEach(function (p) { (p.bilder || []).forEach(function (b) { if (ids.indexOf(b) < 0) ids.push(b); }); });
+    Promise.all(ids.map(function (id, i) { return dbGet("bilder", id).then(function (x) { return x && x.blob ? { name: a.nummer + "_Bild-" + (i + 1) + ".jpg", blob: x.blob } : null; }); }))
+      .then(function (l) { return WC.uebergabe.dateien(l.filter(Boolean)); })
+      .then(function (fs) {
+        auf.files = fs;
+        var text = JSON.stringify(WC.uebergabe.buendel([auf]), null, 1);
+        window.__wcUebergabe = text;
+        herunterladen(WC.uebergabe.dateiname(d), text, "application/json");
+        melde("Auftragsdatei „" + WC.uebergabe.dateiname(d) + "“ gespeichert. In Mein WorkFloh oder Tomys WorkFloh: „📥 Importieren“ und die Datei wählen.", "");
+      });
+  }
+
+  /* ── Eine Position ── */
+  function positionKarte(a, x, kat, kunde, ro, idx) {
+    var p = x.pos, e = x.erg, v = finde(kat.vorlagen, p.vorlage);
+    var ctx = { angebot: a, kunde: kunde };
+    function setze(fn) { return function () { if (ro) return; vorher(a); fn.apply(this, arguments); merken(a); zeichne(); }; }
+    var karte = h("div", { class: "position" + (e.ok ? "" : " offen"), "data-position": p.id, "data-schritt-ziel": idx === 0 ? "masse" : null });
+    karte.append(h("div", { class: "position-kopf" },
+      h("div", null, h("span", { class: "badge kennung", text: p.id }), " ", h("b", { text: v ? v.name : "Vorlage fehlt" })),
+      ro ? null : knopf("✕ Position entfernen", setze(function () { a.positionen = a.positionen.filter(function (q) { return q !== p; }); }), "klein gefahr")));
+    if (!v) return karte;
+
+    /* Eingaben */
+    var g = h("div", { class: "feldgitter" });
+    g.append(feld("Titel (Kundenblatt)", h("input", { value: p.titel, "data-key": p.id + "-titel", disabled: ro, oninput: function () { p.titel = this.value; merken(a); } })));
+    g.append(feld("Beschreibung (Kundenblatt)", h("input", { value: p.beschreibung, "data-key": p.id + "-beschr", disabled: ro, oninput: function () { p.beschreibung = this.value; merken(a); } })));
+    if (v.mengenregel !== "stueck" || v.breiteVorgabe) {
+      g.append(feld(v.mengenregel === "laenge" ? "Länge mm" : "Breite mm", h("input", { inputmode: "decimal", value: deZahl(p.breiteMm), "data-key": p.id + "-b", "data-feld": "breite", disabled: ro, onchange: setze(function () { p.breiteMm = zahlPunkt(this.value) || ""; }) })));
+      g.append(feld("Höhe mm", h("input", { inputmode: "decimal", value: deZahl(p.hoeheMm), "data-key": p.id + "-h", "data-feld": "hoehe", disabled: ro, onchange: setze(function () { p.hoeheMm = zahlPunkt(this.value) || ""; }) })));
+    }
+    g.append(feld("Menge (für die Summe)", h("input", { inputmode: "numeric", value: p.menge, "data-key": p.id + "-menge", "data-feld": "menge", disabled: ro, onchange: setze(function () { var n = Math.max(1, Math.round(zahlPunkt(this.value) || 1)); p.menge = n; if (p.staffeln.indexOf(n) < 0) p.staffeln = p.staffeln.concat([n]).sort(function (q, w) { return q - w; }); }) })));
+    g.append(feld("Staffel (Mengen, mit Komma)", h("input", { value: p.staffeln.join(", "), "data-key": p.id + "-staffel", "data-feld": "staffel", disabled: ro, onchange: setze(function () {
+      var l = this.value.split(/[,;\s]+/).map(function (q) { return Math.round(Number(q)); }).filter(function (q) { return q > 0; });
+      l = l.filter(function (q, i2) { return l.indexOf(q) === i2; }).sort(function (q, w) { return q - w; });
+      if (!l.length) l = [p.menge]; if (l.indexOf(p.menge) < 0) p.menge = l[0]; p.staffeln = l; }) })));
+    if ((v.verfahrenWahl || []).length > 1) {
+      g.append(feld("Verfahren", h("select", { "data-feld": "verfahren", disabled: ro, onchange: setze(function () { p.verfahren = this.value; }) },
+        v.verfahrenWahl.map(function (id) { var vf = finde(kat.verfahren, id); return h("option", { value: id, text: vf ? vf.name : id, selected: id === (p.verfahren || v.verfahrenVorgabe) }); }))));
+    }
+    if ((+v.farbenMax || 1) > 1) {
+      var vfA = finde(kat.verfahren, p.verfahren || v.verfahrenVorgabe);
+      var opts = []; for (var f = 1; f <= v.farbenMax; f++) opts.push(h("option", { value: f, text: f + (f === 1 ? " Farbe" : " Farben"), selected: f === (+p.farben || 1) }));
+      g.append(feld("Farben" + (vfA && vfA.farbregel === "digital" ? " (vierfarbig: zählt nicht)" : ""), h("select", { "data-feld": "farben", disabled: ro, onchange: setze(function () { p.farben = +this.value; }) }, opts)));
+    }
+    (v.slots || []).forEach(function (sl) {
+      var vf = finde(kat.verfahren, p.verfahren || v.verfahrenVorgabe);
+      if (sl.nurBei && sl.nurBei.length && (!vf || sl.nurBei.indexOf(vf.id) < 0)) return;
+      var w = Object.prototype.hasOwnProperty.call(p.wahl || {}, sl.id) ? p.wahl[sl.id] : sl.vorgabe;
+      g.append(feld(sl.name, h("select", { "data-slot": sl.id, disabled: ro, onchange: setze(function () { p.wahl = Object.assign({}, p.wahl); p.wahl[sl.id] = this.value; }) },
+        sl.optional ? h("option", { value: "", text: "— ohne —", selected: !w }) : null,
+        (sl.wahl || []).map(function (id) { var m = finde(kat.materialien, id); return h("option", { value: id, text: m ? m.name : id, selected: id === w }); }))));
+    });
+    karte.append(g);
+
+    /* Bilder der Position */
+    var daumen = h("div", { class: "daumen", "data-pos-bilder": "" });
+    (p.bilder || []).forEach(function (id) {
+      daumen.append(h("span", null, h("img", { src: bildQuelle(id), alt: "Bild" }), ro ? null : knopf("✕", setze(function () { p.bilder = p.bilder.filter(function (q) { return q !== id; }); }), "klein", { "aria-label": "Bild entfernen" })));
+    });
+    if (!ro) daumen.append(h("label", { class: "btn klein" }, "📷 Bild dazu", h("input", { type: "file", accept: "image/*", hidden: true, "data-bild-hoch": p.id, onchange: function () {
+      var file = this.files && this.files[0]; if (!file) return;
+      bildSpeichern(file).then(function (id) { vorher(a); p.bilder = (p.bilder || []).concat([id]); merken(a); zeichne(); }, function () { melde("Das Bild ließ sich nicht lesen.", "bad"); });
+    } })));
+    karte.append(h("div", { class: "zeile" }, h("span", { class: "gedaempft klein", text: "Bilder (Motiv, Mockup — das erste kommt aufs Angebot):" }), daumen));
+
+    /* Ergebnis */
+    if (!e.ok) {
+      karte.append(h("div", { class: "hinweis warn", "data-nicht-kalkuliert": "" }, "Nicht kalkuliert — zählt nicht mit: " + e.offen.join(" · ")));
+      return karte;
+    }
+    var lageText = e.lage === "unter_hk" ? "unter den Herstellkosten — Verlust je Stück " + euro(Math.round((e.herstellkosten - e.netto) / e.menge)) + " schon ohne Gemeinkosten"
+      : e.lage === "unter_sk" ? "unter Selbstkosten — Verlust je Stück " + euro(Math.round((e.selbstkosten - e.netto) / e.menge)) + "; deckt die Gemeinkosten nicht" : "";
+    karte.append(h("div", { class: "band", style: "justify-content:space-between" },
+      h("div", null, h("div", { class: "preis-gross" + (e.lage !== "ok" ? " verlust" : ""), "data-pos-netto": String(e.netto) }, euro(e.netto)),
+        h("div", { class: "gedaempft klein" }, e.menge + " Stück · " + euro(e.stueckCent) + " je Stück netto" + (e.eigen != null ? " · eigener Preis" : ""))),
+      h("div", { class: "band" },
+        h("span", { class: "badge intern", "data-pos-sk": String(e.selbstkosten) }, "Selbstkosten " + euro(e.selbstkosten)),
+        e.eigen != null ? h("span", { class: "badge gelb", "data-eigen-abstand": "" }, abstandText(e)) : null)));
+    if (lageText) karte.append(h("div", { class: "hinweis bad", "data-verlust": e.lage }, "⚠ " + lageText + ". Das ist erlaubt — du entscheidest."));
+
+    /* Staffel mit eigenem Preis */
+    karte.append(staffelTabelle(a, x, kat, ro));
+
+    /* Werkzeuge — eingeklappt, bis man sie braucht */
+    function umschalter(art, text, attr) {
+      var an = !!S.offen[p.id + ":" + art];
+      return knopf(text, function () { S.offen[p.id + ":" + art] = !an; zeichne(); }, "klein" + (an ? " on" : ""), attr);
+    }
+    karte.append(h("div", { class: "band", style: "margin-top:6px" },
+      umschalter("nachbessern", "💶 Preis nachbessern", { "data-nachbessern-knopf": p.id }),
+      umschalter("markt", "📊 Marktvergleich", { "data-markt-knopf": p.id }),
+      umschalter("weg", "🔒 Rechenweg", { "data-weg-knopf": p.id }),
+      (v.beispiele || []).length ? umschalter("bsp", "🖼 Beispiele (" + v.beispiele.length + ")", null) : null));
+    if (S.offen[p.id + ":nachbessern"]) karte.append(erklaerChips(a, p, v, e, kat, ctx, ro));
+
+    /* Eigener Preis → in die Vorlage übernehmen */
+    if (e.eigen != null && e.eigen !== e.nettoKalk && !ro) karte.append(lernenFeld(a, p, v, e, kat, ctx));
+
+    if (S.offen[p.id + ":weg"]) {
+      var schema = h("table", { class: "schema" });
+      e.schema.zeilen.forEach(function (z) { schema.append(h("tr", { class: /^=/.test(z.text) ? "summe" : "" }, h("td", { text: z.text }), h("td", { class: "r", text: euro(z.cent) }))); });
+      karte.append(h("div", { class: "erklaer-feld", "data-rechenweg": "" }, h("b", { text: "🔒 Rechenweg (intern) — Zuschlagskalkulation" }),
+        h("ul", { class: "weg" }, e.weg.map(function (w) { return h("li", { text: w }); })), schema,
+        h("p", { class: "gedaempft klein", text: "Sätze: " + satzQuellen(e) })));
+    }
+    if (S.offen[p.id + ":markt"]) karte.append(marktFeld(a, p, v, e));
+    if (S.offen[p.id + ":bsp"]) karte.append(galerie(v, kat, ctx, null));
+    return karte;
+  }
+  function abstandText(e) {
+    var d = e.eigen - e.nettoKalk, pct = e.nettoKalk ? Math.round(d / e.nettoKalk * 1000) / 10 : 0;
+    return "eigener Preis: " + (d >= 0 ? "+" : "−") + String(Math.abs(pct)).replace(".", ",") + " % " + (d >= 0 ? "über" : "unter") + " Kalkulation (" + euro(e.nettoKalk) + ")";
+  }
+  function satzQuellen(e) {
+    var Q = { position: "Position", angebot: "Angebot", vorlage: "Vorlage", gebiet: "Arbeitsgebiet", vorgabe: "Vorgabe" };
+    function q(k) { var s = e.quelle[k] || ""; return (Q[s.replace("+klasse", "")] || s) + (/\+klasse/.test(s) ? " + Klasse " + e.klasse : ""); }
+    var lohn = e.saetze.modus === "voll" ? "lohnCent" : "stundensatzCent";
+    return (e.saetze.modus === "voll" ? "ausführlich" : "vereinfacht") + " · " + K.SATZ_LABEL[lohn] + " " + euro(Math.round(e.effektiv.lohnCent)) + " (" + q(lohn) + ") · Gewinn " +
+      String(Math.round(e.effektiv.gewinnPct * 100) / 100).replace(".", ",") + " % (" + q("gewinnPct") + ")";
+  }
+
+  /* ── Staffel: Menge → Stückpreis, Summe, Selbstkosten; eigener Preis je Zeile ── */
+  function staffelTabelle(a, x, kat, ro) {
+    var p = x.pos;
+    var t = h("table", { "data-staffel": p.id }, h("thead", null, h("tr", null, h("th", { text: "Menge" }), h("th", { class: "r", text: "je Stück" }), h("th", { class: "r", text: "netto" }),
+      h("th", { class: "r", text: "🔒 Selbstk." }), h("th", { text: "Eigener Preis netto" }))));
+    var tb = h("tbody");
+    x.staffel.forEach(function (st) {
+      if (!st.ok) { tb.append(h("tr", null, h("td", { text: String(st.menge || "") }), h("td", { colspan: "4", text: "nicht kalkuliert: " + st.offen.join(" · ") }))); return; }
+      var inp = h("input", { class: "mittel", inputmode: "decimal", placeholder: G.formatCents(st.nettoKalk), value: st.eigen != null ? G.formatCents(st.eigen) : "", disabled: ro,
+        "data-eigen": String(st.menge), "data-key": p.id + "-eigen-" + st.menge, onchange: function () {
+          vorher(a); var c = this.value.trim() === "" ? null : G.parseEuroToCents(this.value);
+          p.eigen = Object.assign({}, p.eigen); if (c == null || !Number.isFinite(c)) delete p.eigen[st.menge]; else p.eigen[st.menge] = c;
+          merken(a); zeichne(); } });
+      tb.append(h("tr", { class: st.menge === p.menge ? "" : "", "data-staffel-zeile": String(st.menge) },
+        h("td", null, h("b", { text: String(st.menge) }), st.menge === p.menge ? h("span", { class: "gedaempft klein", text: " · Summe" }) : null),
+        h("td", { class: "r" + (st.lage !== "ok" ? " verlust" : ""), text: euro(st.stueckCent) }), h("td", { class: "r", text: euro(st.netto) }),
+        h("td", { class: "r intern-satz", text: euro(st.selbstkosten) }), h("td", null, inp)));
+    });
+    t.append(tb);
+    return h("div", { class: "tabelle-huelle" }, t);
+  }
+
+  /* ── Erklären an Ort und Stelle: Wert antippen → Alternativen mit vorher gerechneter Wirkung ── */
+  function erklaerChips(a, p, v, e, kat, ctx, ro) {
+    var vf = finde(kat.verfahren, p.verfahren || v.verfahrenVorgabe);
+    var chips = [["menge", "Menge " + p.menge], ["zeit", "Arbeitszeit " + String(Math.round(e.minuten)).replace(".", ",") + " min"],
+      ["stundensatz", (e.saetze.modus === "voll" ? "Lohn " : "Stundensatz ") + euro(Math.round(e.effektiv.lohnCent)) + "/h"],
+      ["gewinn", "Gewinn " + String(Math.round(e.effektiv.gewinnPct * 10) / 10).replace(".", ",") + " %"]];
+    if ((v.verfahrenWahl || []).length > 1 && vf) chips.splice(1, 0, ["verfahren", vf.name]);
+    if ((+v.farbenMax || 1) > 1) chips.splice(1, 0, ["farben", (+p.farben || 1) + " Farbe(n)"]);
+    (v.slots || []).forEach(function (sl) {
+      if (sl.nurBei && sl.nurBei.length && (!vf || sl.nurBei.indexOf(vf.id) < 0)) return;
+      if ((sl.wahl || []).length + (sl.optional ? 1 : 0) < 2) return;
+      var w = Object.prototype.hasOwnProperty.call(p.wahl || {}, sl.id) ? p.wahl[sl.id] : sl.vorgabe, m = finde(kat.materialien, w);
+      chips.push(["slot:" + sl.id, sl.name + ": " + (m ? m.name : "ohne")]);
+    });
+    var schluessel = p.id + ":erklaer";
+    var box = h("div", { "data-erklaer": p.id },
+      h("div", { class: "band" }, h("span", { class: "gedaempft klein", text: "Preis nachbessern — antippen:" }),
+        chips.map(function (c) {
+          var an = S.offen[schluessel] === c[0];
+          return h("button", { type: "button", class: "badge erklaer-chip" + (an ? " erklaer-offen" : ""), text: c[1], "data-chip": c[0],
+            onclick: function () { S.offen[schluessel] = an ? null : c[0]; zeichne(); } });
+        })));
+    if (S.offen[schluessel]) box.append(erklaerFeld(a, p, v, e, kat, ctx, S.offen[schluessel], ro));
+    return box;
+  }
+  function alternativen(p, v, e, kat, art) {
+    var l = [];
+    var lohnKey = e.saetze.modus === "voll" ? "lohnCent" : "stundensatzCent";
+    if (art === "menge") {
+      var ms = [Math.max(1, Math.round(p.menge / 2)), p.menge * 2].concat(p.staffeln).filter(function (m, i, s) { return m !== p.menge && s.indexOf(m) === i; }).sort(function (q, w) { return q - w; });
+      ms.forEach(function (m) { l.push({ label: m + " Stück", tun: function (q) { q.menge = m; if (q.staffeln.indexOf(m) < 0) q.staffeln = q.staffeln.concat([m]).sort(function (x, y) { return x - y; }); } }); });
+    } else if (art === "verfahren") {
+      (v.verfahrenWahl || []).forEach(function (id) { var vf = finde(kat.verfahren, id); if (id !== (p.verfahren || v.verfahrenVorgabe)) l.push({ label: vf ? vf.name : id, tun: function (q) { q.verfahren = id; } }); });
+    } else if (art === "farben") {
+      for (var f = 1; f <= (+v.farbenMax || 1); f++) (function (f) { if (f !== (+p.farben || 1)) l.push({ label: f + (f === 1 ? " Farbe" : " Farben"), tun: function (q) { q.farben = f; } }); })(f);
+    } else if (art.indexOf("slot:") === 0) {
+      var sl = finde(v.slots, art.slice(5)), cur = Object.prototype.hasOwnProperty.call(p.wahl || {}, sl.id) ? p.wahl[sl.id] : sl.vorgabe;
+      (sl.optional ? [""] : []).concat(sl.wahl || []).forEach(function (id) {
+        if (id === cur) return; var m = finde(kat.materialien, id);
+        l.push({ label: id ? m ? m.name : id : "ohne", tun: function (q) { q.wahl = Object.assign({}, q.wahl); q.wahl[sl.id] = id; } });
+      });
+    } else if (art === "zeit") {
+      [-20, -10, 10, 20].forEach(function (pc) {
+        l.push({ label: (pc > 0 ? "+" : "−") + Math.abs(pc) + " % Zeit", tun: function (q) {
+          q.zeiten = Object.assign({}, q.zeiten);
+          e.zeiten.forEach(function (z) {
+            var st = finde(v.schritte, z.schritt), ov = (p.zeiten || {})[z.schritt] || {};
+            function b(k) { return zahl(ov[k]) != null ? +ov[k] : +st[k] || 0; }
+            q.zeiten[z.schritt] = { ruestMin: rund2(b("ruestMin") * (1 + pc / 100)), minJeStueck: rund2(b("minJeStueck") * (1 + pc / 100)), minJeM2: rund2(b("minJeM2") * (1 + pc / 100)) };
+          });
+        } });
+      });
+      if (p.zeiten && Object.keys(p.zeiten).length) l.push({ label: "Zeit-Muster der Vorlage", tun: function (q) { q.zeiten = {}; } });
+    } else if (art === "stundensatz") {
+      [-10, -5, 5, 10].forEach(function (pc) { l.push({ label: (pc > 0 ? "+" : "−") + Math.abs(pc) + " % Satz (nur diese Position)", tun: function (q) { q.saetze = Object.assign({}, q.saetze); q.saetze[lohnKey] = Math.round(e.effektiv.lohnCent * (1 + pc / 100)); } }); });
+      if (p.saetze && p.saetze[lohnKey] != null) l.push({ label: "Satz wie Vorlage/Kundenklasse", tun: function (q) { q.saetze = Object.assign({}, q.saetze); delete q.saetze[lohnKey]; } });
+    } else if (art === "gewinn") {
+      [0, 10, 15, 20, 30].forEach(function (gw) { if (Math.abs(gw - e.effektiv.gewinnPct) > 0.01) l.push({ label: "Gewinn " + gw + " % (nur diese Position)", tun: function (q) { q.saetze = Object.assign({}, q.saetze, { gewinnPct: gw }); } }); });
+      if (p.saetze && p.saetze.gewinnPct != null) l.push({ label: "Gewinn wie Vorlage/Kundenklasse", tun: function (q) { q.saetze = Object.assign({}, q.saetze); delete q.saetze.gewinnPct; } });
+    }
+    return l;
+  }
+  function rund2(x) { return Math.round(x * 100) / 100; }
+  function erklaerFeld(a, p, v, e, kat, ctx, art, ro) {
+    var box = h("div", { class: "erklaer-feld", "data-erklaer-feld": art });
+    var text = { menge: "Mehr Stück verteilen Rüstzeit und Einrichten — der Stückpreis sinkt.", zeit: "Das Zeit-Muster der Vorlage, für diese Position angepasst.",
+      stundensatz: "Satz nur für diese Position (eine Kundenklasse wirkt dann hier nicht mehr).", gewinn: "Gewinnaufschlag nur für diese Position.",
+      farben: "Je Farbe: eigene Folie, eigenes Plotten/Entgittern, eigener Pressgang, eigenes Rüsten — außer beim vierfarbigen Digitaltransfer.",
+      verfahren: "Ein anderes Verfahren ändert Material, Zeit und Maschine." }[art] || "Anderes Material — Einkaufspreis, Verschnitt und Gewicht ändern sich.";
+    box.append(h("p", { class: "klein", text: text }));
+    var alts = alternativen(p, v, e, kat, art);
+    if (!alts.length) box.append(h("p", { class: "gedaempft klein", text: "Keine Alternative im Katalog." }));
+    alts.forEach(function (al) {
+      var q = kopie(p); al.tun(q);
+      var n = K.position(kat, q, ctx);
+      /* verglichen wird der KALKULIERTE Preis — ein eigener Preis würde jede Wirkung verdecken */
+      var alt = e.nettoKalk;
+      var wirk = n.ok ? "netto " + euro(alt) + " → " + euro(n.nettoKalk) + " (" + delta(alt, n.nettoKalk) + ") · " + euro(n.menge ? Math.round(n.nettoKalk / n.menge) : 0) + "/Stück · DB " + euro(n.nettoKalk - n.selbstkosten)
+        : "nicht kalkulierbar: " + n.offen.join(" · ");
+      box.append(h("div", { class: "alt-zeile", "data-alternative": al.label },
+        ro ? h("span", { text: al.label }) : knopf(al.label, function () { vorher(a); al.tun(p); merken(a); S.offen[p.id + ":erklaer"] = null; zeichne(); }, "klein"),
+        h("span", { class: "wirkung", "data-wirkung": n.ok ? String(n.nettoKalk) : "", text: wirk })));
+    });
+    if (ro) box.append(h("p", { class: "gedaempft klein", text: "Gestellt — hier wird nur erklärt, nicht geändert." }));
+    return box;
+  }
+
+  /* ── Eigener Preis → Formel lernen (drei Wege, Wirkung vorher) ── */
+  function lernenFeld(a, p, v, e, kat, ctx) {
+    var box = h("div", { class: "erklaer-feld", "data-lernen": p.id });
+    box.append(h("p", null, h("b", { text: "In die Vorlage „" + v.name + "“ übernehmen …" }), " ",
+      h("span", { class: "gedaempft klein", text: "Damit neue Angebote mit dieser Vorlage von selbst " + euro(e.eigen) + " für " + e.menge + " Stück ergeben. Gestellte Angebote bleiben, wie sie sind." })));
+    var anlass = h("input", { value: "Preis aus der Praxis (" + a.nummer + ")", "data-key": p.id + "-anlass", style: "flex:1 1 220px" });
+    box.append(h("div", { class: "zeile" }, h("span", { class: "klein", text: "Anlass:" }), anlass));
+    var WEGE = [["gewinn", "Gewinnaufschlag anpassen", "Preis passt zum Markt"], ["stundensatz", "Stundensatz der Vorlage anpassen", "die Arbeit ist mehr wert"],
+      ["minuten", "Arbeitszeit-Muster anpassen", "es dauert in Wahrheit länger"]];
+    var pq = kopie(p); delete pq.eigen;
+    WEGE.forEach(function (w) {
+      var rr = K.rueckrechnen(kat, pq, ctx, e.eigen, w[0]);
+      var vorschau = !rr.ok ? rr.grund : w[0] === "gewinn" ? "Gewinn " + fmtPct(e.effektiv.gewinnPct) + " → " + fmtPct(rr.wert + (e.effektiv.gewinnPct - (Number((v.saetze || {}).gewinnPct != null ? v.saetze.gewinnPct : (K.saetzeFuer(kat, v, {}, null, null).s.gewinnPct))))) + " %"
+        : w[0] === "stundensatz" ? "Satz der Vorlage → " + euro(Math.round(rr.wert)) + "/h" : "alle Zeiten der Vorlage × " + String(Math.round(rr.wert * 1000) / 1000).replace(".", ",");
+      box.append(h("div", { class: "alt-zeile", "data-lernweg": w[0] },
+        knopf(w[1], function () {
+          if (!rr.ok) return;
+          var info = { datum: A.heute(), anlass: anlass.value, angebot: a.nummer, zielCent: e.eigen, menge: e.menge };
+          K.uebernehmen(S.katalog, v.id, w[0], rr.wert, info); katalogSpeichern();
+          vorher(a); p.eigen = Object.assign({}, p.eigen); delete p.eigen[e.menge]; merken(a);
+          var neu = K.position(S.katalog, p, ctx);
+          melde("Übernommen in „" + v.name + "“: " + w[1] + ". Die Kalkulation ergibt jetzt " + euro(neu.nettoKalk) + " für " + e.menge + " Stück. Im Katalog unter „Verlauf“ rücknehmbar.", "");
+        }, "klein", { disabled: !rr.ok }),
+        h("span", { class: "wirkung", text: w[2] + " · " + vorschau + (rr.ok ? " · ergibt " + euro(rr.netto) + (rr.diff ? " (" + delta(e.eigen, rr.netto) + " Rundung)" : " — genau") : "") })));
+    });
+    return box;
+  }
+  function fmtPct(x) { return String(Math.round(x * 100) / 100).replace(".", ","); }
+
+  /* ── Marktvergleich ── */
+  function marktFeld(a, p, v, e) {
+    var box = h("div", { class: "erklaer-feld", "data-markt": p.id });
+    var stueckVersand = e.stueckCent;
+    var mv = MK.vergleich(v.markt, e.menge, stueckVersand, v.marktGrenzen, A.heute(), Math.round(e.selbstkosten / e.menge));
+    box.append(h("p", null, h("b", { text: "📊 Marktvergleich — " + e.menge + " Stück" }), " ", h("span", { class: "badge intern", text: "🔒 intern" })));
+    if (!mv.klassen.some(function (k) { return k.daten; })) box.append(h("div", { class: "hinweis", "data-kein-vergleich": "" }, "Kein Vergleich — noch keine Marktpreise für diese Vorlage eingetragen. Unten eintragen, was Mitbewerber nehmen."));
+    mv.klassen.forEach(function (k) {
+      var z = h("div", { class: "markt-klasse" + (k.aktiv ? "" : " aus"), "data-markt-klasse": k.id, "data-aktiv": k.aktiv ? "1" : "0" });
+      z.append(h("div", { class: "band" }, h("b", { text: k.name }), h("span", { class: "gedaempft klein", text: k.grenze ? "ab " + k.grenze + " Stück" : "jede Menge" }),
+        k.veraltet ? h("span", { class: "badge gelb", text: k.veraltet + " veraltet (> 6 Monate)" }) : null));
+      if (!k.aktiv) z.append(h("p", { class: "gedaempft klein", text: "nicht vergleichbar bei dieser Menge" }));
+      else if (!k.daten) z.append(h("p", { class: "gedaempft klein", text: "noch keine Preise eingetragen" }));
+      else {
+        var lo = Math.min(k.min, stueckVersand, mv.selbstkosten), hi = Math.max(k.max, stueckVersand, mv.selbstkosten), span = Math.max(1, hi - lo);
+        function pos(c) { return ((c - lo) / span * 100).toFixed(1) + "%"; }
+        z.append(h("div", { class: "markt-balken" }, h("i", { style: "left:" + pos(k.min) + ";width:" + ((k.max - k.min) / span * 100).toFixed(1) + "%" }),
+          h("s", { title: "Selbstkosten", style: "left:" + pos(mv.selbstkosten) }), h("b", { title: "dein Preis", style: "left:" + pos(stueckVersand) })));
+        z.append(h("p", { class: "klein", "data-markt-lage": k.lage || "" }, "min " + euro(k.min) + " · Median " + euro(k.median) + " · max " + euro(k.max) + " (" + k.anzahl + " Preise, je Stück inkl. Versand). Dein Preis " + euro(stueckVersand) + " liegt " + (MK.LAGE_TEXT[k.lage] || "") +
+          (k.bisMedian > 0 ? "; Spielraum bis zum Median +" + euro(k.bisMedian) + " je Stück." : ".")));
+        if (k.median > stueckVersand && k.id === "handwerk" && bearbeitbar(a)) z.append(knopf("Median als eigenen Preis übernehmen (" + euro(k.median * e.menge) + ")", function () {
+          vorher(a); p.eigen = Object.assign({}, p.eigen); p.eigen[e.menge] = k.median * e.menge; merken(a); zeichne(); }, "klein", { "data-median-uebernehmen": "" }));
+      }
+      box.append(z);
+    });
+    if (e.menge >= ((v.marktGrenzen || {}).import || 500) && v.zukaufEkCent) {
+      var hd = K.handel(v.zukaufEkCent, e.saetze);
+      box.append(h("p", { class: "hinweis", "data-zukauf": "" }, "Zukauf statt Eigenfertigung? Bezugspreis " + euro(hd.bezugspreis) + " + Handlungskosten → " + euro(hd.netto) + " je Stück netto."));
+    }
+    /* Eintragen */
+    var f = { anbieter: h("input", { placeholder: "Anbieter", "data-markt-neu": "anbieter" }), klasse: h("select", { "data-markt-neu": "klasse" }, MK.KLASSEN.map(function (k) { return h("option", { value: k.id, text: k.name }); })),
+      menge: h("input", { class: "kurz", inputmode: "numeric", placeholder: "Menge", value: e.menge, "data-markt-neu": "menge" }),
+      stueck: h("input", { class: "kurz", inputmode: "decimal", placeholder: "€/Stück", "data-markt-neu": "stueck" }),
+      versand: h("input", { class: "kurz", inputmode: "decimal", placeholder: "Versand €", "data-markt-neu": "versand" }),
+      quelle: h("input", { placeholder: "Quelle / Link", "data-markt-neu": "quelle" }) };
+    box.append(h("div", { class: "zeile" }, f.anbieter, f.klasse, f.menge, f.stueck, f.versand, f.quelle,
+      knopf("＋ Preis eintragen", function () {
+        var c = G.parseEuroToCents(f.stueck.value); if (!Number.isFinite(c) || c <= 0) { melde("Bitte einen Stückpreis eintragen.", "warn"); return; }
+        var vk = finde(S.katalog.vorlagen, v.id);
+        vk.markt = (vk.markt || []).concat([{ anbieter: f.anbieter.value, klasse: f.klasse.value, menge: Math.max(1, Math.round(zahlPunkt(f.menge.value) || e.menge)), stueckCent: c,
+          versandCent: Number.isFinite(G.parseEuroToCents(f.versand.value)) ? G.parseEuroToCents(f.versand.value) : 0, datum: A.heute(), quelle: f.quelle.value }]);
+        katalogSpeichern(); zeichne();
+      }, "klein", { "data-markt-dazu": "" }),
+      h("a", { class: "btn klein", href: MK.suchLink(v.name, e.menge), target: "_blank", rel: "noopener noreferrer", "data-markt-suche": "" }, "🔎 Bei Mitbewerbern nachsehen")));
+    if ((v.markt || []).length) {
+      var t = h("table", null, h("tr", null, ["Anbieter", "Klasse", "Menge", "€/Stück", "Versand", "Datum", ""].map(function (x) { return h("th", { text: x }); })));
+      v.markt.forEach(function (m, i) {
+        t.append(h("tr", null, h("td", { text: m.anbieter || "—" }), h("td", { text: (finde(MK.KLASSEN, m.klasse) || {}).name || m.klasse }), h("td", { text: String(m.menge) }),
+          h("td", { class: "r", text: euro(m.stueckCent) }), h("td", { class: "r", text: euro(m.versandCent || 0) }), h("td", { text: m.datum || "" }),
+          h("td", null, knopf("✕", function () { var vk = finde(S.katalog.vorlagen, v.id); vk.markt = vk.markt.filter(function (_q, j) { return j !== i; }); katalogSpeichern(); zeichne(); }, "klein", { "aria-label": "Eintrag löschen" }))));
+      });
+      box.append(h("div", { class: "tabelle-huelle" }, t));
+    }
+    return box;
+  }
+
+  /* ── Beispiele mit Bildern in mehreren Ansichten — Preis aus der AKTUELLEN Kalkulation ── */
+  function beispielPosition(v, b) {
+    var p = { vorlage: v.id, menge: b.menge || 1, staffeln: [b.menge || 1], breiteMm: b.breiteMm || v.breiteVorgabe || "", hoeheMm: b.hoeheMm || v.hoeheVorgabe || "",
+      farben: b.farben || 1, verfahren: b.verfahren || v.verfahrenVorgabe || "", wahl: Object.assign({}, b.wahl || {}), zeiten: {}, saetze: {}, eigen: {}, bilder: [] };
+    (v.slots || []).forEach(function (s) { if (!Object.prototype.hasOwnProperty.call(p.wahl, s.id)) p.wahl[s.id] = s.vorgabe || ""; });
+    return p;
+  }
+  function galerie(v, kat, ctx, nehmen) {
+    var gal = h("div", { class: "galerie", "data-galerie": v.id });
+    (v.beispiele || []).forEach(function (b) {
+      var ansichten = b.ansichten || [];
+      var schl = "ans:" + v.id + ":" + b.id, i = Math.min(S.offen[schl] || 0, Math.max(0, ansichten.length - 1));
+      var erg = K.position(kat, beispielPosition(v, b), ctx);
+      var karte = h("div", { class: "beispiel", "data-beispiel": v.id + ":" + b.id },
+        ansichten.length ? h("img", { class: "gross", src: bildQuelle(ansichten[i][1]), alt: ansichten[i][0], "data-ansicht-gross": ansichten[i][0] }) : h("div", { class: "gedaempft klein", text: "noch kein Bild" }),
+        ansichten.length > 1 ? h("div", { class: "ansichten" }, ansichten.map(function (an, j) {
+          return h("button", { type: "button", class: j === i ? "on" : "", title: an[0], "aria-label": "Ansicht " + an[0], "data-ansicht": String(j), onclick: function () { S.offen[schl] = j; zeichne(); } }, h("img", { src: bildQuelle(an[1]), alt: "" }));
+        })) : null,
+        h("b", { text: b.titel }),
+        h("span", { class: "gedaempft klein", text: ansichten.length ? "Ansicht: " + ansichten[i][0] : "" }),
+        erg.ok ? h("span", { "data-beispiel-preis": String(erg.netto) }, "≈ ", h("b", { text: euro(erg.netto) }), " netto · " + euro(erg.stueckCent) + "/Stück",
+          erg.platzhalter ? h("span", { class: "platzhalter-marke", text: " · mit Platzhalter-Werten" }) : null)
+          : h("span", { class: "gedaempft klein", text: "nicht kalkulierbar: " + erg.offen.join(" · ") }),
+        nehmen ? knopf("Als Position übernehmen", function () { nehmen(beispielPosition(v, b), b); }, "klein pri", { "data-beispiel-nehmen": v.id + ":" + b.id }) : null);
+      gal.append(karte);
+    });
+    return gal;
+  }
+  function neuePositionKarte(a, kat, kunde) {
+    var karte = h("div", { class: "karte", "data-neue-position": "", "data-schritt-ziel": "produkt" }, h("h3", { text: "＋ Position" }));
+    var wahl = h("select", { id: "vorlage-wahl", onchange: function () { S.neuPos = this.value; zeichne(); } },
+      h("option", { value: "", text: "— Produkt wählen —" }), kat.gebiete.map(function (gb) {
+        return h("optgroup", { label: gb.name }, kat.vorlagen.filter(function (v) { return v.gebiet === gb.id; }).map(function (v) { return h("option", { value: v.id, text: v.name, selected: v.id === S.neuPos }); }));
+      }));
+    karte.append(h("div", { class: "zeile" }, wahl, S.neuPos ? knopf("Leere Position", function () {
+      vorher(a); A.neuePosition(a, kat, S.neuPos); merken(a); zeichne(); }, "", { id: "position-leer" }) : null));
+    /* … oder eine schon kalkulierte Position aus einem früheren Angebot */
+    var frueher = [];
+    S.angebote.forEach(function (b) { if (b === a) return; b.positionen.forEach(function (p) { frueher.push({ a: b, p: p }); }); });
+    if (frueher.length) {
+      var fw = h("select", { id: "frueher-wahl", "aria-label": "Position aus früherem Angebot" }, h("option", { value: "", text: "— oder aus früherem Angebot übernehmen —" }),
+        frueher.map(function (x, i) { return h("option", { value: String(i), text: x.a.nummer + " · " + ((x.a.kunde || {}).name || "ohne Kunde") + " · " + (x.p.titel || x.p.vorlage) + " · " + x.p.menge + " Stk." }); }));
+      karte.append(h("div", { class: "zeile" }, fw, knopf("Übernehmen", function () {
+        if (fw.value === "") return; var q = kopie(frueher[+fw.value].p); vorher(a); a.zaehler = (a.zaehler || 0) + 1; q.id = "P-" + a.zaehler; a.positionen.push(q); merken(a); zeichne();
+      }, "", { id: "frueher-uebernehmen" })));
+    }
+    var v = finde(kat.vorlagen, S.neuPos);
+    if (v) {
+      karte.append(h("p", { class: "gedaempft klein", text: "Beispiele — so viel Aufwand, ungefähr so ein Preis (gerechnet mit deinen aktuellen Werten):" }));
+      karte.append(galerie(v, kat, { angebot: a, kunde: kunde }, function (pp, b) {
+        vorher(a); var p = A.neuePosition(a, kat, v.id);
+        Object.assign(p, { menge: pp.menge, staffeln: (v.staffelVorgabe || []).concat([pp.menge]).filter(function (m, i, s) { return s.indexOf(m) === i; }).sort(function (x, y) { return x - y; }),
+          breiteMm: pp.breiteMm, hoeheMm: pp.hoeheMm, farben: pp.farben, verfahren: pp.verfahren, wahl: pp.wahl, titel: b.titel });
+        S.neuPos = null; merken(a); zeichne();
+      }));
+    }
+    return karte;
+  }
+
+  /* ── Verpackung & Versand ── */
+  function versandKarte(a, r, kat, ro) {
+    var vs = r.versand, karte = h("div", { class: "karte", "data-versand": "", "data-schritt-ziel": "versand" }, h("h3", { text: "Verpackung & Versand" }));
+    function setze(fn) { return function () { vorher(a); fn.apply(this, arguments); merken(a); zeichne(); }; }
+    if (vs.leer) karte.append(h("p", { class: "gedaempft", text: "Nichts zu versenden (keine kalkulierte Position mit Versand)." }));
+    else if (!vs.ok) karte.append(h("div", { class: "hinweis bad", "data-kein-tarif": "" }, vs.grund + "."));
+    else if (vs.manuell) karte.append(h("p", { "data-versand-cent": String(vs.cent) }, "Von Hand gesetzt: ", h("b", { text: euro(vs.cent) })));
+    else karte.append(h("p", { "data-versand-cent": String(vs.cent) }, h("b", { text: euro(vs.cent) }), " netto — " + vs.pakete + " × " + vs.verpackungName + " · " + vs.dienstName +
+      (vs.sperrgut ? " · Sperrgut" : "") + " · " + String(Math.round(vs.gewichtJePaketG / 100) / 10).replace(".", ",") + " kg je Paket",
+      h("br"), h("span", { class: "gedaempft klein intern-satz", text: "🔒 Verpackung " + euro(vs.verpackungCent) + " + Packen " + euro(vs.packCent) + " + Tarif " + euro(vs.tarifCent) }), ));
+    if (vs.inhalt) karte.append(h("p", { class: "gedaempft klein", text: "Inhalt: " + String(Math.round(vs.inhalt.gewichtG / 100) / 10).replace(".", ",") + " kg · " + String(vs.inhalt.volumenL).replace(".", ",") + " l · längstes Teil " + Math.round(vs.inhalt.laengsteMm) + " mm" }));
+    var vw = a.versand || {};
+    karte.append(h("div", { class: "feldgitter" },
+      feld("Verpackung", h("select", { "data-versand-wahl": "verpackung", disabled: ro, onchange: setze(function () { a.versand = Object.assign({}, a.versand, { verpackung: this.value || undefined }); }) },
+        h("option", { value: "", text: "automatisch" }), kat.verpackungen.map(function (p) { return h("option", { value: p.id, text: p.name, selected: p.id === vw.verpackung }); }))),
+      feld("Dienst", h("select", { "data-versand-wahl": "dienst", disabled: ro, onchange: setze(function () { a.versand = Object.assign({}, a.versand, { dienst: this.value || undefined }); }) },
+        h("option", { value: "", text: "günstigster" }), kat.versand.map(function (d) { return h("option", { value: d.id, text: d.name, selected: d.id === vw.dienst }); }))),
+      feld("Von Hand (netto €, leer = gerechnet)", h("input", { inputmode: "decimal", value: vw.manuellCent != null && vw.manuellCent !== "" ? G.formatCents(vw.manuellCent) : "", disabled: ro, "data-versand-manuell": "",
+        onchange: setze(function () { var c = this.value.trim() === "" ? null : G.parseEuroToCents(this.value); a.versand = Object.assign({}, a.versand, { manuellCent: Number.isFinite(c) ? c : null }); }) }))));
+    return karte;
+  }
+
+  /* ── Kundenblatt: nur aus WC.aussen.angebotExtern ── */
+  function blattAngebot(d) {
+    var b = h("article", { class: "blatt", "data-blatt": "angebot" });
+    var abs = h("div", { class: "absender" }, d.firma.logo ? h("img", { src: d.firma.logo, alt: "" }) : null, h("div", { text: [d.firma.name, d.firma.anschrift, d.firma.kontakt].filter(Boolean).join("\n") }));
+    b.append(h("div", { class: "kopfzeile" }, h("div", { class: "meta" }, h("div", { text: d.kunde.name }), h("div", { style: "white-space:pre-line", text: d.kunde.anschrift })), abs));
+    b.append(h("h1", { text: "Angebot " + d.nummer }));
+    b.append(h("p", { class: "meta", text: "Datum: " + datumDe(d.datum) + " · gültig bis " + datumDe(d.gueltigBis) + (d.titel ? " · " + d.titel : "") }));
+    var t = h("table", null, h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { text: "Leistung" }), h("th", { class: "r", text: "Menge" }), h("th", { class: "r", text: "je Stück" }), h("th", { class: "r", text: "Gesamt netto" }))));
+    var tb = h("tbody");
+    d.positionen.forEach(function (p) {
+      tb.append(h("tr", null, h("td", null, p.bild ? h("img", { class: "pos-bild", src: bildQuelle(p.bild), alt: "" }) : null),
+        h("td", null, h("b", { text: p.titel }), p.beschreibung ? h("div", { class: "klein", text: p.beschreibung }) : null,
+          p.staffel.length ? h("div", { class: "staffel", text: "Staffel: " + p.staffel.map(function (s) { return s.menge + " Stk. à " + euro(s.stueckCent); }).join(" · ") }) : null),
+        h("td", { class: "r", text: String(p.menge) }), h("td", { class: "r", text: euro(p.stueckCent) }), h("td", { class: "r", text: euro(p.gesamtCent) })));
+    });
+    if (d.versand) tb.append(h("tr", null, h("td"), h("td", { text: d.versand.text }), h("td"), h("td"), h("td", { class: "r", text: euro(d.versand.nettoCent) })));
+    t.append(tb); b.append(t);
+    var su = h("table", { class: "summen", style: "width:auto;margin-left:auto;margin-top:10px" });
+    su.append(h("tr", null, h("td", { text: "Summe netto" }), h("td", { class: "r", text: euro(d.summen.netto) })));
+    d.summen.perSatz.forEach(function (p) { su.append(h("tr", null, h("td", { text: d.kleinunternehmer ? "Keine Umsatzsteuer (§ 19 UStG)" : "USt " + p.satz + " %" }), h("td", { class: "r", text: euro(p.ust) }))); });
+    su.append(h("tr", { class: "brutto" }, h("td", { text: "Gesamt" }), h("td", { class: "r", text: euro(d.summen.brutto) })));
+    b.append(su);
+    b.append(h("p", { class: "fuss", text: [d.firma.name, d.firma.steuer, d.firma.bank].filter(Boolean).join("\n") }));
+    return b;
+  }
+  function datumDe(iso) { var m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(iso || ""); return m ? m[3] + "." + m[2] + "." + m[1] : iso || ""; }
+  function blattBauen(a) {
+    var r = A.rechne(a, S.katalog, kundeVon(a), S.einst.kleinunternehmer);
+    return blattAngebot(WC.aussen.angebotExtern(a, r, S.einst.firma, S.einst.kleinunternehmer));
+  }
+  function drucke(a) { var d = document.getElementById("druck"); d.replaceChildren(blattBauen(a)); window.print(); }
+  function vorschau(a) {
+    var dlg = document.getElementById("vorschau");
+    dlg.replaceChildren(h("div", { class: "vorschau-kopf" }, h("b", { text: "Vorschau — genau das, was der Kunde bekommt" }),
+      h("div", { class: "band" }, knopf("🖨 Drucken / als PDF", function () { dlg.close(); drucke(a); }, "pri klein"), knopf("✕", function () { dlg.close(); }, "klein", { "aria-label": "Schließen" }))),
+      h("div", { class: "vorschau-papier" }, blattBauen(a)));
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+  }
+
+  /* ════ Kunden ════ */
+  function zKunden(main) {
+    var karte = h("div", { class: "karte" }, h("h2", { text: "Kunden" }),
+      h("p", { class: "gedaempft klein", text: "Die Klasse wirkt auf die Kalkulation (Einstellungen → Kundenklassen) und steht nie auf dem Angebot." }));
+    S.kunden.forEach(function (k) {
+      function sp() { dbPut("kunden", kopie(k)); }
+      karte.append(h("div", { class: "eintrag-kat", "data-kunde": k.id, style: "border:1px solid var(--line);border-radius:11px;padding:8px;margin:6px 0" }, h("div", { class: "feldgitter" },
+        feld("Name / Firma", h("input", { value: k.name, "data-key": k.id + "-name", oninput: function () { k.name = this.value; sp(); } })),
+        feld("Anschrift", h("textarea", { value: k.anschrift, "data-key": k.id + "-anschrift", rows: "2", oninput: function () { k.anschrift = this.value; sp(); } })),
+        feld("Klasse", h("select", { "data-kunde-klasse": k.id, onchange: function () { k.klasse = this.value; sp(); S.angebote.forEach(function (a) { if (a.kundeId === k.id && bearbeitbar(a)) { a.kunde = { name: k.name, anschrift: k.anschrift, klasse: k.klasse }; merken(a); } }); zeichne(); } },
+          ["A", "B", "C"].map(function (c) { var kl = (S.katalog.gebiete[0].klassen || {})[c] || {}; return h("option", { value: c, text: kl.name || c, selected: (k.klasse || "B") === c }); })))),
+        knopf("✕ Kunde löschen", function () { if (!confirm("Kunde „" + k.name + "“ löschen?")) return; S.kunden = S.kunden.filter(function (q) { return q !== k; }); dbDel("kunden", k.id); zeichne(); }, "klein gefahr")));
+    });
+    karte.append(knopf("＋ Kunde", function () {
+      var n = 1; S.kunden.forEach(function (k) { var m = /^K-(\d+)$/.exec(k.id); if (m) n = Math.max(n, +m[1] + 1); });
+      var k = { id: "K-" + n, name: "Neuer Kunde", anschrift: "", klasse: "B" }; S.kunden.push(k); dbPut("kunden", kopie(k)); zeichne();
+    }, "pri", { id: "neuer-kunde" }));
+    main.append(karte);
+  }
+
+  /* ════ Katalog ════ */
+  var FELDER = {
+    gebiete: [["name", "Name", "text"]],
+    materialien: [["name", "Name", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["einheit", "Einheit", "wahl", ["m2", "lfm", "stueck", "platte"]], ["ekCent", "Einkaufspreis je Einheit €", "cent"],
+      ["verschnittPct", "Verschnitt %", "zahl"], ["rollenbreiteMm", "Rollenbreite mm", "zahl"], ["platteBMm", "Platte Breite mm", "zahl"], ["platteHMm", "Platte Höhe mm", "zahl"], ["gewichtG", "Gewicht g je Einheit", "zahl"]],
+    verfahren: [["name", "Name", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["maschinensatzCent", "Maschinenstundensatz €/h", "cent"], ["leistung", "Leistung je Stunde", "zahl"],
+      ["leistungEinheit", "Leistung in", "wahl", ["m2", "stueck"]], ["ruestMin", "Rüstzeit min", "zahl"], ["farbregel", "Farbregel", "wahl", ["ein", "je_farbe", "digital"]], ["jeFarbe", "Maschine läuft je Farbe", "bool"]],
+    vorlagen: [["name", "Name", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["mengenregel", "Mengenregel", "wahl", ["stueck", "flaeche", "rolle", "platte", "laenge"]], ["beschreibungVorgabe", "Beschreibung (Vorgabe)", "text"],
+      ["breiteVorgabe", "Breite mm (Vorgabe)", "zahl"], ["hoeheVorgabe", "Höhe mm (Vorgabe)", "zahl"], ["abstandMm", "Abstand mm (Nesting)", "zahl"], ["farbenMax", "Farben höchstens", "zahl"],
+      ["verfahrenWahl", "Verfahren (Auswahl)", "multi:verfahren"], ["verfahrenVorgabe", "Verfahren (Vorgabe)", "ref:verfahren"],
+      ["versandArt", "Versand als", "wahl", ["stueck", "flach", "rolle", "keiner"]], ["volumenJeStueckL", "Volumen je Stück l", "zahl"], ["laengeMm", "Längstes Maß je Stück mm", "zahl"], ["dickeMm", "Dicke mm (flach/rolle)", "zahl"],
+      ["gewichtJeStueckG", "Zusatzgewicht je Stück g", "zahl"], ["zukaufEkCent", "Zukauf-EK je Stück € (Vergleich)", "cent"]],
+    verpackungen: [["name", "Name", "text"], ["innenL", "Innen L mm", "zahl"], ["innenB", "Innen B mm", "zahl"], ["innenH", "Innen H mm", "zahl"], ["eigengewichtG", "Eigengewicht g", "zahl"],
+      ["ekCent", "Einkaufspreis €", "cent"], ["packMin", "Packen min", "zahl"], ["maxGewichtG", "max. Gewicht g", "zahl"]],
+    versand: [["name", "Name", "text"], ["maxL", "max. Länge mm (0 = egal)", "zahl"], ["maxGurt", "max. Gurtmaß mm (0 = egal)", "zahl"], ["sperrgutCent", "Sperrgut-Zuschlag € (leer = keins)", "cent"], ["sperrgutMaxL", "Sperrgut bis Länge mm", "zahl"]],
+  };
+  var PREISFELDER = ["ekCent", "maschinensatzCent", "leistung", "ruestMin", "gewichtG", "verschnittPct", "packMin", "sperrgutCent"];
+  var KAT_NAMEN = { vorlagen: "Produktvorlagen", materialien: "Materialien", verfahren: "Verfahren", verpackungen: "Verpackungen", versand: "Versandtarife", gebiete: "Arbeitsgebiete" };
+
+  function eingabe(obj, key, typ, opt, onAenderung) {
+    var w = obj[key];
+    function fertig(neu) { obj[key] = neu; var war = !!obj.platzhalter; if (PREISFELDER.indexOf(key) >= 0 || /Cent$/.test(key)) delete obj.platzhalter; katalogSpeichern(); if (onAenderung) onAenderung(); else if (war && !obj.platzhalter) zeichne(); }
+    var at = { "data-kat-feld": key };
+    if (typ === "text") return h("input", Object.assign(at, { value: w || "", onchange: function () { fertig(this.value); } }));
+    if (typ === "zahl") return h("input", Object.assign(at, { inputmode: "decimal", value: w == null ? "" : deZahl(w), onchange: function () { fertig(zahlPunkt(this.value)); } }));
+    if (typ === "cent") return h("input", Object.assign(at, { inputmode: "decimal", value: w == null || w === "" ? "" : G.formatCents(w), onchange: function () { var c = this.value.trim() === "" ? null : G.parseEuroToCents(this.value); fertig(Number.isFinite(c) ? c : null); } }));
+    if (typ === "bool") return h("input", Object.assign(at, { type: "checkbox", checked: !!w, onchange: function () { fertig(this.checked); } }));
+    if (typ === "wahl") return h("select", Object.assign(at, { onchange: function () { fertig(this.value); } }), opt.map(function (o) { return h("option", { value: o, text: o, selected: o === w }); }));
+    if (typ === "gebiet") return h("select", Object.assign(at, { onchange: function () { fertig(this.value); } }), S.katalog.gebiete.map(function (gb) { return h("option", { value: gb.id, text: gb.name, selected: gb.id === w }); }));
+    if (typ.indexOf("ref:") === 0) { var l = S.katalog[typ.slice(4)]; return h("select", Object.assign(at, { onchange: function () { fertig(this.value); } }), h("option", { value: "", text: "—" }), l.map(function (x) { return h("option", { value: x.id, text: x.name, selected: x.id === w }); })); }
+    if (typ.indexOf("multi:") === 0) {
+      var liste = S.katalog[typ.slice(6)], cur = Array.isArray(w) ? w : [];
+      return h("div", Object.assign(at, { class: "band" }), liste.map(function (x) {
+        return h("label", { class: "schalter" }, h("input", { type: "checkbox", checked: cur.indexOf(x.id) >= 0, onchange: function () {
+          var n = (Array.isArray(obj[key]) ? obj[key] : []).filter(function (q) { return q !== x.id; }); if (this.checked) n.push(x.id); fertig(n); } }), x.name);
+      }));
+    }
+    return h("span");
+  }
+  function felderFuer(obj, liste, onAenderung) { return h("div", { class: "feldgitter" }, liste.map(function (f) { return feld(f[1], eingabe(obj, f[0], f[2], f[3], onAenderung)); })); }
+
+  function zKatalog(main) {
+    var kat = S.katalog;
+    var fehler = KAT.pruefe(kat), ph = KAT.platzhalter(kat);
+    main.append(h("div", { class: "karte" }, h("h2", { text: "Katalog" }),
+      h("p", { class: "gedaempft klein", text: "Alles hier ist von Hand erweiterbar: Arbeitsgebiete, Materialien, Verfahren, Produktvorlagen mit Zeit-Mustern, Beispielen und Marktpreisen, Verpackungen, Versandtarife." }),
+      ph.anzahl ? h("div", { class: "hinweis warn", "data-katalog-platzhalter": String(ph.anzahl) }, ph.anzahl + " Einträge tragen noch Platzhalter-Werte (gelb markiert). Wer einen Preis ändert, nimmt die Marke weg.") : null,
+      fehler.length ? h("div", { class: "hinweis bad", "data-katalog-fehler": "" }, "Der Katalog hat Fehler: " + fehler.join(" · ")) : null,
+      h("div", { class: "band" },
+        knopf("⬇ Katalog als Datei", function () { herunterladen("workflow-calculate-katalog.json", KAT.exportieren(kat), "application/json"); }, "klein", { id: "katalog-export" }),
+        h("label", { class: "btn klein" }, "⬆ Katalog einlesen", h("input", { type: "file", accept: ".json,application/json", hidden: true, id: "katalog-import", onchange: function () {
+          var file = this.files && this.files[0]; if (!file) return;
+          file.text().then(function (t) { var r = KAT.importieren(t); if (!r.ok) { melde("Nicht eingelesen: " + r.fehler.join(" · "), "bad"); return; } S.katalog = r.katalog; katalogSpeichern(); melde("Katalog eingelesen.", ""); });
+        } })),
+        knopf("Startkatalog wiederherstellen", function () { if (confirm("Den ganzen Katalog durch den Startkatalog ersetzen? Eigene Einträge gehen verloren (vorher als Datei sichern).")) { S.katalog = kopie(WC.START); katalogSpeichern(); zeichne(); } }, "klein gefahr"))));
+    var nav = h("div", { class: "band", style: "margin-bottom:10px" });
+    Object.keys(KAT_NAMEN).forEach(function (k) { nav.append(knopf(KAT_NAMEN[k] + " (" + kat[k].length + ")", function () { S.katReiter = k; S.katOffen = null; zeichne(); }, "chip" + (S.katReiter === k ? " on" : ""), { "data-kat-reiter": k })); });
+    main.append(nav);
+    var liste = kat[S.katReiter] || [];
+    var karte = h("div", { class: "karte katalog-liste" });
+    liste.forEach(function (x) {
+      var auf = S.katOffen === x.id;
+      var kopfZ = h("div", { class: "band", style: "justify-content:space-between" },
+        h("button", { type: "button", class: "btn klein", "data-kat-eintrag": x.id, onclick: function () { S.katOffen = auf ? null : x.id; zeichne(); } }, (auf ? "▾ " : "▸ ") + (x.name || x.id)),
+        h("span", { class: "band" }, x.platzhalter ? h("span", { class: "platzhalter-marke", text: "Platzhalter" }) : null,
+          knopf("⧉", function () { var c = kopie(x); c.id = KAT.neueKennung(liste, x.id + "_kopie"); c.name = (x.name || "") + " (Kopie)"; c.verlauf = []; liste.push(c); katalogSpeichern(); S.katOffen = c.id; zeichne(); }, "klein", { "aria-label": "Kopieren", title: "Kopieren" }),
+          knopf("✕", function () { if (!confirm("„" + (x.name || x.id) + "“ löschen?")) return; S.katalog[S.katReiter] = liste.filter(function (q) { return q !== x; }); katalogSpeichern(); zeichne(); }, "klein gefahr", { "aria-label": "Löschen", title: "Löschen" })));
+      var e = h("div", { class: "eintrag-kat", "data-kat-id": x.id }, kopfZ);
+      if (auf) {
+        e.append(felderFuer(x, FELDER[S.katReiter] || [], null));
+        if (S.katReiter === "vorlagen") e.append(vorlageDetails(x));
+        if (S.katReiter === "versand") e.append(stufenEditor(x));
+        if (S.katReiter === "gebiete") e.append(h("p", { class: "gedaempft klein", text: "Sätze und Kundenklassen des Gebiets: Reiter „Einstellungen“." }));
+      }
+      karte.append(e);
+    });
+    karte.append(knopf("＋ " + (KAT_NAMEN[S.katReiter] || "Eintrag"), function () {
+      var n = neuerEintrag(S.katReiter); liste.push(n); katalogSpeichern(); S.katOffen = n.id; zeichne();
+    }, "pri", { id: "kat-neu" }));
+    main.append(karte);
+  }
+  function neuerEintrag(art) {
+    var gb = S.katalog.gebiete[0] ? S.katalog.gebiete[0].id : "";
+    var l = S.katalog[art], id = KAT.neueKennung(l, "neu");
+    if (art === "materialien") return { id: id, gebiet: gb, name: "Neues Material", einheit: "m2", ekCent: null, verschnittPct: 0, gewichtG: 0 };
+    if (art === "verfahren") return { id: id, gebiet: gb, name: "Neues Verfahren", maschinensatzCent: null, leistung: 0, leistungEinheit: "stueck", ruestMin: 0, farbregel: "ein", jeFarbe: false };
+    if (art === "vorlagen") return { id: id, gebiet: gb, name: "Neues Produkt", mengenregel: "stueck", verfahrenWahl: [], verfahrenVorgabe: "", farbenMax: 1, slots: [], schritte: [], staffelVorgabe: [1],
+      versandArt: "stueck", volumenJeStueckL: 0, laengeMm: 0, markt: [], marktGrenzen: { online: 50, import: 500 }, verlauf: [], beispiele: [] };
+    if (art === "verpackungen") return { id: id, name: "Neue Verpackung", innenL: 0, innenB: 0, innenH: 0, eigengewichtG: 0, ekCent: null, packMin: 0 };
+    if (art === "versand") return { id: id, name: "Neuer Dienst", maxL: 0, maxGurt: 0, sperrgutCent: null, stufen: [] };
+    return { id: id, name: "Neues Arbeitsgebiet", saetze: kopie(S.katalog.gebiete[0] ? S.katalog.gebiete[0].saetze : {}), klassen: kopie(S.katalog.gebiete[0] ? S.katalog.gebiete[0].klassen : {}) };
+  }
+  /* Kleine Tabellen-Editoren für Listen in einem Eintrag */
+  function listenEditor(titel, arr, spalten, neu, attr) {
+    var box = h("div", Object.assign({ style: "margin-top:8px" }, attr || {}), h("b", { text: titel }));
+    arr.forEach(function (z, i) {
+      box.append(h("div", { class: "zeile", style: "align-items:flex-end" }, spalten.map(function (s) { return feld(s[1], eingabe(z, s[0], s[2], s[3])); }),
+        knopf("✕", function () { arr.splice(i, 1); katalogSpeichern(); zeichne(); }, "klein", { "aria-label": "Zeile löschen" })));
+    });
+    box.append(knopf("＋ " + titel, function () { arr.push(neu()); katalogSpeichern(); zeichne(); }, "klein"));
+    return box;
+  }
+  function stufenEditor(d) { d.stufen = d.stufen || []; return listenEditor("Gewichtsstufe", d.stufen, [["bisG", "bis g", "zahl"], ["cent", "Preis €", "cent"]], function () { return { bisG: 0, cent: null }; }); }
+  function vorlageDetails(v) {
+    var box = h("div");
+    v.slots = v.slots || []; v.schritte = v.schritte || []; v.beispiele = v.beispiele || []; v.markt = v.markt || []; v.marktGrenzen = v.marktGrenzen || {};
+    box.append(feld("Staffel (Vorgabe, mit Komma)", h("input", { value: (v.staffelVorgabe || []).join(", "), onchange: function () { v.staffelVorgabe = this.value.split(/[,;\s]+/).map(Number).filter(function (n) { return n > 0; }); katalogSpeichern(); } })));
+    box.append(listenEditor("Material-Platz", v.slots, [["name", "Name", "text"], ["bezug", "Menge aus", "wahl", ["regel", "flaeche", "stueck"]], ["wahl", "Materialien", "multi:materialien"],
+      ["vorgabe", "Vorgabe", "ref:materialien"], ["optional", "darf fehlen", "bool"], ["jeFarbe", "je Farbe", "bool"], ["nurBei", "nur bei Verfahren", "multi:verfahren"]],
+      function () { return { id: KAT.neueKennung(v.slots, "platz"), name: "Material", bezug: "regel", wahl: [], vorgabe: "" }; }, { "data-slots": "" }));
+    box.append(listenEditor("Arbeitsschritt (Zeit-Muster)", v.schritte, [["name", "Name", "text"], ["ruestMin", "Rüsten min", "zahl"], ["minJeStueck", "min je Stück", "zahl"], ["minJeM2", "min je m²", "zahl"],
+      ["jeFarbe", "je Farbe", "bool"], ["nurBei", "nur bei Verfahren", "multi:verfahren"]],
+      function () { return { id: KAT.neueKennung(v.schritte, "schritt"), name: "Schritt", ruestMin: 0, minJeStueck: 0, minJeM2: 0 }; }, { "data-schritte": "" }));
+    /* Sätze der Vorlage (überstimmen das Arbeitsgebiet) */
+    v.saetze = v.saetze || {};
+    box.append(h("div", { style: "margin-top:8px" }, h("b", { text: "Eigene Sätze dieser Vorlage (leer = Arbeitsgebiet)" }),
+      felderFuer(v.saetze, [["stundensatzCent", "Stundensatz €/h", "cent"], ["lohnCent", "Lohn €/h (ausführlich)", "cent"], ["gewinnPct", "Gewinn %", "zahl"], ["materialzuschlagPct", "Materialzuschlag %", "zahl"]])));
+    /* Beispiele mit Ansichten */
+    var bx = h("div", { style: "margin-top:8px", "data-beispiele-editor": "" }, h("b", { text: "Beispiele (Bilder in mehreren Ansichten; der Preis wird immer frisch gerechnet)" }));
+    v.beispiele.forEach(function (b, i) {
+      b.ansichten = b.ansichten || [];
+      bx.append(h("div", { class: "eintrag-kat" },
+        felderFuer(b, [["titel", "Titel", "text"], ["menge", "Menge", "zahl"], ["breiteMm", "Breite mm", "zahl"], ["hoeheMm", "Höhe mm", "zahl"], ["farben", "Farben", "zahl"], ["verfahren", "Verfahren", "ref:verfahren"]]),
+        h("div", { class: "daumen" }, b.ansichten.map(function (an, j) {
+          return h("span", { class: "band" }, h("img", { src: bildQuelle(an[1]), alt: an[0] }), h("input", { class: "mittel", value: an[0], "aria-label": "Name der Ansicht", onchange: function () { an[0] = this.value; katalogSpeichern(); } }),
+            knopf("✕", function () { b.ansichten.splice(j, 1); katalogSpeichern(); zeichne(); }, "klein", { "aria-label": "Ansicht entfernen" }));
+        }), h("label", { class: "btn klein" }, "📷 Foto als Ansicht", h("input", { type: "file", accept: "image/*", hidden: true, "data-ansicht-hoch": v.id + ":" + b.id, onchange: function () {
+          var file = this.files && this.files[0]; if (!file) return;
+          bildSpeichern(file).then(function (id) { b.ansichten.push(["Foto " + (b.ansichten.length + 1), "img:" + id]); katalogSpeichern(); zeichne(); }, function () { melde("Das Bild ließ sich nicht lesen.", "bad"); });
+        } }))),
+        knopf("✕ Beispiel entfernen", function () { v.beispiele.splice(i, 1); katalogSpeichern(); zeichne(); }, "klein gefahr")));
+    });
+    bx.append(knopf("＋ Beispiel", function () { v.beispiele.push({ id: KAT.neueKennung(v.beispiele, "b"), titel: "Beispiel", menge: (v.staffelVorgabe || [1])[0], breiteMm: v.breiteVorgabe || "", hoeheMm: v.hoeheVorgabe || "", ansichten: [] }); katalogSpeichern(); zeichne(); }, "klein"));
+    box.append(bx);
+    box.append(galerie(v, S.katalog, {}, null));
+    /* Marktgrenzen */
+    box.append(h("div", { style: "margin-top:8px" }, h("b", { text: "Marktvergleich: ab welcher Menge eine Klasse gilt" }),
+      felderFuer(v.marktGrenzen, [["online", "Online-Druckerei ab Stück", "zahl"], ["import", "Import/Massenware ab Stück", "zahl"]])));
+    /* Verlauf: übernommene Preise, rücknehmbar */
+    var vl = h("div", { style: "margin-top:8px", "data-verlauf": v.id }, h("b", { text: "Verlauf (eigene Preise übernommen)" }));
+    if (!(v.verlauf || []).length) vl.append(h("p", { class: "gedaempft klein", text: "noch nichts übernommen" }));
+    (v.verlauf || []).slice().reverse().forEach(function (e) {
+      vl.append(h("div", { class: "zeile", "data-verlauf-eintrag": String(e.nr) },
+        h("span", { class: "klein", text: e.datum + " · " + ({ gewinn: "Gewinn", stundensatz: "Stundensatz", minuten: "Zeit-Muster" }[e.weg] || e.weg) + " · " + (e.anlass || "") + (e.angebot ? " · " + e.angebot : "") + (e.zurueck ? " · zurückgenommen" : "") }),
+        e.zurueck ? null : knopf("Rücknehmen", function () { K.ruecknehmen(S.katalog, v.id, e.nr); katalogSpeichern(); melde("Zurückgenommen — die Vorlage rechnet wieder wie vorher.", ""); }, "klein", { "data-ruecknehmen": String(e.nr) })));
+    });
+    box.append(vl);
+    return box;
+  }
+  function herunterladen(name, text, typ) {
+    var u = URL.createObjectURL(new Blob([text], { type: typ })), l = h("a", { href: u, download: name });
+    document.body.append(l); l.click(); l.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 2000);
+  }
+
+  /* ════ Einstellungen ════ */
+  function zEinstellungen(main) {
+    var f = S.einst.firma;
+    main.append(h("div", { class: "karte" }, h("h2", { text: "Firma (steht auf dem Angebot)" }),
+      h("div", { class: "feldgitter" }, ["name", "anschrift", "kontakt", "steuer", "bank"].map(function (k) {
+        var lab = { name: "Name", anschrift: "Anschrift", kontakt: "Kontakt", steuer: "Steuernummer / USt-IdNr.", bank: "Bankverbindung" }[k];
+        return feld(lab, h(k === "anschrift" ? "textarea" : "input", { value: f[k] || "", "data-firma": k, "data-key": "firma-" + k, oninput: function () { f[k] = this.value; einstSpeichern(); } }));
+      })),
+      h("label", { class: "schalter" }, h("input", { type: "checkbox", checked: !!S.einst.kleinunternehmer, id: "kleinunternehmer", onchange: function () { S.einst.kleinunternehmer = this.checked; einstSpeichern(); } }), "Kleinunternehmer (§ 19 UStG, keine USt)")));
+    S.katalog.gebiete.forEach(function (gb) {
+      var s = gb.saetze = gb.saetze || {};
+      function sp() { delete gb.platzhalter; katalogSpeichern(); }
+      var modus = s.modus === "voll" ? "voll" : "einfach";
+      var karte = h("div", { class: "karte", "data-gebiet-saetze": gb.id }, h("h2", { text: "Sätze — " + gb.name }),
+        gb.platzhalter ? h("div", { class: "hinweis warn", "data-saetze-platzhalter": "" }, "Platzhalter-Sätze — nicht aus deinen Zahlen. Unten mit den Rechnern aus deinen Jahreskosten bestimmen.") : null,
+        h("p", { class: "gedaempft klein", text: "Gerechnet wird nach dem Schema der Zuschlagskalkulation (Kosten- und Leistungsrechnung). Die Formeln sind Standard; die Sätze sind betriebsindividuell und kommen aus deinen eigenen Kosten." }),
+        h("div", { class: "seg", style: "margin:6px 0" }, [["einfach", "Vereinfacht"], ["voll", "Ausführlich (MGK, FGK, VwGK, VtGK)"]].map(function (m) {
+          return h("button", { type: "button", class: modus === m[0] ? "on" : "", "data-modus": m[0], onclick: function () { s.modus = m[0]; sp(); zeichne(); } }, m[1]);
+        })));
+      var liste = modus === "voll"
+        ? [["lohnCent", "Fertigungslohn €/h", "cent"], ["mgkPct", "Materialgemeinkosten %", "zahl"], ["fgkPct", "Fertigungsgemeinkosten %", "zahl"], ["vwgkPct", "Verwaltungsgemeinkosten %", "zahl"], ["vtgkPct", "Vertriebsgemeinkosten %", "zahl"]]
+        : [["stundensatzCent", "Stundenverrechnungssatz €/h", "cent"], ["materialzuschlagPct", "Materialzuschlag %", "zahl"], ["gkPct", "Gemeinkosten % (auf Herstellkosten)", "zahl"]];
+      liste = liste.concat([["gewinnPct", "Gewinn %", "zahl"], ["skontoPct", "Kundenskonto %", "zahl"], ["provisionPct", "Provision %", "zahl"], ["rabattPct", "Kundenrabatt %", "zahl"],
+        ["handlungskostenPct", "Handlungskosten % (Zukauf)", "zahl"], ["ustSatz", "USt %", "zahl"]]);
+      karte.append(felderFuer(s, liste, function () { delete gb.platzhalter; katalogSpeichern(); }));
+      /* Kundenklassen */
+      gb.klassen = gb.klassen || {};
+      var kl = h("div", { "data-klassen": gb.id }, h("h3", { text: "Kundenklassen A / B / C", style: "margin-top:10px" }),
+        h("p", { class: "gedaempft klein", text: "Wirkt auf Stundensatz und Gewinn, solange Position oder Angebot keinen eigenen Wert setzen. Steht nie auf dem Angebot." }));
+      ["A", "B", "C"].forEach(function (c) {
+        var k = gb.klassen[c] = gb.klassen[c] || { name: c, stundenPct: 0, gewinnPct: 0 };
+        kl.append(h("div", { class: "zeile" }, h("b", { text: c, style: "width:1.5em" }), felderFuer(k, [["name", "Bezeichnung", "text"], ["stundenPct", "Stundensatz ± %", "zahl"], ["gewinnPct", "Gewinn ± Prozentpunkte", "zahl"]])));
+      });
+      karte.append(kl);
+      karte.append(rechnerKarte(gb));
+      main.append(karte);
+    });
+  }
+  function rechnerKarte(gb) {
+    var s = gb.saetze, box = h("div");
+    var R1 = S.rechner1 = S.rechner1 || { lohnJahrCent: null, lohnnebenPct: 21, gemeinkostenJahrCent: null, gewinnJahrCent: null, produktiveStunden: 1400 };
+    var r1 = K.stundensatzRechner(R1);
+    box.append(h("details", { "data-rechner": "stundensatz" }, h("summary", { text: "🧮 Stundensatz-Rechner" }),
+      h("p", { class: "gedaempft klein", text: "Stundenverrechnungssatz = (Lohn + Lohnnebenkosten + Gemeinkosten + Gewinn im Jahr) ÷ produktive Stunden im Jahr" }),
+      felderFuer(R1, [["lohnJahrCent", "Lohn im Jahr €", "cent"], ["lohnnebenPct", "Lohnnebenkosten %", "zahl"], ["gemeinkostenJahrCent", "Gemeinkosten im Jahr € (Miete, Strom, Fahrzeug …)", "cent"],
+        ["gewinnJahrCent", "gewünschter Gewinn im Jahr €", "cent"], ["produktiveStunden", "produktive Stunden im Jahr", "zahl"]], zeichne),
+      r1.ok ? h("p", { "data-rechner-satz": String(r1.satzCent) }, "Ergebnis: ", h("b", { text: euro(r1.satzCent) + " je Stunde" }), " ",
+        knopf("übernehmen", function () { s.stundensatzCent = r1.satzCent; delete gb.platzhalter; katalogSpeichern(); melde("Stundenverrechnungssatz " + euro(r1.satzCent) + " übernommen.", ""); }, "klein pri")) : h("p", { class: "gedaempft klein", text: r1.grund })));
+    var R2 = S.rechner2 = S.rechner2 || { mekCent: null, fertigungslohnCent: null, mgkCent: null, fgkCent: null, vwgkCent: null, vtgkCent: null };
+    var r2 = K.zuschlagsRechner(R2);
+    box.append(h("details", { "data-rechner": "zuschlaege" }, h("summary", { text: "🧮 Zuschlags-Rechner (vereinfachter Betriebsabrechnungsbogen)" }),
+      h("p", { class: "gedaempft klein", text: "Jahreskosten eintragen (aus der EÜR / Buchhaltung). MGK % = MGK ÷ Materialeinzelkosten · FGK % = FGK ÷ Fertigungslöhne · VwGK %, VtGK % = Kosten ÷ Herstellkosten." }),
+      felderFuer(R2, [["mekCent", "Materialeinzelkosten im Jahr €", "cent"], ["fertigungslohnCent", "Fertigungslöhne im Jahr €", "cent"], ["mgkCent", "Materialgemeinkosten €", "cent"],
+        ["fgkCent", "Fertigungsgemeinkosten €", "cent"], ["vwgkCent", "Verwaltungsgemeinkosten €", "cent"], ["vtgkCent", "Vertriebsgemeinkosten €", "cent"]], zeichne),
+      r2.ok ? h("p", { "data-rechner-zuschlaege": "" }, "MGK " + fmtPct(r2.mgkPct) + " % · FGK " + fmtPct(r2.fgkPct) + " % · VwGK " + fmtPct(r2.vwgkPct) + " % · VtGK " + fmtPct(r2.vtgkPct) + " % ",
+        knopf("übernehmen (ausführlicher Modus)", function () { Object.assign(s, { modus: "voll", mgkPct: r2.mgkPct, fgkPct: r2.fgkPct, vwgkPct: r2.vwgkPct, vtgkPct: r2.vtgkPct }); delete gb.platzhalter; katalogSpeichern(); melde("Zuschlagssätze übernommen — ausführlicher Modus ist an.", ""); }, "klein pri"))
+        : h("p", { class: "gedaempft klein", text: r2.grund })));
+    return box;
+  }
+
+  /* ── Glanzpunkt folgt der Maus (wie Workflow-Needs) ── */
+  function glanz() {
+    if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    document.addEventListener("pointermove", function (e) {
+      var b = e.target && e.target.closest && e.target.closest(".btn"); if (!b) return;
+      var r = b.getBoundingClientRect(), px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+      b.style.setProperty("--mx", (px * 100).toFixed(1) + "%"); b.style.setProperty("--my", (py * 100).toFixed(1) + "%");
+      b.style.setProperty("--ry", ((px - 0.5) * 10).toFixed(2) + "deg"); b.style.setProperty("--rx", (-(py - 0.5) * 10).toFixed(2) + "deg");
+    }, { passive: true });
+    document.addEventListener("pointerout", function (e) { var b = e.target && e.target.closest && e.target.closest(".btn"); if (b) ["--mx", "--my", "--rx", "--ry"].forEach(function (p) { b.style.removeProperty(p); }); }, { passive: true });
+  }
+  function neuLaden() {
+    var EIGEN = /^workflow-calculate-/;
+    Promise.resolve().then(function () { return window.caches ? caches.keys().then(function (n) { return Promise.all(n.filter(function (x) { return EIGEN.test(x); }).map(function (x) { return caches.delete(x); })); }) : null; })
+      .catch(function () {}).then(function () {
+        return navigator.serviceWorker && navigator.serviceWorker.getRegistrations ? navigator.serviceWorker.getRegistrations().then(function (rs) {
+          var hier = new URL("./", location.href).href; return Promise.all(rs.filter(function (r) { return r.scope === hier; }).map(function (r) { return r.unregister(); })); }) : null;
+      }).catch(function () {}).then(function () { return jetztSpeichern(); }).then(function () { location.replace(location.pathname + "?frisch=" + Date.now() + location.hash); });
+  }
+
+  function start() {
+    try { if (/[?&]frisch=/.test(location.search) && history.replaceState) history.replaceState(null, "", location.pathname + location.hash); } catch (_e) {}
+    if (lsGet(LS.thema) === "light") document.documentElement.dataset.theme = "light";
+    document.getElementById("thema").addEventListener("click", function () {
+      var hell = document.documentElement.dataset.theme !== "light";
+      if (hell) document.documentElement.dataset.theme = "light"; else delete document.documentElement.dataset.theme;
+      lsSet(LS.thema, hell ? "light" : "dark"); zeichneKopf();
+    });
+    document.getElementById("neuladen").addEventListener("click", neuLaden);
+    glanz();
+    Promise.all([dbAlle("angebote"), dbAlle("kunden")]).then(function (r) {
+      S.angebote = r[0].sort(function (a, b) { return a.id < b.id ? 1 : -1; });
+      S.kunden = r[1].sort(function (a, b) { return a.id < b.id ? -1 : 1; });
+      return bilderVorladen(alleBildIds());
+    }).then(function () {
+      if (!aktivesAngebot() && S.angebote[0]) S.aktiv = S.angebote[0].id;
+      zeichne(); document.body.dataset.bereit = "1";
+    }).catch(function () { zeichne(); melde("Der Speicher (IndexedDB) ist nicht erreichbar — Angebote werden nicht gespeichert.", "bad"); document.body.dataset.bereit = "1"; });
+  }
+
+  window.WCApp = { S: S, zeichne: zeichne, blattBauen: blattBauen, jetztSpeichern: jetztSpeichern };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
+})();
