@@ -451,6 +451,7 @@ try {
     await q.selectOption("#vorlage-wahl", "tasse"); await tippe(q, "#position-leer", "Leere Position");
     await q.locator('[data-position="P-1"] [data-feld="menge"]').fill("2"); await q.locator('[data-position="P-1"] [data-feld="menge"]').press("Tab");
     ok("KLEIN-SEITE: 2 Tassen → Karte „Kleinmengenzuschlag“ mit 12,00 €", await q.getAttribute("[data-kleinmenge]", "data-kleinmenge").catch(() => "") === "1200");
+    ok("KLEIN-SEITE: 12,00 € ist Klaus' Wert — keine Platzhalter-Marke", await q.evaluate(() => { const k = window.WCApp.S.katalog; return !!k.kleinmenge && k.kleinmenge.cent === 1200 && !k.kleinmenge.platzhalter; }));
     let bl = await druck(q, "#druck-angebot");
     ok("KLEIN-SEITE: Kundenblatt trägt die eigene Zeile", await q.locator("#druck [data-blatt-kleinmenge]").count() === 1 && /Kleinmengenzuschlag/.test(bl.text) && /12,00/.test(bl.text));
     await tippe(q, "[data-kleinmenge-schalter]", "Kleinmengenzuschlag weglassen");
@@ -464,6 +465,96 @@ try {
     await q.locator('[data-position="P-1"] [data-feld="menge"]').fill("10"); await q.locator('[data-position="P-1"] [data-feld="menge"]').press("Tab");
     ok("KLEIN-SEITE: ab 10 Stück keine Karte, keine Zeile", await q.locator("[data-kleinmenge]").count() === 0);
     await s10.ctx.close();
+  }
+
+  /* ── 📥 Anfrage einlesen, alte Angebote nach Ähnlichkeit, Entwurf — erfundene Mails ── */
+  {
+    const { readFileSync } = await import("node:fs");
+    const DAT = join(dirname(fileURLToPath(import.meta.url)), "daten", "anfragen");
+    const s11 = await seite(1200), q = s11.p;
+    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await tippe(q, '[data-reiter="kunden"]', "Reiter Kunden");
+    await tippe(q, "#neuer-kunde", "Neuer Kunde");
+    await q.locator('[data-kunde="K-1"] input').first().fill("Sportverein Beispiel e.V.");
+    await q.fill('[data-kunde-nr="K-1"]', "10234");
+    await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
+    await tippe(q, "#neues-angebot", "Neues Angebot");
+    await q.selectOption("#kunde-wahl", "K-1");
+    await q.fill('[data-key="titel"]', "Vereinstassen");
+    await q.selectOption("#vorlage-wahl", "tasse"); await tippe(q, "#position-leer", "Leere Position");
+    await q.locator('[data-position="P-1"] [data-feld="menge"]').fill("50"); await q.locator('[data-position="P-1"] [data-feld="menge"]').press("Tab");
+    await tippe(q, "#stellen", "Angebot stellen");
+    const altId = await q.evaluate(() => window.WCApp.S.aktiv);
+    await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
+    await tippe(q, "#anfrage-knopf", "Anfrage einlesen");
+    await q.fill("#anfrage-text", readFileSync(join(DAT, "verein.txt"), "utf8"));
+    await tippe(q, "#anfrage-lesen", "Lesen");
+    ok("ANFRAGE-SEITE: erkannt — Kunde über die Kundennummer, 80 Tassen", /Sportverein Beispiel e\.V\. \(über Kundennummer 10234\)/.test(await q.textContent('[data-erkannt="kunde"]').catch(() => "")) &&
+      /Tasse.*\(80\)/.test(await q.textContent('[data-erkannt="produkte"]').catch(() => "")));
+    ok("ANFRAGE-SEITE: das alte Vereinsangebot steht oben, mit Grund", await q.getAttribute("[data-anfrage] [data-treffer-zeile]", "data-treffer-zeile").catch(() => "") === altId &&
+      /gleicher Kunde/.test(await q.textContent("[data-anfrage] [data-treffer-zeile]").catch(() => "")) && await q.getAttribute("#anfrage-erzeugen", "data-basis") === altId);
+    await tippe(q, "#anfrage-erzeugen", "Angebot erzeugen");
+    ok("ANFRAGE-SEITE: Entwurf erzeugt — 80 Tassen, Kunde gesetzt, nicht gestellt, sagt, woher er kommt",
+      await q.inputValue('[data-position="P-1"] [data-feld="menge"]').catch(() => "") === "80" && await q.locator("#stellen").count() === 1 &&
+      /automatisch erstellt/.test(await q.textContent("[data-notiz]").catch(() => "")) && /50 → 80/.test(await q.textContent("[data-meldung]").catch(() => "")));
+    const bl = await druck(q, "#druck-angebot");
+    ok("ANFRAGE-SEITE: Kundenblatt ohne Absender-Adresse und ohne Hinweis auf die Automatik", /Sportverein/.test(bl.text) && !/sv-beispiel\.example|automatisch|Anfrage/.test(bl.text));
+    await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
+    await q.fill("#angebot-suche", "Sportverein");
+    ok("SUCHE-SEITE: Teil des Kundennamens findet beide Angebote des Vereins", await q.locator("[data-treffer-zeile]").count() === 2);
+    await q.fill("#angebot-suche", "");
+    await tippe(q, "#anfrage-knopf", "Anfrage einlesen (eml)");
+    await q.setInputFiles("#anfrage-datei", { name: "hochzeit.eml", mimeType: "message/rfc822", buffer: readFileSync(join(DAT, "hochzeit.eml")) });
+    await q.waitForSelector("[data-ohne-produkt]", { timeout: 5000 }).catch(() => {});
+    ok("ANFRAGE-SEITE: ohne Laser im Katalog — „Tischkarten (60)“ wird als „kein passendes Produkt“ benannt", /„Tischkarten“ \(60\).*kein passendes Produkt/.test(await q.textContent("[data-ohne-produkt]").catch(() => "")));
+    await tippe(q, '[data-reiter="katalog"]', "Reiter Katalog");
+    await tippe(q, '[data-gebiet-hinzu="laser"]', "Lasergravur hinzufügen");
+    await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
+    await q.setInputFiles("#anfrage-datei", { name: "hochzeit.eml", mimeType: "message/rfc822", buffer: readFileSync(join(DAT, "hochzeit.eml")) });
+    await q.waitForSelector('[data-erkannt="produkte"]', { timeout: 5000 }).catch(() => {});
+    ok("ANFRAGE-SEITE: .eml — Tischkarten (60) und Sektgläser (2), Kunde noch nicht angelegt", /Tischkarte.*\(60\)/.test(await q.textContent('[data-erkannt="produkte"]').catch(() => "")) &&
+      /nicht im Kundenstamm.*Anna Brautpaar/.test(await q.textContent('[data-erkannt="kunde"]').catch(() => "")));
+    await tippe(q, "[data-anfrage-kunde-neu]", "als Kunde anlegen");
+    ok("ANFRAGE-SEITE: „als Kunde anlegen“ — danach ist der Kunde erkannt (E-Mail)", /Anna Brautpaar \(über E-Mail anna@example\.org\)/.test(await q.textContent('[data-erkannt="kunde"]').catch(() => "")));
+    await s11.ctx.close();
+  }
+
+  /* ── 🤖 Anfrage mit KI lesen: prüfen, verdecken, einmal anhalten, nur Belegtes — Gegenseite gestellt ── */
+  {
+    const { readFileSync } = await import("node:fs");
+    const DAT = join(dirname(fileURLToPath(import.meta.url)), "daten", "anfragen");
+    const s12 = await seite(1200), q = s12.p;
+    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await tippe(q, '[data-reiter="kunden"]', "Reiter Kunden");
+    await tippe(q, "#neuer-kunde", "Neuer Kunde");
+    await q.locator('[data-kunde="K-1"] input').first().fill("Sportverein Beispiel e.V.");
+    await q.fill('[data-kunde-nr="K-1"]', "10234");
+    await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
+    const antwort = JSON.stringify({ positionen: [{ vorlage: "tasse", menge: 120, zitat: "diesmal 120 Stück von den Tassen" }, { vorlage: "kuli", menge: 30, zitat: "dazu 30 Kulis" },
+      { vorlage: "kuli", menge: 300, zitat: "dazu 30 Kulis" }], unklar: [] });
+    await q.evaluate((antwort) => { window.__kiAnfragen = []; window.__wcKiFetch = async (u, o) => { window.__kiAnfragen.push({ u, o }); return { ok: true, status: 200, json: async () => ({ content: [{ type: "text", text: antwort }] }) }; }; }, antwort);
+    await tippe(q, "#anfrage-knopf", "Anfrage einlesen");
+    await q.setInputFiles("#anfrage-datei", { name: "frei.eml", mimeType: "message/rfc822", buffer: readFileSync(join(DAT, "frei-mit-befehl.eml")) });
+    await q.waitForSelector("[data-ki-anfrage] summary", { timeout: 5000 }).catch(() => {});
+    await q.locator("[data-ki-anfrage] summary").click();
+    const verdeckt = await q.textContent("[data-ki-verdeckt]").catch(() => "");
+    const PII = /Max|Beispiel|Sportverein|10234|23125|Musterstra|12345|Musterstadt|sv-beispiel/;
+    ok("KI-ANFRAGE-SEITE: vor dem Senden steht der verdeckte Text da — ohne Namen, Nummern, Anschrift", verdeckt.length > 30 && /120 Stück von den Tassen/.test(verdeckt) && !PII.test(verdeckt), verdeckt);
+    ok("KI-ANFRAGE-SEITE: die Anweisung an eine KI ist markiert", /KI-ANWEISUNG/.test(await q.textContent("[data-ki-halt]").catch(() => "")));
+    await q.fill("#ki-schluessel", "sk-ant-" + "x".repeat(50));
+    await tippe(q, "#ki-schluessel-setzen", "Schlüssel übernehmen");
+    await tippe(q, "#ki-anfrage-los", "An die KI senden (erster Tipp)");
+    ok("KI-ANFRAGE-SEITE: der erste Tipp hält an — nichts ist hinausgegangen", await q.evaluate(() => window.__kiAnfragen.length) === 0 && /noch einmal tippen/.test(await q.textContent("[data-ki-halt]").catch(() => "")));
+    await tippe(q, "#ki-anfrage-los", "Trotzdem senden");
+    await q.waitForSelector("[data-ki-anfrage-ergebnis]", { timeout: 10000 }).catch(() => {});
+    const req = await q.evaluate(() => window.__kiAnfragen.map((x) => x.o.body).join(" "));
+    ok("KI-ANFRAGE-SEITE: der zweite Tipp sendet — und im Körper steht nichts Persönliches", req.length > 0 && !PII.test(req) && !/vorstand@/.test(req));
+    ok("KI-ANFRAGE-SEITE: 2 Positionen übernommen, 1 verworfen (Menge nicht im Zitat)", await q.getAttribute("[data-ki-anfrage-ergebnis]", "data-ki-anfrage-ergebnis").catch(() => "") === "2" &&
+      await q.getAttribute("[data-ki-anfrage-ergebnis]", "data-ki-anfrage-verworfen").catch(() => "") === "1");
+    await tippe(q, "#anfrage-erzeugen", "Angebot erzeugen");
+    ok("KI-ANFRAGE-SEITE: Entwurf mit 120 Tassen und 30 Kulis, Kunde über die Kundennummer", await q.inputValue('[data-position="P-1"] [data-feld="menge"]').catch(() => "") === "120" &&
+      await q.inputValue('[data-position="P-2"] [data-feld="menge"]').catch(() => "") === "30" && await q.inputValue("#kunde-wahl").catch(() => "") === "K-1");
+    await s12.ctx.close();
   }
 
   /* ── Vollbild: die Arbeitsfläche nutzt jede Breite (Klaus 2026-10-12) ── */

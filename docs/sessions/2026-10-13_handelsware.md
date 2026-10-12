@@ -59,11 +59,45 @@ Herstellungsverfahren … Wir machen den Einkauf, müssen natürlich gut handeln
   wäre als Titel aufs Kundenblatt gekommen. Jetzt „Kugelschreiber mit Logo“; die Probe sucht Zukauf/Lohngravur/Laser/Hersteller.
 - ⚠ **Hochzeit mit 60 Gästen über Fremdfertigung:** eingetragen sind 1/10/25/50 — für 60 rechnet die Position nicht (Frage 2 unten).
 - **Kleinmengenzuschlag** (Klaus: *„als eigene Zeile, unter 10 Stück“*): eigene Zeile „Kleinmengenzuschlag“ auf dem Angebot,
-  **einmal je Angebot**, sobald eine Stück-Position unter 10 liegt; Stunden, km und Montage zählen nicht. Betrag **12,00 € netto
-  als Platzhalter** (Einstellungen → Kleinmengenzuschlag: Text, Grenze, Betrag; leer = aus). Je Angebot „weglassen“.
+  **einmal je Angebot**, sobald eine Stück-Position unter 10 liegt; Stunden, km und Montage zählen nicht. Betrag **12,00 € netto**
+  (Einstellungen → Kleinmengenzuschlag: Text, Grenze, Betrag; leer = aus). Je Angebot „weglassen“.
   Geht auf das Kundenblatt, in die WorkFloh-Datei und als Position an BookLedgerPro. Gestellte Angebote bleiben unverändert.
-  ⚠ Selbst entschieden, von Klaus zu bestätigen: Betrag, „einmal je Angebot“ statt je Position.
+  ✅ Klaus 2026-10-13: „12 Euro passt, einmal je Angebot“ — die Platzhalter-Marke ist weg.
 - Am Laser offen bei Klaus: Lasertyp und Stärke, Einrichtzeit, Minuten je Name, Maschinenstundensatz, welche Rohlinge.
+
+## Nachtrag: Anfrage einlesen, alte Angebote wiederfinden
+
+Klaus: *„Über den Kundennamen oder Kundennummer sollen alte Angebote leicht übernommen werden können … automatisch nach oben
+gerückt werden, das Angebot, was der Anfrage am nächsten kommt … eine Anfrage über E-Mail automatisch erkannt … ein entsprechendes
+Angebot automatisch generiert.“*
+
+- **Kunden** haben jetzt **Kundennummer** und **E-Mail**.
+- **Suche** über alle alten Angebote (Reiter „Angebote“): Kundenname (auch Teil), Kundennummer, Angebotsnummer, Produkt, Text.
+  Das Nächstliegende steht oben, mit Ähnlichkeit in % und dem Grund („gleicher Kunde · Tasse · ähnliche Menge“). „⧉ als neues Angebot“ übernimmt.
+- **📥 Anfrage einlesen**: E-Mail einfügen oder `.eml` wählen. Gelesen werden Absender, Kundennummer, Mengen, Maße, Farben, Produkte;
+  der Kunde wird gefunden (Kundennummer, E-Mail, Firmen-Adresse, Name) oder kann mit einem Tipp angelegt werden.
+  **„✨ Angebot erzeugen“** nimmt das nächstliegende alte Angebot (ab 40 %) und setzt die angefragten Mengen — sonst baut es den
+  Entwurf aus den erkannten Produkten. Immer ein **Entwurf**; gestellt wird von Hand.
+- Offline, ohne KI, auf dem Gerät. ⚠ Grenzen: freie Formulierungen („so wie letztes Mal, nur doppelt so viele“) versteht es nicht;
+  Anhänge der Mail werden nicht gelesen; die Gewichte der Ähnlichkeit sind gewählt, nicht gemessen. Optional später: KI mit eigenem
+  Schlüssel für freie Texte — dann ginge der Mailtext an die KI, das braucht Klaus' ausdrückliches Ja.
+
+## Nachtrag: KI-Lesung mit eigenem Schlüssel, personenbezogene Daten ausgeblendet
+
+Klaus: *„KI mit eigenem Schlüssel einbinden, dabei alles, was beim Auslieferungsprüfer, Sendeprüfer … Bedarfsanalyse …
+Workflow PDF beachtet wird … dass … nicht von einer KI personifizierte Daten übernehmen. Das soll ausgeblendet werden.“*
+
+- In „📥 Anfrage einlesen“ steht **„🤖 Mit KI lesen“** — freiwillig, nach der Offline-Lesung, mit demselben Schlüssel wie die Marktpreis-Recherche.
+- **Prüfen:** Prüfkern des Auslieferungsprüfers (`pruefer-mail.js`, byte-1:1 aus Workflow-PDF). Anweisung an eine KI, versteckter
+  Text, unsichtbare Zeichen, Absender-Tarnung → die App **hält einmal an** und zeigt den Fund; erst der zweite Tipp sendet.
+- **Verdecken:** Sage-Modul 25 (byte-1:1 über Workflow-Needs) + eigene Muster. Getestet an einer erfundenen Mail: Name, Verein,
+  Kundennummer, Telefon, Straße, PLZ/Ort, Mail, Datum, Betrag, Rechnername und IP aus dem Mailkopf — nichts davon im Körper der Anfrage.
+  Mengen und Produktwörter bleiben lesbar. Vorgeschlagene weitere Namen (aus Anrede/Gruß) lassen sich mit einem Tipp dazunehmen.
+- **Nicht raten:** eine KI-Position zählt nur mit wörtlichem Zitat aus der Anfrage, das die Menge trägt, und mit einer Vorlage
+  aus dem Katalog — sonst verworfen, mit Grund. Der Kunde wird nie von der KI bestimmt.
+- ⚠ Nicht gegen die echte API gemessen (kein Schlüssel im Behälter) — Gegenseite gestellt, wie bei der Marktpreis-Recherche.
+  ⚠ Verdecken ist keine Verschlüsselung: was kein Muster hat und nicht im Kundenstamm steht („die Filialleiterin in Kiel“), bleibt
+  stehen — darum steht der verdeckte Text vor dem Senden sichtbar da.
 
 ## Lieferanten — ehrlich
 
