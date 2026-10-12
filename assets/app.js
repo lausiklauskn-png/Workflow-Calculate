@@ -784,15 +784,82 @@
           versandCent: Number.isFinite(G.parseEuroToCents(f.versand.value)) ? G.parseEuroToCents(f.versand.value) : 0, datum: A.heute(), quelle: f.quelle.value }]);
         katalogSpeichern(); zeichne();
       }, "klein", { "data-markt-dazu": "" }),
-      h("a", { class: "btn klein", href: MK.suchLink(v.name, e.menge), target: "_blank", rel: "noopener noreferrer", "data-markt-suche": "" }, "🔎 Bei Mitbewerbern nachsehen")));
+      h("a", { class: "btn klein", href: MK.suchLink(v.name, e.menge), target: "_blank", rel: "noopener noreferrer", "data-markt-suche": "" }, "🔎 Bei Mitbewerbern nachsehen"),
+      knopf("🤖 KI-Recherche", function () { S.offen[p.id + ":ki"] = !S.offen[p.id + ":ki"]; zeichne(); }, "klein" + (S.offen[p.id + ":ki"] ? " on" : ""), { "data-ki-knopf": p.id })));
+    if (mv.ungeprueft) box.append(h("p", { class: "hinweis", "data-markt-ungeprueft": String(mv.ungeprueft) }, mv.ungeprueft + " ungeprüfte Preise aus der KI-Recherche — sie zählen erst nach ✓ (Quelle ansehen, dann bestätigen)."));
+    if (S.offen[p.id + ":ki"]) box.append(kiFeld(p, v, e));
     if ((v.markt || []).length) {
       var t = h("table", null, h("tr", null, ["Anbieter", "Klasse", "Menge", "€/Stück", "Versand", "Datum", ""].map(function (x) { return h("th", { text: x }); })));
       v.markt.forEach(function (m, i) {
-        t.append(h("tr", null, h("td", { text: m.anbieter || "—" }), h("td", { text: (finde(MK.KLASSEN, m.klasse) || {}).name || m.klasse }), h("td", { text: String(m.menge) }),
+        t.append(h("tr", { "data-markt-zeile": m.ungeprueft ? "ungeprueft" : "geprueft" }, h("td", null, m.anbieter || "—",
+          m.ungeprueft ? h("span", { class: "badge gelb", text: " ungeprüft" }) : null,
+          m.quelle && /^https?:\/\//.test(m.quelle) ? h("div", null, h("a", { href: m.quelle, target: "_blank", rel: "noopener noreferrer", class: "klein", "data-markt-quelle": "" }, "↗ Quelle")) : null,
+          m.zitat ? h("div", { class: "gedaempft klein", text: "„" + m.zitat + "“" + (m.notiz ? " · " + m.notiz : "") }) : null,
+          m.ungeprueft ? knopf("✓ geprüft", function () { var vk = finde(S.katalog.vorlagen, v.id); var x = vk.markt[i]; if (x) { delete x.ungeprueft; x.geprueftAm = A.heute(); } katalogSpeichern(); zeichne(); }, "klein", { "data-markt-pruefen": String(i) }) : null), h("td", { text: (finde(MK.KLASSEN, m.klasse) || {}).name || m.klasse }), h("td", { text: String(m.menge) }),
           h("td", { class: "r", text: euro(m.stueckCent) }), h("td", { class: "r", text: euro(m.versandCent || 0) }), h("td", { text: m.datum || "" }),
           h("td", null, knopf("✕", function () { var vk = finde(S.katalog.vorlagen, v.id); vk.markt = vk.markt.filter(function (_q, j) { return j !== i; }); katalogSpeichern(); zeichne(); }, "klein", { "aria-label": "Eintrag löschen" }))));
       });
       box.append(h("div", { class: "tabelle-huelle" }, t));
+    }
+    return box;
+  }
+
+  /* ── KI-Recherche: eigener Schlüssel, Websuche, nur belegte Preise (WC.recherche) ── */
+  var KI_ABLAGE = {
+    lies: function (k) { return Promise.resolve(lsJson("workflowcalculate_ki_" + k, null)); },
+    schreib: function (k, v) { lsSet("workflowcalculate_ki_" + k, JSON.stringify(v)); return Promise.resolve(); },
+    loesch: function (k) { try { localStorage.removeItem("workflowcalculate_ki_" + k); } catch (_e) {} return Promise.resolve(); },
+  };
+  function kiFeld(p, v, e) {
+    var T = window.WERKSTATT_SCHLUESSEL, R = WC.recherche, info = R.auftragsInfo(v, p, S.katalog), erg = (S.kiErgebnis || {})[p.id];
+    var box = h("div", { class: "erklaer-feld", "data-ki-feld": p.id }, h("b", { text: "🤖 KI-Recherche der Marktpreise" }), " ", h("span", { class: "badge intern", text: "🔒 intern" }),
+      h("p", { class: "klein" }, "Geht hinaus (an Anthropic, über deinen eigenen Schlüssel): ", h("b", { "data-ki-auftrag": "", text: R.auftragsText(info) }), ". Nicht hinaus: Kunde, Titel, Beschreibung, deine Preise und Sätze."),
+      h("p", { class: "gedaempft klein", text: "Die KI sucht im Netz (bis zu " + R.MAX_SUCHEN + " Suchen à 1 Cent, dazu Tokens). Übernommen wird nur ein Preis, der wörtlich im zitierten Text einer gefundenen Seite steht — sonst wird er verworfen, mit Grund. Was durchkommt, steht als „ungeprüft“ mit Link in der Liste und zählt erst nach ✓." }));
+    var meld = h("p", { class: "klein", id: "ki-meldung", hidden: true });
+    function sag(t, gut) { meld.hidden = false; meld.className = "hinweis " + (gut ? "" : "bad"); meld.textContent = t; }
+    function los(schluessel) {
+      sag("Recherche läuft … (kann eine Minute dauern)", true);
+      var fetchFn = window.__wcKiFetch || null;
+      R.rufen(schluessel, info, fetchFn, A.heute()).then(function (r) {
+        var vk = finde(S.katalog.vorlagen, v.id), neu = 0;
+        vk.markt = vk.markt || [];
+        r.funde.forEach(function (f) { if (!vk.markt.some(function (m) { return m.quelle === f.quelle && m.roh === f.roh && m.menge === f.menge; })) { vk.markt.push(f); neu++; } });
+        katalogSpeichern();
+        S.kiErgebnis = S.kiErgebnis || {}; S.kiErgebnis[p.id] = Object.assign({ neu: neu }, r); zeichne();
+      }, function (err) { sag("Nicht gelungen: " + (err && err.message || err) + ". Es wurde nichts übernommen.", false); });
+    }
+    if (S.kiSchluessel) {
+      box.append(h("div", { class: "zeile" }, h("span", { class: "gedaempft klein", text: "Schlüssel für diese Sitzung gesetzt." }),
+        knopf("🤖 Jetzt recherchieren", function () { los(S.kiSchluessel); }, "pri klein", { id: "ki-los" }),
+        knopf("Schlüssel vergessen", function () { S.kiSchluessel = null; zeichne(); }, "klein")));
+    } else {
+      var sch = h("input", { type: "password", id: "ki-schluessel", placeholder: "sk-ant-…", autocomplete: "off", style: "flex:1 1 220px;min-width:0" });
+      var merk = h("input", { type: "checkbox", id: "ki-merken" }), pw = h("input", { type: "password", id: "ki-passwort", placeholder: "Passwort (mind. 8 Zeichen)", autocomplete: "off", style: "flex:1 1 160px;min-width:0" });
+      box.append(h("div", { class: "zeile", id: "ki-gemerkt", hidden: true }, h("span", { class: "klein", text: "Auf diesem Gerät liegt ein verschlüsselter Schlüssel — Passwort:" }),
+        h("input", { type: "password", id: "ki-aufschliessen-pw", autocomplete: "off" }), knopf("Aufschließen", function () {
+          T.holen(KI_ABLAGE, document.getElementById("ki-aufschliessen-pw").value).then(function (k) { S.kiSchluessel = k; zeichne(); },
+            function (err) { sag(err.message === "passwort" ? "Das Passwort passt nicht." : "Nicht aufzuschließen (" + err.message + ").", false); });
+        }, "klein", { id: "ki-aufschliessen" }), knopf("Gespeicherten Schlüssel löschen", function () { T.werfen(KI_ABLAGE).then(zeichne); }, "klein gefahr")));
+      box.append(h("div", { class: "zeile" }, sch, h("label", { class: "schalter" }, merk, "verschlüsselt auf diesem Gerät merken"), pw,
+        knopf("Übernehmen", function () {
+          var f = T.pruefeForm(sch.value);
+          if (!f.ok) { sag("Schlüssel: " + f.grund + ". " + f.hinweis, false); return; }
+          if (merk.checked) {
+            if (pw.value.length < 8) { sag("Zum Merken ein Passwort mit mindestens 8 Zeichen.", false); return; }
+            T.einlegen(KI_ABLAGE, pw.value, sch.value).then(function () { S.kiSchluessel = sch.value; zeichne(); }, function (err) { sag("Nicht gemerkt: " + err.message, false); });
+          } else { S.kiSchluessel = sch.value; zeichne(); }
+        }, "klein", { id: "ki-schluessel-setzen" })));
+      box.append(h("p", { class: "gedaempft klein", text: "Ohne Merken gilt der Schlüssel nur bis zum Schließen der Seite. Gemerkt liegt er verschlüsselt im Browser; das Passwort steht nirgends." }));
+      T.liegtEtwas(KI_ABLAGE).then(function (da) { var z = document.getElementById("ki-gemerkt"); if (z) z.hidden = !da; });
+    }
+    box.append(meld);
+    if (erg) {
+      var k = erg.kosten;
+      box.append(h("p", { class: "hinweis", "data-ki-ergebnis": String(erg.funde.length), "data-ki-verworfen": String(erg.verworfen.length) },
+        erg.funde.length + " belegte(r) Preis(e) gefunden, " + erg.neu + " neu in der Liste (ungeprüft) · " + erg.verworfen.length + " verworfen · " + erg.quellen + " Quellen · " +
+        k.suchen + " Suche(n), " + k.ein + " Token ein / " + k.aus + " aus ≈ " + String(k.usdGerechnet.toFixed(4)).replace(".", ",") + " $ (gerechnet nach Listenpreis)" +
+        (erg.keinPreis ? " · Die KI fand keinen belegbaren Preis." : "") + (erg.fehler.length ? " · Fehler der Suche: " + erg.fehler.join(", ") : "")));
+      if (erg.verworfen.length) box.append(h("ul", { class: "weg", "data-ki-verworfen-liste": "" }, erg.verworfen.map(function (x) { return h("li", { class: "klein", text: x.grund + " — " + x.zeile.slice(0, 160) }); })));
     }
     return box;
   }

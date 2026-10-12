@@ -21,7 +21,8 @@
     grenzen = grenzen || {};
     var klassen = KLASSEN.map(function (k) {
       var grenze = grenzen[k.id] != null && grenzen[k.id] !== "" ? Number(grenzen[k.id]) : k.grenzeVorgabe;
-      var liste = (eintraege || []).filter(function (e) { return e.klasse === k.id && Number(e.stueckCent) > 0 && Number(e.menge) > 0; });
+      /* ungeprüfte Funde der KI-Recherche zählen erst nach ✓ */
+      var liste = (eintraege || []).filter(function (e) { return !e.ungeprueft && e.klasse === k.id && Number(e.stueckCent) > 0 && Number(e.menge) > 0; });
       var preise = liste.map(function (e) { return Math.round(Number(e.stueckCent) + (Number(e.versandCent) || 0) / Number(e.menge)); });
       var r = { id: k.id, name: k.name, grenze: grenze, aktiv: menge >= grenze, anzahl: preise.length,
         veraltet: liste.filter(function (e) { return e.datum && heute && tageZwischen(e.datum, heute) > VERALTET_TAGE; }).length };
@@ -34,7 +35,8 @@
       return r;
     });
     var irgend = klassen.some(function (k) { return k.daten && k.aktiv; });
-    return { menge: menge, eigen: eigen, selbstkosten: sk, klassen: klassen, vergleich: irgend };
+    var ungeprueft = (eintraege || []).filter(function (e) { return e.ungeprueft; }).length;
+    return { menge: menge, eigen: eigen, selbstkosten: sk, klassen: klassen, vergleich: irgend, ungeprueft: ungeprueft };
   }
   var LAGE_TEXT = { unter: "unter allen eingetragenen Preisen", ueber: "über allen eingetragenen Preisen", unteres: "im unteren Drittel",
     mittleres: "im mittleren Drittel", oberes: "im oberen Drittel" };

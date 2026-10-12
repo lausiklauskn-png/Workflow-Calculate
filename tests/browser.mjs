@@ -276,13 +276,13 @@ try {
   {
     const s4 = await seite(1200), q = s4.p;
     await q.goto(url); await q.waitForSelector("body[data-bereit]");
-    ok("BEISPIEL-SEITE: Auswahl und „Alle laden“ stehen gleich bei „＋ Neues Angebot“", await q.locator("[data-beispiel-angebote] #beispiel-wahl option").count() === 4);
+    ok("BEISPIEL-SEITE: Auswahl und „Alle laden“ stehen gleich bei „＋ Neues Angebot“", await q.locator("[data-beispiel-angebote] #beispiel-wahl option").count() === 5);
     await tippe(q, "#beispiel-alle", "Alle Beispiele laden");
-    ok("BEISPIEL-SEITE: vier Angebote stehen in der Liste", await q.locator("[data-angebot-zeile]").count() === 4);
+    ok("BEISPIEL-SEITE: fünf Angebote stehen in der Liste", await q.locator("[data-angebot-zeile]").count() === 5);
     await tippe(q, "#beispiel-alle", "noch einmal alle laden");
-    ok("BEISPIEL-SEITE: ein zweites Laden legt nichts doppelt an", await q.locator("[data-angebot-zeile]").count() === 4 && /Schon geladen/.test(await q.textContent("[data-meldung]").catch(() => "")));
+    ok("BEISPIEL-SEITE: ein zweites Laden legt nichts doppelt an", await q.locator("[data-angebot-zeile]").count() === 5 && /Schon geladen/.test(await q.textContent("[data-meldung]").catch(() => "")));
     await q.locator("[data-angebot-zeile]", { hasText: "Sportverein" }).click();
-    ok("BEISPIEL-SEITE: das Vereins-Angebot hat 5 kalkulierte Positionen", await q.locator("[data-position] [data-pos-netto]").count() === 5 && await q.locator("[data-nicht-kalkuliert]").count() === 0);
+    ok("BEISPIEL-SEITE: das Vereins-Angebot hat 4 kalkulierte Positionen", await q.locator("[data-position] [data-pos-netto]").count() === 4 && await q.locator("[data-nicht-kalkuliert]").count() === 0);
     ok("BEISPIEL-SEITE: es sagt, dass es ein Beispiel ist", await q.locator("[data-notiz] .badge").count() === 1);
     await q.evaluate(() => { window.__wcUebergabe = null; });
     await tippe(q, "#uebergabe", "An WorkFloh übergeben");
@@ -299,7 +299,7 @@ try {
         auf[0].kunde === "Sportverein Beispiel e. V." && /brutto/.test(auf[0].preis) && /Trainer-Polo/.test(auf[0].text) && /Aufnäher/.test(auf[0].text), auf);
       await wf.ctx.close(); sv.server.close();
     }
-    ok("BEISPIEL-SEITE: WorkFloh-Datei mit Kunde und allen 5 Positionen", !!bu && bu.wf === "forward" && /Sportverein Beispiel/.test(ub) && /Trainer-Polo/.test(ub) && /Aufnäher/.test(ub), ub.slice(0, 200));
+    ok("BEISPIEL-SEITE: WorkFloh-Datei mit Kunde und allen 4 Positionen", !!bu && bu.wf === "forward" && /Sportverein Beispiel/.test(ub) && /Trainer-Polo/.test(ub) && /Aufnäher/.test(ub), ub.slice(0, 200));
     await q.evaluate(() => { window.__wcSprungAbfangen = true; window.__wcSprung = null; });
     await tippe(q, "#an-blp", "An BookLedgerPro");
     await q.waitForFunction(() => !!window.__wcSprung, null, { timeout: 5000 }).catch(() => {});
@@ -309,6 +309,53 @@ try {
     const bl = await druck(q, "#druck-angebot");
     ok("BEISPIEL-SEITE: Kundenblatt der Fahrzeugbeschriftung nennt „3 Std.“ Gestaltung", /3 Std\./.test(bl.text) && /Handwerk Beispiel GmbH/.test(bl.text));
     await s4.ctx.close();
+  }
+
+  /* ── KI-Recherche im Browser — gestellte Gegenseite, nichts geht wirklich hinaus ── */
+  {
+    const { teilA, teilB } = await import("./daten/ki-antwort.mjs");
+    const s6 = await seite(1200), q = s6.p;
+    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await tippe(q, "#neues-angebot", "Neues Angebot");
+    await q.selectOption("#vorlage-wahl", "tasse"); await tippe(q, '[data-beispiel-nehmen="tasse:b1"]', "Beispiel Tasse");
+    await q.fill('[data-position="P-1"] input[data-key="P-1-titel"]', "GEHEIM-TITEL Kunde Beispiel");
+    await q.evaluate((antworten) => { window.__kiAnfragen = []; window.__wcKiFetch = async (u, o) => { window.__kiAnfragen.push({ u, o }); const j = antworten.shift(); return { ok: true, status: 200, json: async () => j }; }; }, [teilA(), teilB()]);
+    await tippe(q, '[data-markt-knopf="P-1"]', "Marktvergleich");
+    await tippe(q, '[data-ki-knopf="P-1"]', "KI-Recherche");
+    ok("KI-SEITE: vor dem Senden steht da, was hinausgeht — ohne Titel", /50 Stk\. · Tasse bedrucken/.test(await q.textContent("[data-ki-auftrag]").catch(() => "")) && !/GEHEIM/.test(await q.textContent("[data-ki-auftrag]").catch(() => "GEHEIM")));
+    await q.fill("#ki-schluessel", "kein-schluessel");
+    await tippe(q, "#ki-schluessel-setzen", "Schlüssel übernehmen (falsch)");
+    ok("KI-SEITE: ein falsch geformter Schlüssel wird abgewiesen, bevor etwas hinausgeht", /falscher Anfang/.test(await q.textContent("#ki-meldung").catch(() => "")) && await q.evaluate(() => window.__kiAnfragen.length) === 0);
+    await q.fill("#ki-schluessel", "sk-ant-" + "x".repeat(50));
+    await tippe(q, "#ki-schluessel-setzen", "Schlüssel übernehmen");
+    await tippe(q, "#ki-los", "Jetzt recherchieren");
+    await q.waitForSelector("[data-ki-ergebnis]", { timeout: 10000 }).catch(() => {});
+    ok("KI-SEITE: 2 belegte Preise, 2 verworfen mit Grund", await q.getAttribute("[data-ki-ergebnis]", "data-ki-ergebnis").catch(() => "") === "2" && await q.getAttribute("[data-ki-ergebnis]", "data-ki-verworfen").catch(() => "") === "2" &&
+      /nicht im zitierten Text/.test(await q.textContent("[data-ki-verworfen-liste]").catch(() => "")));
+    const req = await q.evaluate(() => window.__kiAnfragen.map((x) => x.o.body).join(" "));
+    ok("KI-SEITE: in der Anfrage steht kein Titel und kein Kunde", req.length > 0 && !/GEHEIM|Kunde Beispiel/.test(req));
+    ok("KI-SEITE: die Funde stehen ungeprüft mit Quelle in der Liste", await q.locator('[data-markt-zeile="ungeprueft"]').count() === 2 && await q.locator("[data-markt-quelle]").count() >= 2 && await q.locator("[data-markt-ungeprueft]").count() === 1);
+    ok("KI-SEITE: ungeprüft gibt es noch keinen Vergleich", await q.locator("[data-kein-vergleich]").count() === 1);
+    await tippe(q, "[data-markt-pruefen]", "✓ geprüft");
+    ok("KI-SEITE: nach ✓ zählt der Preis im Vergleich", await q.locator('[data-markt-zeile="geprueft"]').count() === 1 && await q.locator("[data-kein-vergleich]").count() === 0);
+    await s6.ctx.close();
+  }
+
+  /* ── Vollbild: die Arbeitsfläche nutzt jede Breite (Klaus 2026-10-12) ── */
+  {
+    const v = await seite(1920), q = v.p;
+    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await tippe(q, "#beispiel-laden", "Beispiel laden");
+    const masse = [];
+    for (const [b, hh] of [[360, 740], [740, 360], [1024, 768], [1920, 1080]]) {
+      await q.setViewportSize({ width: b, height: hh });
+      masse.push(await q.evaluate(() => { const m = document.querySelector("main").getBoundingClientRect(); return [Math.round(m.width), document.documentElement.clientWidth]; }));
+    }
+    ok("VOLLBILD: die Arbeitsfläche ist auf Handy hoch/quer, Tablet und großem Schirm so breit wie das Fenster", masse.every(([m, w]) => Math.abs(m - w) <= 1), masse);
+    await tippe(q, "#vorschau-angebot", "Vorschau");
+    const dlg = await q.evaluate(() => { const r = document.getElementById("vorschau").getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), window.innerWidth, window.innerHeight]; });
+    ok("VOLLBILD: die Vorschau füllt den ganzen Schirm", Math.abs(dlg[0] - dlg[2]) <= 1 && Math.abs(dlg[1] - dlg[3]) <= 1, dlg);
+    await v.ctx.close();
   }
 
   /* ── Handy: keine waagerechte Rollbahn ── */

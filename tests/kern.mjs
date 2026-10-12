@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const WURZEL = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const KERN = ["assets/kern/geld.js", "assets/kern/mengen.js", "assets/kern/kalkulation.js", "assets/kern/versand.js", "assets/kern/markt.js",
-  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/kern/nachkalk.js", "assets/daten/werbetechnik.js", "assets/daten/stickerei.js", "assets/daten/dienstleistung.js", "assets/daten/beispiel-angebote.js", "assets/daten/bilder.js"];
+  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/kern/nachkalk.js", "assets/kern/recherche.js", "assets/daten/werbetechnik.js", "assets/daten/stickerei.js", "assets/daten/dienstleistung.js", "assets/daten/beispiel-angebote.js", "assets/daten/bilder.js"];
 for (const f of KERN) require(join(WURZEL, f));
 const WC = globalThis.WC, K = WC.kalk, M = WC.mengen, A = WC.angebot, V = WC.versand, MK = WC.markt;
 
@@ -376,21 +376,55 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   const kat = kopie(WC.START), L = [];
   WC.BEISPIEL_ANGEBOTE.forEach((b) => { const r = WC.beispielAngebot(L, kat, b.bid, "2026-10-12"); if (r.ok) L.push(r.angebot); });
   const posN = L.reduce((s, a) => s + a.positionen.length, 0);
-  ok("BEISPIEL: vier Angebote mit zusammen 10–15 Positionen", L.length === 4 && posN >= 10 && posN <= 15, posN);
+  ok("BEISPIEL: fünf Angebote mit zusammen 10–15 Positionen", L.length === 5 && posN >= 10 && posN <= 15, posN);
   ok("BEISPIEL: fehlende Arbeitsgebiete werden mitgeholt", WC.katalog.gebietDa(kat, "stickerei") && WC.katalog.gebietDa(kat, "dienstleistung") && WC.katalog.pruefe(kat).length === 0);
   const gebiete = new Set(L.flatMap((a) => a.positionen.map((p) => K.finde(kat.vorlagen, p.vorlage).gebiet)));
   ok("BEISPIEL: alle drei Arbeitsgebiete kommen vor", gebiete.size === 3, [...gebiete]);
   const rs = L.map((a) => A.rechne(a, kat, a.kunde, false));
   ok("BEISPIEL: jede Position ist kalkuliert und hat einen Preis", rs.every((r) => r.positionen.every((x) => x.erg.ok && x.erg.netto > 0)), rs.flatMap((r) => r.positionen.filter((x) => !x.erg.ok).map((x) => x.pos.titel + ": " + x.erg.offen)));
   ok("BEISPIEL: Kunden sind erkennbar erfunden", L.every((a) => /Beispiel/.test(a.kunde.name) && /Musterstadt/.test(a.kunde.anschrift)));
-  ok("BEISPIEL: ein Beispiel wird nicht doppelt geladen", !WC.beispielAngebot(L, kat, "verein").ok && L.length === 4);
-  ok("BEISPIEL: fortlaufende Nummern AN-2026-0001 … 0004", L.map((a) => a.nummer).join() === "AN-2026-0001,AN-2026-0002,AN-2026-0003,AN-2026-0004");
+  ok("BEISPIEL: ein Beispiel wird nicht doppelt geladen", !WC.beispielAngebot(L, kat, "verein").ok && L.length === 5);
+  ok("BEISPIEL: fortlaufende Nummern AN-2026-0001 … 0005", L.map((a) => a.nummer).join() === "AN-2026-0001,AN-2026-0002,AN-2026-0003,AN-2026-0004,AN-2026-0005");
   const ds = L.map((a, i) => WC.aussen.angebotExtern(a, rs[i], { name: "Werkstatt Beispiel" }, false));
   ok("BEISPIEL: jedes geht als WorkFloh-Auftrag hinaus (Kunde, alle Positionen)", ds.every((d) => { const au = WC.uebergabe.auftrag(d); const t = JSON.stringify(au); return au.status === "angebot" && t.includes(d.kunde.name) && d.positionen.every((p) => t.includes(p.titel)); }));
   ok("BEISPIEL: jedes geht an BookLedgerPro, und die Summe stimmt auf den Cent", ds.every((d) => { const n = WC.uebergabe.blpNutzlast(d); return WC.uebergabe.blpAdresse(d).ok && n.positionen.reduce((s, x) => s + x.menge * x.einzelpreisCent, 0) === d.summen.netto; }));
-  ok("BEISPIEL: C-Kunde (Familie) zahlt je Stück mehr als derselbe Artikel bei B", (() => {
-    const p = rs[3].positionen[0].pos, b = Object.assign({}, L[3].kunde, { klasse: "B" });
-    return K.position(kat, p, { angebot: L[3], kunde: L[3].kunde }).netto > K.position(kat, p, { angebot: L[3], kunde: b }).netto; })());
+  const ih = L.findIndex((a) => a.beispiel === "hochzeit");
+  ok("BEISPIEL: statt Geburtstag gibt es Firmenjubiläum und Hochzeit", ih >= 0 && L.some((a) => a.beispiel === "jubilaeum") && !L.some((a) => /Geburtstag/.test(a.titel)));
+  ok("BEISPIEL: C-Kunde (Hochzeit) zahlt je Stück mehr als derselbe Artikel bei B", ih >= 0 && (() => {
+    const p = rs[ih].positionen[0].pos, b = Object.assign({}, L[ih].kunde, { klasse: "B" });
+    return K.position(kat, p, { angebot: L[ih], kunde: L[ih].kunde }).netto > K.position(kat, p, { angebot: L[ih], kunde: b }).netto; })());
+}
+
+/* ── KI-Recherche: nur belegte Preise, ungeprüft, nichts Internes hinaus ── */
+{
+  const R = WC.recherche, { teilA, teilB } = await import(pathToFileURL(join(WURZEL, "tests/daten/ki-antwort.mjs")).href);
+  const kat = kopie(WC.START); K.finde(kat.materialien, "tasse_11").ekCent = 731;
+  const v = K.finde(kat.vorlagen, "tasse"), p = pos(kat, "tasse", { menge: 50, titel: "GEHEIM-TITEL", beschreibung: "GEHEIM-BESCHREIBUNG" });
+  const info = R.auftragsInfo(v, p, kat), body = JSON.stringify(R.anfrage(info));
+  ok("RECHERCHE: hinaus gehen nur Produktangaben (kein Titel, keine Beschreibung, kein EK)", /50 Stk\. · Tasse bedrucken/.test(body) && !/GEHEIM|731|7,31/.test(body), body.slice(0, 300));
+  ok("RECHERCHE: Websuche (web_search), höchstens 5 Suchen, Modell claude-opus-5-5", /"type":"web_search_20260209"/.test(body) && /"max_uses":5/.test(body) && /"model":"claude-opus-5-5"/.test(body));
+  ok("RECHERCHE: Zahlen in deutscher und englischer Schreibweise", R.lesarten("1.234,56").includes(123456) && R.lesarten("1,234.56").includes(123456) && R.lesarten("4.90").includes(490) && R.lesarten("5").includes(500));
+  const a = R.auswerten([teilA(), teilB()], info, "2026-10-12");
+  const f1 = a.funde.find((f) => f.menge === 50);
+  ok("RECHERCHE: belegter Preis wird übernommen — mit Quelle, Zitat, „ungeprüft“", f1 && f1.stueckCent === 690 && f1.versandCent === 495 && f1.ungeprueft === true && /druck-beispiel\.example/.test(f1.quelle) && /6,90/.test(f1.zitat), a.funde);
+  ok("RECHERCHE: Quelle, die die Suche nicht geliefert hat, wird verworfen", a.verworfen.some((x) => /Erfunden/.test(x.zeile) && /nicht aus der Websuche/.test(x.grund)), a.verworfen);
+  ok("RECHERCHE: Zahl, die nicht im Zitat steht, wird verworfen (nicht geraten)", a.verworfen.some((x) => /Grosshandel/.test(x.zeile) && /nicht im zitierten Text/.test(x.grund)) && !a.funde.some((f) => f.klasse === "import"), a.verworfen);
+  const f2 = a.funde.find((f) => f.menge === 100);
+  ok("RECHERCHE: Gesamtpreis brutto → Stück netto, und es steht dabei", f2 && f2.stueckCent === 500 && /brutto/.test(f2.notiz) && /Gesamtpreis/.test(f2.notiz), f2);
+  ok("RECHERCHE: Kosten gerechnet (2 Suchen, Tokens) und Suchfehler genannt", a.kosten.suchen === 2 && a.kosten.usdGerechnet === 0.1 && a.fehler.includes("too_many_requests"), a.kosten);
+  const mv = MK.vergleich([Object.assign({}, f1)], 50, 1000, {}, "2026-10-12", 500);
+  ok("RECHERCHE: ungeprüfte Preise zählen nicht im Marktvergleich", !mv.klassen.some((k) => k.daten) && mv.ungeprueft === 1);
+  /* Aufruf mit gestellter Gegenseite: pause_turn wird fortgesetzt, Kopfzeilen stimmen */
+  const anfragen = [];
+  const stell = (antworten) => async (url, o) => { anfragen.push({ url, o }); const j = antworten.shift(); return { ok: true, status: 200, json: async () => j }; };
+  const r2 = await R.rufen("sk-ant-test", info, stell([teilA(), teilB()]), "2026-10-12");
+  ok("RECHERCHE: pause_turn wird fortgesetzt (zweite Anfrage trägt die erste Antwort)", anfragen.length === 2 && JSON.parse(anfragen[1].o.body).messages.length === 2 && r2.funde.length === 2);
+  ok("RECHERCHE: Kopfzeilen für den Browser (Schlüssel, Version, direkter Zugriff)", anfragen[0].url === "https://api.anthropic.com/v1/messages" && anfragen[0].o.headers["x-api-key"] === "sk-ant-test" &&
+    anfragen[0].o.headers["anthropic-dangerous-direct-browser-access"] === "true" && anfragen[0].o.headers["anthropic-version"] === "2023-06-01");
+  const fehl = await R.rufen("sk-ant-x", info, async () => ({ ok: false, status: 401, json: async () => ({ error: { message: "invalid x-api-key" } }) })).then(() => "", (e) => e.message);
+  ok("RECHERCHE: abgewiesener Schlüssel → Fehler mit Grund, nichts übernommen", /invalid x-api-key/.test(fehl));
+  const abl = await R.rufen("sk-ant-x", info, stell([{ stop_reason: "refusal", content: [] }])).then(() => "", (e) => e.message);
+  ok("RECHERCHE: Ablehnung (refusal) wird gemeldet, nicht als leeres Ergebnis", /abgelehnt/.test(abl));
 }
 
 /* ── STUFE 2: Klaus' Symbol ── */
