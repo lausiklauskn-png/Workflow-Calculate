@@ -347,7 +347,7 @@ try {
     const sz = await seite(1200), q = sz.p;
     await q.goto(url); await q.waitForSelector("body[data-bereit]");
     await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
-    const anfangTiefe = await q.getAttribute("#seite-zurueck", "data-tiefe");
+    const anfangTiefe = await q.getAttribute("#seite-zurueck", "data-tiefe"), anfangLaenge = await q.evaluate(() => history.length);
     await tippe(q, '[data-reiter="katalog"]', "Reiter Katalog");
     await tippe(q, '[data-kat-reiter="lieferanten"]', "Katalog-Reiter Lieferanten");
     await tippe(q, '[data-kat-reiter="verfahren"]', "Katalog-Reiter Verfahren");
@@ -356,7 +356,8 @@ try {
     await tippe(q, '[data-reiter="einstellungen"]', "Reiter Einstellungen");
     await tippe(q, "#handel-knopf", "Knopf Handelsware");
     const tiefe = Number(await q.getAttribute("#seite-zurueck", "data-tiefe")) - Number(anfangTiefe);
-    ok("ZURÜCK: jeder Wechsel der Ansicht ist ein Schritt (6 Schritte gezählt)", tiefe === 6 && !(await q.locator("#seite-zurueck").isDisabled()), tiefe);
+    const laenge = (await q.evaluate(() => history.length)) - anfangLaenge;
+    ok("ZURÜCK: jeder Wechsel der Ansicht ist ein Schritt (6 Schritte gezählt, 6 im Verlauf des Browsers)", tiefe === 6 && laenge === 6 && !(await q.locator("#seite-zurueck").isDisabled()), { tiefe, laenge });
     const wo = () => q.evaluate(() => { const st = history.state || {}; return [st.reiter, st.katReiter || "", st.katOffen || "", location.hash].join("|"); });
     await tippe(q, "#seite-zurueck", "← Zurück 1");
     ok("ZURÜCK: ← von Handelsware führt in die Einstellungen (Adresse ohne #handel)", (await wo()) === "einstellungen|||" && await q.locator('[data-reiter="einstellungen"].on').count() === 1, await wo());
