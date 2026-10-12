@@ -136,5 +136,6 @@
 
   WC.angebot = { heute: heute, plusTage: plusTage, naechsteNummer: naechsteNummer, neu: neu, neuePosition: neuePosition,
     katalogFuer: katalogFuer, stellen: stellen, zurueckZumEntwurf: zurueckZumEntwurf, fassungVon: fassungVon, neueFassung: neueFassung, vergleich: vergleich, versandTeil: versandTeil, rechne: rechne, kleinmengeFuer: kleinmengeFuer, zaehltKlein: zaehltKlein,
-    KLEINMENGE_VORGABE: { grenze: 10, cent: 1200, text: "Kleinmengenzuschlag", platzhalter: true } };
+    /* Klaus 2026-10-13 bestätigt: 12,00 € netto, unter 10 Stück, einmal je Angebot — sein Wert, kein Platzhalter */
+    KLEINMENGE_VORGABE: { grenze: 10, cent: 1200, text: "Kleinmengenzuschlag" } };
 })(typeof window !== "undefined" ? window : globalThis);

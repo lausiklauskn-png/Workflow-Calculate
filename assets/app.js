@@ -29,7 +29,12 @@
   }
   /* Kleinmengenzuschlag (Klaus 2026-10-13): fehlt er im eigenen Katalog, kommt die Vorgabe dazu (Platzhalter-Betrag).
      Nur der LIVE-Katalog — ein eingefrorener Stand bleibt, wie er war. */
-  function katalogErgaenzen(k) { if (k && !k.kleinmenge) k.kleinmenge = kopie(A.KLEINMENGE_VORGABE); return k; }
+  function katalogErgaenzen(k) {
+    if (k && !k.kleinmenge) k.kleinmenge = kopie(A.KLEINMENGE_VORGABE);
+    /* die Vorgabe 12,00 € / 10 Stk. hat Klaus bestätigt — eine früher gespeicherte Platzhalter-Marke an genau diesem Wert fällt weg */
+    else if (k && k.kleinmenge.platzhalter && +k.kleinmenge.cent === 1200 && +k.kleinmenge.grenze === 10) delete k.kleinmenge.platzhalter;
+    return k;
+  }
   katalogLaden();
   function katalogSpeichern() { lsSet(LS.katalog, JSON.stringify(S.katalog)); }
   function einstSpeichern() { lsSet(LS.einst, JSON.stringify(S.einst)); }
@@ -229,9 +234,15 @@
       " Löschst du die Browserdaten oder wechselst das Gerät, sind sie sonst weg. ",
       knopf("🔐 Jetzt sichern", function () { S.reiter = "einstellungen"; zeichne(); var k = document.getElementById("sicherung-kasten"); if (k) k.scrollIntoView(); }, "klein pri"), " ",
       knopf("Später", function () { ssSet("workflowcalculate_sicherung_spaeter", "1"); zeichne(); }, "klein")));
-    main.append(h("div", { class: "band", style: "margin-bottom:12px" }, knopf("＋ Neues Angebot", neuesAngebot, "pri", { id: "neues-angebot" }), beispielSteuerung()));
+    main.append(h("div", { class: "band", style: "margin-bottom:12px" }, knopf("＋ Neues Angebot", neuesAngebot, "pri", { id: "neues-angebot" }),
+      knopf("📥 Anfrage einlesen (E-Mail)", function () { S.anfrageOffen = !S.anfrageOffen; zeichne(); }, S.anfrageOffen ? "on" : "", { id: "anfrage-knopf" }), beispielSteuerung()));
+    if (S.anfrageOffen) main.append(anfrageKarte());
     if (!S.angebote.length) { main.append(h("p", { class: "gedaempft", text: "Noch kein Angebot." })); return; }
     var kat = S.katalog;
+    /* Suche: Kundenname, Kundennummer, Produkt, Angebotsnummer — das Nächstliegende steht oben */
+    main.append(h("div", { class: "zeile", style: "margin-bottom:8px" }, h("input", { type: "search", id: "angebot-suche", "data-key": "angebot-suche", value: S.suche || "",
+      placeholder: "🔎 Alte Angebote: Kunde, Kundennummer, Produkt …", style: "flex:1 1 280px", oninput: function () { S.suche = this.value; zeichne(); } })));
+    if ((S.suche || "").trim()) { main.append(trefferKarte(WC.anfrage.suche(S.suche, S.angebote, S.kunden, kat), "Treffer für „" + S.suche.trim() + "“")); return; }
     var t = h("table", null, h("thead", null, h("tr", null, ["Nummer", "Kunde", "Titel", "Status", "netto", ""].map(function (x, i) { return h("th", { class: i === 4 ? "r" : "", text: x }); }))));
     var tb = h("tbody");
     S.angebote.forEach(function (a) {
@@ -245,6 +256,118 @@
     main.append(h("div", { class: "karte" }, h("div", { class: "tabelle-huelle" }, t)));
     var nk = nachkalkVorlagenKarte();
     if (nk) main.append(nk);
+  }
+
+  /* ── Alte Angebote nach Ähnlichkeit (Klaus 2026-10-13: „automatisch nach oben gerückt … was der Anfrage am nächsten kommt“) ── */
+  function trefferKarte(liste, titel, nehmen) {
+    var box = h("div", { class: "karte", "data-treffer": String(liste.length) }, h("h3", { text: titel }));
+    if (!liste.length) { box.append(h("p", { class: "gedaempft", text: "Kein passendes altes Angebot gefunden." })); return box; }
+    liste.slice(0, 12).forEach(function (x, i) {
+      var a = x.angebot, r = A.rechne(a, S.katalog, kundeVon(a), S.einst.kleinunternehmer);
+      box.append(h("div", { class: "eintrag-kat", "data-treffer-zeile": a.id, "data-wert": String(x.wert) },
+        h("div", { class: "band", style: "justify-content:space-between" },
+          h("div", null, i === 0 ? h("span", { class: "badge ok", text: "am nächsten" }) : null, " ", h("b", { text: a.nummer + (A.fassungVon(a) > 1 ? " · F" + A.fassungVon(a) : "") + " · " + ((kundeVon(a) || {}).name || "ohne Kunde") }),
+            h("span", { class: "gedaempft klein", text: " · " + (a.titel || "") + " · " + datumDe(a.datum) + " · " + euro(r.summen.netto) + " netto" })),
+          h("span", { class: "badge", title: "Ähnlichkeit", text: x.wert + " %" })),
+        h("p", { class: "gedaempft klein", text: x.gruende.join(" · ") }),
+        h("div", { class: "band" },
+          knopf("Öffnen", function () { S.aktiv = a.id; lsSet(LS.aktiv, a.id); geheZu("angebot"); }, "klein"),
+          nehmen ? knopf("📥 daraus den Entwurf", function () { nehmen(a); }, "klein pri", { "data-treffer-nehmen": a.id })
+            : knopf("⧉ als neues Angebot", function () { angebotKopieren(a); }, "klein pri", { "data-treffer-kopieren": a.id }))));
+    });
+    return box;
+  }
+  /* ── 📥 Anfrage einlesen: Text einfügen oder .eml wählen → erkannt → Entwurf ── */
+  function anfrageKarte() {
+    var AN = WC.anfrage, kat = S.katalog;
+    var text = h("textarea", { id: "anfrage-text", rows: "7", "data-key": "anfrage-text", placeholder: "E-Mail hier einfügen (mit „Von:“ und „Betreff:“, wenn vorhanden) …", style: "width:100%" }, S.anfrageText || "");
+    text.value = S.anfrageText || "";
+    function lies(roh) { S.anfrageText = roh; S.anfrage = AN.lesen(roh, kat, S.kunden); S.kiHalt = null; S.kiErgebnisAnfrage = null; S.kiNamen = []; zeichne(); }
+    var box = h("div", { class: "karte", "data-anfrage": "" }, h("h3", { text: "📥 Anfrage einlesen" }),
+      h("p", { class: "gedaempft klein", text: "Gelesen wird auf dem Gerät, ohne KI und ohne Netz: Absender, Kundennummer, Mengen, Maße, Farben, Produkte. Daraus entsteht ein Entwurf — gestellt wird er nur von dir." }),
+      text,
+      h("div", { class: "band", style: "margin-top:6px" }, knopf("Lesen", function () { lies(text.value); }, "pri", { id: "anfrage-lesen" }),
+        h("label", { class: "btn" }, "📄 .eml-Datei wählen", h("input", { type: "file", accept: ".eml,message/rfc822,.txt", hidden: true, id: "anfrage-datei", onchange: function () {
+          var f = this.files && this.files[0]; if (!f) return;
+          f.arrayBuffer().then(function (b) { var u = new Uint8Array(b), t = ""; for (var i = 0; i < u.length; i += 0x8000) t += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); lies(t); });
+        } })),
+        S.anfrage ? knopf("✕ leeren", function () { S.anfrage = null; S.anfrageText = ""; zeichne(); }, "klein") : null));
+    var an = S.anfrage;
+    if (!an) return box;
+    var k = an.kunde ? an.kunde.kunde : null;
+    var erk = h("div", { class: "erklaer-feld", "data-anfrage-erkannt": "" }, h("b", { text: "Erkannt" }),
+      h("ul", { class: "weg" },
+        h("li", { "data-erkannt": "kunde" }, k ? "Kunde: " + k.name + " (über " + an.kunde.grund + ")" : "Kunde: nicht im Kundenstamm" + (an.absender.name || an.absender.email ? " — Absender " + [an.absender.name, an.absender.email].filter(Boolean).join(" · ") : ""),
+          !k && (an.absender.name || an.absender.email) ? knopf("＋ als Kunde anlegen", function () {
+            var n = 1; S.kunden.forEach(function (q) { var m = /^K-(\d+)$/.exec(q.id); if (m) n = Math.max(n, +m[1] + 1); });
+            var nk = { id: "K-" + n, name: an.absender.name || an.absender.email, anschrift: "", klasse: "B", email: an.absender.email, nr: an.kundennr || "" };
+            S.kunden.push(nk); dbPut("kunden", kopie(nk)); lies(S.anfrageText);
+          }, "klein", { "data-anfrage-kunde-neu": "" }) : null),
+        h("li", { "data-erkannt": "nr" }, "Kundennummer: " + (an.kundennr || "—")),
+        h("li", { "data-erkannt": "mengen" }, "Mengen: " + (an.mengen.length ? an.mengen.map(function (m) { return m.menge + (m.roh ? " " + m.roh : ""); }).join(" · ") : "—")),
+        h("li", null, "Maße: " + (an.masse ? an.masse.text : "—") + " · Farben: " + (an.farben || "—")),
+        h("li", { "data-erkannt": "produkte" }, "Produkte: " + (an.produkte.length ? an.produkte.map(function (p) { return p.name + (p.menge != null ? " (" + p.menge + ")" : ""); }).join(" · ") : "—"))),
+      an.ohneProdukt.length ? h("p", { class: "hinweis warn", "data-ohne-produkt": "" }, an.ohneProdukt.map(function (x) { return "„" + x.wort + "“ (" + x.menge + ")"; }).join(" · ") +
+        ": kein passendes Produkt im Katalog — Arbeitsgebiet holen (Katalog → Arbeitsgebiete) oder Vorlage anlegen.") : null,
+      an.nichtErkannt.length ? h("p", { class: "hinweis warn", "data-nicht-erkannt": an.nichtErkannt.join(",") }, "Nicht erkannt: " + an.nichtErkannt.join(", ") + " — im Entwurf von Hand ergänzen.") : null);
+    box.append(erk);
+    box.append(kiAnfrageFeld(an));
+    function erzeugen(basis) {
+      var e = AN.entwurf(an, kat, S.angebote, S.kunden, basis || null);
+      S.angebote.unshift(e.angebot); S.aktiv = e.angebot.id; lsSet(LS.aktiv, e.angebot.id); merken(e.angebot);
+      S.anfrage = null; S.anfrageText = ""; S.anfrageOffen = false;
+      S.reiter = "angebot"; lsSet(LS.reiter, "angebot"); adresseSetzen("angebot");
+      melde("Entwurf " + e.angebot.nummer + " aus der Anfrage: " + e.weg.join(" · ") + (e.offen.length ? " — Offen: " + e.offen.join(" · ") : "") + ". Bitte prüfen.", e.offen.length ? "warn" : "");
+      window.scrollTo(0, 0);
+    }
+    var l = AN.aehnlich(an, S.angebote, S.kunden, kat);
+    var auto = l[0] && l[0].wert >= AN.SCHWELLE ? l[0].angebot : null;
+    box.append(h("div", { class: "band", style: "margin:8px 0" }, knopf(auto ? "✨ Angebot erzeugen (aus " + auto.nummer + ")" : "✨ Angebot erzeugen (aus den erkannten Produkten)", function () { erzeugen(auto); }, "pri", { id: "anfrage-erzeugen", "data-basis": auto ? auto.id : "" }),
+      auto ? knopf("ohne altes Angebot, nur aus der Anfrage", function () { var x = AN.entwurf(an, kat, S.angebote, S.kunden, false); S.angebote.unshift(x.angebot); S.aktiv = x.angebot.id; lsSet(LS.aktiv, x.angebot.id); merken(x.angebot); S.anfrage = null; S.anfrageOffen = false; geheZu("angebot"); melde("Entwurf " + x.angebot.nummer + ": " + x.weg.join(" · ") + (x.offen.length ? " — Offen: " + x.offen.join(" · ") : ""), x.offen.length ? "warn" : ""); }, "klein", { id: "anfrage-ohne-basis" }) : null));
+    if (l.length) box.append(trefferKarte(l, "Ähnliche alte Angebote — das nächste oben", function (a) { erzeugen(a); }));
+    return box;
+  }
+
+  /* ── 🤖 Anfrage mit KI lesen: erst prüfen (Prüfkern), dann verdecken (Modul 25), zeigen, was hinausgeht, dann senden ── */
+  function kiAnfrageFeld(an) {
+    var KI = WC.kiAnfrage, kat = S.katalog;
+    var box = h("details", { class: "erklaer-feld", "data-ki-anfrage": "", open: !!S.kiAnfrageOffen, ontoggle: function () { if (S.kiAnfrageOffen !== this.open) { S.kiAnfrageOffen = this.open; zeichne(); } } },
+      h("summary", null, h("b", { text: "🤖 Mit KI lesen (freie Formulierungen)" }), " ", h("span", { class: "badge intern", text: "eigener Schlüssel" })));
+    if (!S.kiAnfrageOffen) return box;
+    S.kiNamen = S.kiNamen || [];
+    var v = KI.vorbereiten(S.anfrageText || "", an, S.kunden, { namen: S.kiNamen });
+    if (v.fehler) { box.append(h("p", { class: "hinweis bad", text: v.fehler })); return box; }
+    var meld = h("p", { class: "klein", id: "ki-meldung", hidden: true });
+    function sag(t, gut) { meld.hidden = false; meld.className = "hinweis " + (gut ? "" : "bad"); meld.textContent = t; }
+    box.append(h("p", { class: "gedaempft klein", text: "Vor dem Senden: geprüft auf versteckte Befehle (Prüfkern des Auslieferungsprüfers) und verdeckt (Sage-Modul 25: Namen, E-Mail, Telefon, Anschrift, IBAN, Datum, Beträge, Kundennummer). Hinaus geht nur der Text unten und die Liste deiner Produktvorlagen — keine Preise, keine Kunden. Der Kunde wird nicht von der KI bestimmt. Übernommen wird nur, was wörtlich in der Anfrage steht." }));
+    if (v.vorschlaege.length) box.append(h("div", { class: "band", "data-ki-vorschlaege": "" }, h("span", { class: "klein", text: "Vielleicht auch Namen — mit verdecken?" }),
+      v.vorschlaege.map(function (n) { return knopf("＋ " + n, function () { S.kiNamen = S.kiNamen.concat([n]); zeichne(); }, "klein", { "data-ki-name": n }); })));
+    box.append(h("p", { class: "klein" }, h("b", { text: "Geht hinaus (verdeckt):" })),
+      h("pre", { class: "ki-verdeckt", "data-ki-verdeckt": "", style: "white-space:pre-wrap;max-height:240px;overflow:auto" }, v.text));
+    if (v.leck) { box.append(h("p", { class: "hinweis bad", "data-ki-leck": "" }, "Im verdeckten Text steht noch Klartext („" + v.leck + "“) — so geht nichts hinaus.")); return box; }
+    if (v.halt) box.append(h("div", { class: "hinweis " + (S.kiHalt === v.text ? "warn" : "bad"), "data-ki-halt": "" },
+      h("b", { text: S.kiHalt === v.text ? "Angehalten — noch einmal tippen sendet trotzdem." : "⚠ Auffällig — vor dem Senden ansehen:" }),
+      h("ul", { class: "weg" }, v.befunde.map(function (b) { return h("li", { text: "Zeile " + b.zeile + " · " + b.kennung + ": " + b.satz }); }))));
+    function los() {
+      if (v.halt && S.kiHalt !== v.text) { S.kiHalt = v.text; zeichne(); return; }
+      sag("Die KI liest … (einige Sekunden)", true);
+      KI.rufen(S.kiSchluessel, KI.anfrage(v.text, kat), window.__wcKiFetch || null).then(function (antwort) {
+        var erg = KI.auswerten(antwort, v.text, kat);
+        if (!erg.ok) { sag(erg.grund + " Es wurde nichts übernommen.", false); return; }
+        S.anfrage = KI.uebernehmen(an, erg, v.map); S.kiHalt = null;
+        S.kiErgebnisAnfrage = { n: erg.positionen.length, verworfen: erg.verworfen, unklar: erg.unklar };
+        zeichne();
+      }, function (err) { sag("Nicht gelungen: " + (err && err.message || err) + ". Es wurde nichts übernommen.", false); });
+    }
+    if (S.kiSchluessel) box.append(h("div", { class: "zeile" }, knopf(v.halt && S.kiHalt === v.text ? "🤖 Trotzdem an die KI senden" : "🤖 An die KI senden", los, "pri klein", { id: "ki-anfrage-los" }),
+      knopf("Schlüssel vergessen", function () { S.kiSchluessel = null; zeichne(); }, "klein")));
+    else schluesselEingabe(box, sag);
+    box.append(meld);
+    var eg = S.kiErgebnisAnfrage;
+    if (eg) box.append(h("div", { class: "hinweis", "data-ki-anfrage-ergebnis": String(eg.n), "data-ki-anfrage-verworfen": String(eg.verworfen.length) },
+      eg.n + " Position(en) aus der KI übernommen (belegt durch ein Zitat aus der Anfrage) · " + eg.verworfen.length + " verworfen" + (eg.unklar.length ? " · unklar: " + eg.unklar.join("; ") : ""),
+      eg.verworfen.length ? h("ul", { class: "weg" }, eg.verworfen.map(function (x) { return h("li", { class: "klein", text: x.grund + " — " + x.zeile }); })) : null));
+    return box;
   }
 
   /* Beispiel-Angebote laden (wie Workflow-Needs „Beispiele“) — zum Ansehen, Lernen und Testen der Übergaben */
@@ -853,6 +976,28 @@
     schreib: function (k, v) { lsSet("workflowcalculate_ki_" + k, JSON.stringify(v)); return Promise.resolve(); },
     loesch: function (k) { try { localStorage.removeItem("workflowcalculate_ki_" + k); } catch (_e) {} return Promise.resolve(); },
   };
+  /* Schlüssel eingeben, merken, aufschließen — EINE Stelle für Marktpreis-Recherche und Anfrage-Lesung (derselbe Schlüssel) */
+  function schluesselEingabe(box, sag) {
+    var T = window.WERKSTATT_SCHLUESSEL;
+      var sch = h("input", { type: "password", id: "ki-schluessel", placeholder: "sk-ant-…", autocomplete: "off", style: "flex:1 1 220px;min-width:0" });
+      var merk = h("input", { type: "checkbox", id: "ki-merken" }), pw = h("input", { type: "password", id: "ki-passwort", placeholder: "Passwort (mind. 8 Zeichen)", autocomplete: "off", style: "flex:1 1 160px;min-width:0" });
+      box.append(h("div", { class: "zeile", id: "ki-gemerkt", hidden: true }, h("span", { class: "klein", text: "Auf diesem Gerät liegt ein verschlüsselter Schlüssel — Passwort:" }),
+        h("input", { type: "password", id: "ki-aufschliessen-pw", autocomplete: "off" }), knopf("Aufschließen", function () {
+          T.holen(KI_ABLAGE, document.getElementById("ki-aufschliessen-pw").value).then(function (k) { S.kiSchluessel = k; zeichne(); },
+            function (err) { sag(err.message === "passwort" ? "Das Passwort passt nicht." : "Nicht aufzuschließen (" + err.message + ").", false); });
+        }, "klein", { id: "ki-aufschliessen" }), knopf("Gespeicherten Schlüssel löschen", function () { T.werfen(KI_ABLAGE).then(zeichne); }, "klein gefahr")));
+      box.append(h("div", { class: "zeile" }, sch, h("label", { class: "schalter" }, merk, "verschlüsselt auf diesem Gerät merken"), pw,
+        knopf("Übernehmen", function () {
+          var f = T.pruefeForm(sch.value);
+          if (!f.ok) { sag("Schlüssel: " + f.grund + ". " + f.hinweis, false); return; }
+          if (merk.checked) {
+            if (pw.value.length < 8) { sag("Zum Merken ein Passwort mit mindestens 8 Zeichen.", false); return; }
+            T.einlegen(KI_ABLAGE, pw.value, sch.value).then(function () { S.kiSchluessel = sch.value; zeichne(); }, function (err) { sag("Nicht gemerkt: " + err.message, false); });
+          } else { S.kiSchluessel = sch.value; zeichne(); }
+        }, "klein", { id: "ki-schluessel-setzen" })));
+      box.append(h("p", { class: "gedaempft klein", text: "Ohne Merken gilt der Schlüssel nur bis zum Schließen der Seite. Gemerkt liegt er verschlüsselt im Browser; das Passwort steht nirgends." }));
+      T.liegtEtwas(KI_ABLAGE).then(function (da) { var z = document.getElementById("ki-gemerkt"); if (z) z.hidden = !da; });
+  }
   function kiFeld(p, v, e) {
     var T = window.WERKSTATT_SCHLUESSEL, R = WC.recherche, info = R.auftragsInfo(v, p, S.katalog), erg = (S.kiErgebnis || {})[p.id];
     var box = h("div", { class: "erklaer-feld", "data-ki-feld": p.id }, h("b", { text: "🤖 KI-Recherche der Marktpreise" }), " ", h("span", { class: "badge intern", text: "🔒 intern" }),
@@ -875,26 +1020,7 @@
       box.append(h("div", { class: "zeile" }, h("span", { class: "gedaempft klein", text: "Schlüssel für diese Sitzung gesetzt." }),
         knopf("🤖 Jetzt recherchieren", function () { los(S.kiSchluessel); }, "pri klein", { id: "ki-los" }),
         knopf("Schlüssel vergessen", function () { S.kiSchluessel = null; zeichne(); }, "klein")));
-    } else {
-      var sch = h("input", { type: "password", id: "ki-schluessel", placeholder: "sk-ant-…", autocomplete: "off", style: "flex:1 1 220px;min-width:0" });
-      var merk = h("input", { type: "checkbox", id: "ki-merken" }), pw = h("input", { type: "password", id: "ki-passwort", placeholder: "Passwort (mind. 8 Zeichen)", autocomplete: "off", style: "flex:1 1 160px;min-width:0" });
-      box.append(h("div", { class: "zeile", id: "ki-gemerkt", hidden: true }, h("span", { class: "klein", text: "Auf diesem Gerät liegt ein verschlüsselter Schlüssel — Passwort:" }),
-        h("input", { type: "password", id: "ki-aufschliessen-pw", autocomplete: "off" }), knopf("Aufschließen", function () {
-          T.holen(KI_ABLAGE, document.getElementById("ki-aufschliessen-pw").value).then(function (k) { S.kiSchluessel = k; zeichne(); },
-            function (err) { sag(err.message === "passwort" ? "Das Passwort passt nicht." : "Nicht aufzuschließen (" + err.message + ").", false); });
-        }, "klein", { id: "ki-aufschliessen" }), knopf("Gespeicherten Schlüssel löschen", function () { T.werfen(KI_ABLAGE).then(zeichne); }, "klein gefahr")));
-      box.append(h("div", { class: "zeile" }, sch, h("label", { class: "schalter" }, merk, "verschlüsselt auf diesem Gerät merken"), pw,
-        knopf("Übernehmen", function () {
-          var f = T.pruefeForm(sch.value);
-          if (!f.ok) { sag("Schlüssel: " + f.grund + ". " + f.hinweis, false); return; }
-          if (merk.checked) {
-            if (pw.value.length < 8) { sag("Zum Merken ein Passwort mit mindestens 8 Zeichen.", false); return; }
-            T.einlegen(KI_ABLAGE, pw.value, sch.value).then(function () { S.kiSchluessel = sch.value; zeichne(); }, function (err) { sag("Nicht gemerkt: " + err.message, false); });
-          } else { S.kiSchluessel = sch.value; zeichne(); }
-        }, "klein", { id: "ki-schluessel-setzen" })));
-      box.append(h("p", { class: "gedaempft klein", text: "Ohne Merken gilt der Schlüssel nur bis zum Schließen der Seite. Gemerkt liegt er verschlüsselt im Browser; das Passwort steht nirgends." }));
-      T.liegtEtwas(KI_ABLAGE).then(function (da) { var z = document.getElementById("ki-gemerkt"); if (z) z.hidden = !da; });
-    }
+    } else schluesselEingabe(box, sag);
     box.append(meld);
     if (erg) {
       var k = erg.kosten;
@@ -1053,6 +1179,8 @@
       karte.append(h("div", { class: "eintrag-kat", "data-kunde": k.id, style: "border:1px solid var(--line);border-radius:11px;padding:8px;margin:6px 0" }, h("div", { class: "feldgitter" },
         feld("Name / Firma", h("input", { value: k.name, "data-key": k.id + "-name", oninput: function () { k.name = this.value; sp(); } })),
         feld("Anschrift", h("textarea", { value: k.anschrift, "data-key": k.id + "-anschrift", rows: "2", oninput: function () { k.anschrift = this.value; sp(); } })),
+        feld("Kundennummer", h("input", { value: k.nr || "", "data-key": k.id + "-nr", "data-kunde-nr": k.id, oninput: function () { k.nr = this.value.trim(); sp(); } })),
+        feld("E-Mail", h("input", { type: "email", value: k.email || "", "data-key": k.id + "-email", "data-kunde-email": k.id, oninput: function () { k.email = this.value.trim(); sp(); } })),
         feld("Klasse", h("select", { "data-kunde-klasse": k.id, onchange: function () { k.klasse = this.value; sp(); S.angebote.forEach(function (a) { if (a.kundeId === k.id && bearbeitbar(a)) { a.kunde = { name: k.name, anschrift: k.anschrift, klasse: k.klasse }; merken(a); } }); zeichne(); } },
           ["A", "B", "C"].map(function (c) { var kl = (S.katalog.gebiete[0].klassen || {})[c] || {}; return h("option", { value: c, text: kl.name || c, selected: (k.klasse || "B") === c }); })))),
         knopf("✕ Kunde löschen", function () { if (!confirm("Kunde „" + k.name + "“ löschen?")) return; S.kunden = S.kunden.filter(function (q) { return q !== k; }); dbDel("kunden", k.id); zeichne(); }, "klein gefahr")));
