@@ -24,6 +24,7 @@
   function katalogLaden() {
     var k = lsJson(LS.katalog, null);
     S.katalog = k && !KAT.pruefe(k).length ? k : kopie(WC.START);
+    S.katalog.lieferanten = S.katalog.lieferanten || [];
   }
   katalogLaden();
   function katalogSpeichern() { lsSet(LS.katalog, JSON.stringify(S.katalog)); }
@@ -166,17 +167,29 @@
     }
     var th = document.getElementById("thema");
     if (th) { var hell = document.documentElement.dataset.theme === "light"; th.textContent = hell ? "🌙" : "☀"; th.title = hell ? "Dunkel" : "Hell"; }
+    var hk = document.getElementById("handel-knopf");
+    if (hk) hk.className = "btn handel-knopf" + (S.reiter === "handel" ? " on" : "");
     var nav = document.getElementById("reiter"); nav.replaceChildren();
     REITER.forEach(function (r) {
-      nav.append(knopf(r[1], function () { S.reiter = r[0]; lsSet(LS.reiter, r[0]); S.meldung = null; zeichne(); window.scrollTo(0, 0); }, "chip" + (S.reiter === r[0] ? " on" : ""), { "data-reiter": r[0] }));
+      nav.append(knopf(r[1], function () { geheZu(r[0]); }, "chip" + (S.reiter === r[0] ? " on" : ""), { "data-reiter": r[0] }));
     });
+  }
+  /* Die Seite „🛒 Handelsware“ hat eine eigene Adresse (#handel) — als Lesezeichen oder in einem neuen Tab zu öffnen.
+     Gleicher Speicher, gleicher Katalog: es gibt keinen zweiten Zustand. */
+  function adresseSetzen(reiter) {
+    var soll = reiter === "handel" ? "#handel" : "";
+    if ((location.hash || "") === soll) return;
+    try { history.replaceState(null, "", location.pathname + location.search + soll); } catch (_e) {}
+  }
+  function geheZu(reiter) {
+    S.reiter = reiter; lsSet(LS.reiter, reiter); S.meldung = null; adresseSetzen(reiter); zeichne(); window.scrollTo(0, 0);
   }
   function zeichne() {
     var fk = fokusMerken();
     zeichneKopf();
     var main = document.getElementById("inhalt"); main.replaceChildren();
     if (S.meldung) main.append(h("div", { class: "hinweis " + (S.meldung.art || ""), role: "status", "data-meldung": "" }, S.meldung.text));
-    var fn = { angebote: zAngebote, angebot: zAngebot, katalog: zKatalog, kunden: zKunden, einstellungen: zEinstellungen }[S.reiter] || zAngebote;
+    var fn = { angebote: zAngebote, angebot: zAngebot, katalog: zKatalog, kunden: zKunden, einstellungen: zEinstellungen, handel: zHandel }[S.reiter] || zAngebote;
     fn(main);
     fokusZurueck(fk);
   }
@@ -371,6 +384,16 @@
     N.positionen.forEach(function (q) {
       var x = WC.nachkalk.istVon(a, q.id);
       var mm = q.minutenPct;
+      if (q.handel) {
+        box.append(h("div", { class: "eintrag-kat", "data-nk-zeile": q.id, "data-sk-ist": String(q.ist.selbstkosten), "data-db-ist": String(q.dbIst) },
+          h("div", null, h("span", { class: "badge kennung", text: q.id }), " ", h("b", { text: q.titel }), " ", h("span", { class: "badge", text: "🛒 Einkaufsprodukt" })),
+          h("div", { class: "feldgitter" },
+            feld("Einkauf Ist komplett inkl. Versand (€, Rechnung des Lieferanten) · Plan " + euro(q.plan.einkauf), h("input", { inputmode: "decimal", value: x.einkaufCent != null ? G.formatCents(x.einkaufCent) : "", placeholder: G.formatCents(q.plan.einkauf), "data-ist": q.id + ":einkaufCent",
+              onchange: function () { var c = this.value.trim() === "" ? null : G.parseEuroToCents(this.value); setzen(q.id, "einkaufCent", Number.isFinite(c) && c >= 0 ? c : null); } }))),
+          h("p", { class: "klein" + (q.dbIst < 0 ? " verlust" : "") }, q.erfasst ? "Einkauf " + euro(q.plan.einkauf) + " → " + euro(q.ist.einkauf) + " (" + delta(q.plan.einkauf, q.ist.einkauf) + ") · Selbstkosten " + euro(q.plan.selbstkosten) + " → " + euro(q.ist.selbstkosten) +
+            " · Deckungsbeitrag " + euro(q.dbPlan) + " → " + euro(q.dbIst) : "nicht erfasst — zählt mit dem Plan (Einkauf " + euro(q.plan.einkauf) + ")")));
+        return;
+      }
       box.append(h("div", { class: "eintrag-kat", "data-nk-zeile": q.id, "data-sk-ist": String(q.ist.selbstkosten), "data-db-ist": String(q.dbIst) },
         h("div", null, h("span", { class: "badge kennung", text: q.id }), " ", h("b", { text: q.titel })),
         h("div", { class: "feldgitter" },
@@ -535,6 +558,8 @@
         (sl.wahl || []).map(function (id) { var m = finde(kat.materialien, id); return h("option", { value: id, text: m ? m.name : id, selected: id === w }); }))));
     });
     karte.append(g);
+    if (v.einkaufsprodukt) karte.append(h("p", { class: "gedaempft klein", "data-handel-hinweis": "" }, "🛒 Einkaufsprodukt — Verkauf komplett inkl. Versand, kein eigener Versandposten. Eingetragene Mengen: " +
+      (K.einkaufsMengen(v).join(", ") || "keine") + " (Zwischenmengen werden nicht geschätzt). ", knopf("Einkauf ansehen", function () { geheZu("handel"); }, "klein")));
 
     /* Bilder der Position */
     var daumen = h("div", { class: "daumen", "data-pos-bilder": "" });
@@ -583,7 +608,8 @@
     if (S.offen[p.id + ":weg"]) {
       var schema = h("table", { class: "schema" });
       e.schema.zeilen.forEach(function (z) { schema.append(h("tr", { class: /^=/.test(z.text) ? "summe" : "" }, h("td", { text: z.text }), h("td", { class: "r", text: euro(z.cent) }))); });
-      karte.append(h("div", { class: "erklaer-feld", "data-rechenweg": "" }, h("b", { text: "🔒 Rechenweg (intern) — Zuschlagskalkulation" }),
+      karte.append(h("div", { class: "erklaer-feld", "data-rechenweg": "" }, h("b", { text: "🔒 Rechenweg (intern) — " + (e.handel ? "Handelskalkulation" : "Zuschlagskalkulation") }),
+        e.handel && KAT.sichereAdresse(e.handel.url) ? h("p", { class: "klein" }, "Lieferant: ", h("a", { href: KAT.sichereAdresse(e.handel.url), target: "_blank", rel: "noopener noreferrer", text: (e.handel.lieferantName || "Link") + " ↗" })) : null,
         h("ul", { class: "weg" }, e.weg.map(function (w) { return h("li", { text: w }); })), schema,
         h("p", { class: "gedaempft klein", text: "Sätze: " + satzQuellen(e) })));
     }
@@ -628,6 +654,7 @@
   /* ── Erklären an Ort und Stelle: Wert antippen → Alternativen mit vorher gerechneter Wirkung ── */
   function erklaerChips(a, p, v, e, kat, ctx, ro) {
     var vf = finde(kat.verfahren, p.verfahren || v.verfahrenVorgabe);
+    if (e.handel) return erklaerChipsBox(a, p, v, e, kat, ctx, ro, [["menge", "Menge " + p.menge], ["gewinn", "Gewinn " + String(Math.round(e.effektiv.gewinnPct * 10) / 10).replace(".", ",") + " %"]]);
     var chips = [["menge", "Menge " + p.menge], ["zeit", "Arbeitszeit " + String(Math.round(e.minuten)).replace(".", ",") + " min"],
       ["stundensatz", (e.saetze.modus === "voll" ? "Lohn " : "Stundensatz ") + euro(Math.round(e.effektiv.lohnCent)) + "/h"],
       ["gewinn", "Gewinn " + String(Math.round(e.effektiv.gewinnPct * 10) / 10).replace(".", ",") + " %"]];
@@ -639,6 +666,9 @@
       var w = Object.prototype.hasOwnProperty.call(p.wahl || {}, sl.id) ? p.wahl[sl.id] : sl.vorgabe, m = finde(kat.materialien, w);
       chips.push(["slot:" + sl.id, sl.name + ": " + (m ? m.name : "ohne")]);
     });
+    return erklaerChipsBox(a, p, v, e, kat, ctx, ro, chips);
+  }
+  function erklaerChipsBox(a, p, v, e, kat, ctx, ro, chips) {
     var schluessel = p.id + ":erklaer";
     var box = h("div", { "data-erklaer": p.id },
       h("div", { class: "band" }, h("span", { class: "gedaempft klein", text: "Preis nachbessern — antippen:" }),
@@ -654,7 +684,8 @@
     var l = [];
     var lohnKey = e.saetze.modus === "voll" ? "lohnCent" : "stundensatzCent";
     if (art === "menge") {
-      var ms = [Math.max(1, Math.round(p.menge / 2)), p.menge * 2].concat(p.staffeln).filter(function (m, i, s) { return m !== p.menge && s.indexOf(m) === i; }).sort(function (q, w) { return q - w; });
+      /* Handelsware: nur Mengen mit eingetragenem Einkauf — Zwischenmengen werden nicht geschätzt */
+      var ms = (e.handel ? e.handel.mengen : [Math.max(1, Math.round(p.menge / 2)), p.menge * 2].concat(p.staffeln)).filter(function (m, i, s) { return m !== p.menge && s.indexOf(m) === i; }).sort(function (q, w) { return q - w; });
       ms.forEach(function (m) { l.push({ label: m + " Stück", tun: function (q) { q.menge = m; if (q.staffeln.indexOf(m) < 0) q.staffeln = q.staffeln.concat([m]).sort(function (x, y) { return x - y; }); } }); });
     } else if (art === "verfahren") {
       (v.verfahrenWahl || []).forEach(function (id) { var vf = finde(kat.verfahren, id); if (id !== (p.verfahren || v.verfahrenVorgabe)) l.push({ label: vf ? vf.name : id, tun: function (q) { q.verfahren = id; } }); });
@@ -896,10 +927,14 @@
     var karte = h("div", { class: "karte", "data-neue-position": "", "data-schritt-ziel": "produkt" }, h("h3", { text: "＋ Position" }));
     var wahl = h("select", { id: "vorlage-wahl", onchange: function () { S.neuPos = this.value; zeichne(); } },
       h("option", { value: "", text: "— Produkt wählen —" }), kat.gebiete.map(function (gb) {
-        return h("optgroup", { label: gb.name }, kat.vorlagen.filter(function (v) { return v.gebiet === gb.id; }).map(function (v) { return h("option", { value: v.id, text: v.name, selected: v.id === S.neuPos }); }));
+        var l = KAT.eigenfertigung(kat).filter(function (v) { return v.gebiet === gb.id; });
+        return l.length ? h("optgroup", { label: gb.name }, l.map(function (v) { return h("option", { value: v.id, text: v.name, selected: v.id === S.neuPos }); })) : null;
       }));
+    var nHandel = KAT.handelsware(S.katalog).length;
     karte.append(h("div", { class: "zeile" }, wahl, S.neuPos ? knopf("Leere Position", function () {
       vorher(a); A.neuePosition(a, kat, S.neuPos); merken(a); zeichne(); }, "", { id: "position-leer" }) : null));
+    karte.append(h("p", { class: "gedaempft klein", "data-handel-verweis": "" }, "Fertig eingekaufte Produkte" + (nHandel ? " (" + nHandel + ")" : "") + " stehen nicht hier, sondern auf der Seite ",
+      knopf("🛒 Handelsware", function () { geheZu("handel"); }, "klein"), " — von dort „ins Angebot“."));
     /* … oder eine schon kalkulierte Position aus einem früheren Angebot */
     var frueher = [];
     S.angebote.forEach(function (b) { if (b === a) return; b.positionen.forEach(function (p) { frueher.push({ a: b, p: p }); }); });
@@ -1004,6 +1039,159 @@
     main.append(karte);
   }
 
+  /* ════ 🛒 Handelsware (Klaus 2026-10-13) ════
+     „Eine eigene Seite … nur Produkte, die ich fertig einkaufe und wieder verkaufe — mit gewinnbringendem Aufschlag.“
+     Einkauf komplett inkl. Versand → + Handlungskosten → + Gewinn (+ Kundenklasse) → Verkauf komplett inkl. Versand.
+     Gerechnet mit WC.kalk.handel — derselbe Weg wie im Angebot. Alles hier ist intern; aufs Kundenblatt kommt nur die Position. */
+  function handelLink(url, text) {
+    var u = KAT.sichereAdresse(url);
+    return u ? h("a", { href: u, target: "_blank", rel: "noopener noreferrer", "data-lieferant-link": "", text: text + " ↗" }) : null;
+  }
+  function insAngebot(v, menge) {
+    var a = aktivesAngebot(), neu = false;
+    if (!a || !bearbeitbar(a)) { a = A.neu(S.angebote); S.angebote.unshift(a); S.aktiv = a.id; lsSet(LS.aktiv, a.id); neu = true; }
+    vorher(a);
+    var p = A.neuePosition(a, S.katalog, v.id);
+    p.menge = menge; if (p.staffeln.indexOf(menge) < 0) p.staffeln = p.staffeln.concat([menge]).sort(function (x, y) { return x - y; });
+    merken(a);
+    S.reiter = "angebot"; lsSet(LS.reiter, "angebot"); adresseSetzen("angebot");
+    melde("„" + v.name + "“, " + menge + " " + (v.einheitText || "Stk.") + ", steht als Position " + p.id + " in Angebot " + a.nummer +
+      (neu ? " — neu angelegt, weil kein Angebot als Entwurf offen war." : "."), "");
+    window.scrollTo(0, 0);
+  }
+  function zHandel(main) {
+    var kat = S.katalog; kat.lieferanten = kat.lieferanten || [];
+    var hw = KAT.handelsware(kat), klasse = S.handelKlasse || "B";
+    var kopfK = h("div", { class: "karte", "data-handel-seite": "" },
+      h("div", { class: "position-kopf" }, h("h2", { text: "🛒 Handelsware" }),
+        h("div", { class: "band" },
+          h("a", { class: "btn klein", href: "#handel", target: "_blank", rel: "noopener", "data-neuer-tab": "", text: "↗ in neuem Tab" }),
+          h("span", { class: "badge intern", text: "🔒 intern" }))),
+      h("p", { class: "gedaempft klein", text: "Nur Produkte, die du fertig einkaufst und mit Aufschlag weiterverkaufst. Einkauf komplett inkl. Versand → + Handlungskosten → + Gewinn → Verkauf komplett inkl. Versand, als EINE Position ohne eigenen Versandposten. Lieferant, Link und Einkaufspreis gehen nie aufs Kundenblatt, nie an WorkFloh oder BookLedgerPro." }),
+      h("div", { class: "band" }, h("span", { class: "klein", text: "Rechnen für Kundenklasse:" }),
+        h("select", { "data-handel-klasse": "", onchange: function () { S.handelKlasse = this.value; zeichne(); } },
+          ["A", "B", "C"].map(function (k) { return h("option", { value: k, text: k + "-Kunde", selected: k === klasse }); }))));
+    main.append(kopfK);
+    if (!KAT.gebietDa(kat, "handelsware") && WC.STARTKATALOGE && WC.STARTKATALOGE.handelsware) {
+      main.append(h("div", { class: "karte" }, h("p", { text: "Beispiele mit Platzhalter-Preisen: 500 Kugelschreiber fertig bedruckt · Visitenkarten 250 / 500 / 1000." }),
+        knopf("＋ Beispiele holen (Arbeitsgebiet Handelsware)", function () {
+          var r = KAT.gebietHinzufuegen(S.katalog, WC.STARTKATALOGE.handelsware); katalogSpeichern();
+          melde(r.neu.vorlagen + " Einkaufsprodukte geholt. Die Preise sind Platzhalter — eigene Einkaufspreise eintragen („✎ Einkauf bearbeiten“).", "");
+        }, "pri", { "data-handel-start": "" })));
+    }
+    var hin = KAT.hinweise(kat);
+    if (hin.length) main.append(h("div", { class: "hinweis warn", "data-handel-hinweise": "" }, hin.join(" · ")));
+    if (!hw.length) main.append(h("div", { class: "karte" }, h("p", { class: "gedaempft", "data-handel-leer": "" }, "Noch keine Einkaufsprodukte. Eine Produktvorlage wird eins mit dem Haken „🛒 Einkaufsprodukt“ (Katalog → Produktvorlagen) — oder hier neu anlegen.")));
+    hw.forEach(function (v) { main.append(handelProdukt(v, kat, klasse)); });
+    main.append(h("div", { class: "band", style: "margin:10px 0" }, knopf("＋ Neues Einkaufsprodukt", function () {
+      var gb = KAT.gebietDa(kat, "handelsware") ? "handelsware" : (kat.gebiete[0] || {}).id || "";
+      var id = KAT.neueKennung(kat.vorlagen, "zukauf");
+      kat.vorlagen.push({ id: id, gebiet: gb, name: "Neues Einkaufsprodukt", einkaufsprodukt: true, einkauf: [], mengenregel: "stueck", einheitText: "Stk.", beschreibungVorgabe: "",
+        staffelVorgabe: [], verfahrenWahl: [], verfahrenVorgabe: "", farbenMax: 1, slots: [], schritte: [], versandArt: "keiner", markt: [], marktGrenzen: { online: 1, import: 500 }, verlauf: [], beispiele: [] });
+      katalogSpeichern(); S.offen["handel:" + id] = true; zeichne();
+    }, "pri", { id: "handel-neu" })));
+    main.append(lieferantenKarte(kat));
+    main.append(h("div", { class: "karte gedaempft klein", "data-handel-grenzen": "" },
+      h("p", { text: "Zwischenmengen werden nicht geschätzt: steht für eine Menge kein Einkauf da, rechnet die Position nicht und sagt das. Wie es stattdessen gehen soll, ist noch offen." }),
+      h("p", { text: "Wiederverkäuferpreise stehen bei vielen Lieferanten erst nach der Anmeldung — eingetragen wird, was auf deinem Konto oder deiner Rechnung steht." }),
+      h("p", { text: "Kundenrabatt und Skonto aus den Sätzen wirken bei Handelsware nicht — es zählen Handlungskosten, Gewinn und die Kundenklasse." })));
+  }
+  function handelProdukt(v, kat, klasse) {
+    var sf = K.saetzeFuer(kat, v, {}, null, { klasse: klasse }), einh = v.einheitText || "Stk.";
+    var auf = !!S.offen["handel:" + v.id];
+    var karte = h("div", { class: "karte", "data-handel-produkt": v.id });
+    var ph = (v.einkauf || []).some(function (x) { return x.platzhalter; }), phGb = !!(K.finde(kat.gebiete, v.gebiet) || {}).platzhalter;
+    karte.append(h("div", { class: "position-kopf" },
+      h("div", null, h("b", { text: v.name }), " ", ph ? h("span", { class: "platzhalter-marke", "data-einkauf-platzhalter": "", text: "Einkauf: Platzhalter" }) : null,
+        phGb ? h("span", { class: "badge gelb", "data-saetze-platzhalter": "", text: "Sätze: Platzhalter" }) : null),
+      knopf(auf ? "▾ Einkauf bearbeiten" : "✎ Einkauf bearbeiten", function () { S.offen["handel:" + v.id] = !auf; zeichne(); }, "klein" + (auf ? " on" : ""), { "data-handel-bearbeiten": v.id })));
+    karte.append(h("p", { class: "gedaempft klein", text: "Handlungskosten " + fmtPct(+sf.s.handlungskostenPct || 0) + " % · Gewinn " + fmtPct(+sf.s.gewinnPct || 0) + " %" + (sf.klasse ? " (mit " + sf.klasse + "-Kunde)" : "") }));
+    var zeilen = (v.einkauf || []).map(function (x, i) { return { x: x, i: i }; }).sort(function (a, b) { return (+a.x.menge || 0) - (+b.x.menge || 0) || a.i - b.i; });
+    if (!zeilen.length) karte.append(h("p", { class: "hinweis warn", text: "Noch kein Einkauf eingetragen — „✎ Einkauf bearbeiten“." }));
+    else {
+      var t = h("table", { class: "handel-tab", "data-handel-tabelle": v.id }, h("thead", null, h("tr", null,
+        ["Menge", "Lieferant", "Einkauf inkl. Versand", "+ Handlungsk.", "+ Gewinn", "Verkauf inkl. Versand netto", "je " + einh, "Aufschlag", "Spanne", ""].map(function (x, i) { return h("th", { class: i >= 2 && i <= 8 ? "r" : "", text: x }); }))));
+      var tb = h("tbody");
+      zeilen.forEach(function (z) {
+        var x = z.x, m = Math.round(+x.menge) || 0, lf = K.finde(kat.lieferanten, x.lieferant);
+        var lfZelle = h("td", null, lf ? lf.name : x.lieferant ? "„" + x.lieferant + "“ fehlt" : h("span", { class: "gedaempft", text: "—" }), " ", handelLink(x.url || (lf && lf.url), lf ? "" : "Link"));
+        if (x.gesamtCent == null || x.gesamtCent === "" || !(m > 0)) {
+          tb.append(h("tr", { "data-handel-zeile": String(m), "data-offen": "" }, h("td", { text: m ? m + " " + einh : "—" }), lfZelle,
+            h("td", { colspan: "8", class: "gedaempft", text: !(m > 0) ? "Menge fehlt" : "Einkaufspreis fehlt — nicht kalkuliert" })));
+          return;
+        }
+        var hd = K.handel(+x.gesamtCent, sf.s), zaehlt = K.einkaufFuer(v, m).treffer === x;
+        var spanne = hd.netto - hd.bezugspreis;
+        tb.append(h("tr", { "data-handel-zeile": String(m), "data-einkauf": String(hd.bezugspreis), "data-verkauf": String(hd.netto), class: zaehlt ? "" : "gedaempft" },
+          h("td", { text: m + " " + einh }), lfZelle,
+          h("td", { class: "r", text: euro(hd.bezugspreis) }), h("td", { class: "r", text: euro(hd.handlungskosten) }), h("td", { class: "r", text: euro(hd.gewinn) }),
+          h("td", { class: "r" }, h("b", { text: euro(hd.netto) })), h("td", { class: "r", text: euro(Math.round(hd.netto / m)) }),
+          h("td", { class: "r", "data-aufschlag": "", text: hd.bezugspreis ? fmtPct(Math.round(spanne / hd.bezugspreis * 10000) / 100) + " %" : "—" }),
+          h("td", { class: "r", "data-spanne": String(spanne), text: euro(spanne) + (hd.netto ? " · " + fmtPct(Math.round(spanne / hd.netto * 10000) / 100) + " %" : "") }),
+          h("td", null, zaehlt ? knopf("ins Angebot", function () { insAngebot(v, m); }, "klein pri", { "data-ins-angebot": v.id + ":" + m })
+            : h("span", { class: "klein", text: "teurer als ein anderer Einkauf für " + m }))));
+      });
+      t.append(tb);
+      karte.append(h("div", { class: "tabelle-huelle" }, t));
+      karte.append(h("p", { class: "gedaempft klein", text: "Aufschlag = auf den Einkauf · Spanne = Verkauf − Einkauf, in % vom Verkauf. Mehrere Einkäufe für dieselbe Menge: der günstigste zählt." }));
+    }
+    if (auf) karte.append(handelBearbeiten(v, kat));
+    return karte;
+  }
+  function handelBearbeiten(v, kat) {
+    var box = h("div", { class: "erklaer-feld", "data-handel-editor": v.id });
+    v.saetze = v.saetze || {}; v.einkauf = v.einkauf || [];
+    var gb = K.finde(kat.gebiete, v.gebiet) || { saetze: {} };
+    box.append(h("div", { class: "feldgitter" },
+      feld("Name", eingabe(v, "name", "text", null, zeichne)),
+      feld("Beschreibung (Kundenblatt)", eingabe(v, "beschreibungVorgabe", "text", null, zeichne)),
+      feld("Mengen-Einheit (Stk., Pack)", eingabe(v, "einheitText", "text", null, zeichne)),
+      feld("Handlungskosten % (leer = Gebiet: " + fmtPct(+gb.saetze.handlungskostenPct || 0) + ")", eingabe(v.saetze, "handlungskostenPct", "zahl", null, zeichne)),
+      feld("Gewinn % (leer = Gebiet: " + fmtPct(+gb.saetze.gewinnPct || 0) + ")", eingabe(v.saetze, "gewinnPct", "zahl", null, zeichne)),
+      feld("🛒 Einkaufsprodukt", eingabe(v, "einkaufsprodukt", "bool"))));
+    box.append(h("b", { text: "Einkauf — Komplettpreis je Menge, inkl. Versand" }));
+    v.einkauf.forEach(function (z, i) {
+      box.append(h("div", { class: "zeile", style: "align-items:flex-end", "data-einkauf-zeile": String(i) },
+        feld("Menge", eingabe(z, "menge", "zahl", null, zeichne)),
+        feld("gesamt inkl. Versand €", eingabe(z, "gesamtCent", "cent", null, zeichne)),
+        feld("Lieferant", h("select", { "data-kat-feld": "lieferant", onchange: function () { z.lieferant = this.value; katalogSpeichern(); zeichne(); } },
+          h("option", { value: "", text: "—" }), kat.lieferanten.map(function (l) { return h("option", { value: l.id, text: l.name, selected: l.id === z.lieferant }); }))),
+        feld("Link zum Produkt", eingabe(z, "url", "link", null, zeichne)),
+        feld("Stand", eingabe(z, "datum", "datum", null, zeichne)),
+        knopf("✕", function () { v.einkauf.splice(i, 1); katalogSpeichern(); zeichne(); }, "klein", { "aria-label": "Einkauf löschen" })));
+    });
+    box.append(knopf("＋ Einkauf", function () { v.einkauf.push({ menge: null, gesamtCent: null, lieferant: "", url: "", datum: A.heute() }); katalogSpeichern(); zeichne(); }, "klein", { "data-einkauf-neu": v.id }));
+    return box;
+  }
+  function lieferantenKarte(kat) {
+    var box = h("div", { class: "karte", "data-lieferanten": "" }, h("h3", { text: "Lieferanten" }));
+    if (!kat.lieferanten.length) box.append(h("p", { class: "gedaempft klein", text: "Noch keine Lieferanten eingetragen." }));
+    kat.lieferanten.forEach(function (l) {
+      box.append(h("div", { class: "zeile", "data-lieferant": l.id }, h("b", { text: l.name || l.id }), handelLink(l.url, "öffnen"),
+        h("span", { class: "badge", text: FUER_TEXT[l.fuer] || l.fuer || "—" }), h("span", { class: "badge", text: l.anmeldung ? "Konto nötig" : "ohne Konto" }),
+        l.geprueftAm ? h("span", { class: "badge ok", text: "geprüft " + datumDe(l.geprueftAm) }) : h("span", { class: "badge gelb", text: "ungeprüft" }),
+        l.notiz ? h("span", { class: "gedaempft klein", text: l.notiz }) : null));
+    });
+    box.append(h("div", { class: "band" }, knopf("Lieferanten bearbeiten (Katalog)", function () { S.katReiter = "lieferanten"; S.katOffen = null; geheZu("katalog"); }, "klein", { "data-lieferanten-bearbeiten": "" })));
+    var vs = (WC.LIEFERANTEN_VORSCHLAEGE || []).filter(function (x) { return !K.finde(kat.lieferanten, x.id); });
+    if (vs.length) {
+      var vb = h("details", { class: "erklaer-feld", "data-vorschlaege": String(vs.length) },
+        h("summary", null, h("b", { text: "Vorschläge zum Prüfen (" + vs.length + ")" }), " ", h("span", { class: "badge gelb", text: "nicht abgerufen — ungeprüft" })),
+        h("p", { class: "gedaempft klein", text: "Per Websuche gefunden (2026-10-12); die Seiten selbst ließen sich beim Bau nicht abrufen. Öffnen, ansehen, dann „✓ geprüft“ — erst das trägt den Lieferanten ein, mit heutigem Datum." }));
+      vs.forEach(function (x) {
+        vb.append(h("div", { class: "eintrag-kat", "data-vorschlag": x.id },
+          h("div", { class: "zeile" }, h("b", { text: x.name }), handelLink(x.url, "öffnen"), h("span", { class: "badge", text: FUER_TEXT[x.fuer] || x.fuer }), h("span", { class: "badge", text: x.anmeldung ? "Konto nötig" : "ohne Konto" })),
+          h("p", { class: "gedaempft klein", text: x.notiz }),
+          knopf("✓ geprüft — eintragen", function () {
+            var n = kopie(x); n.geprueftAm = A.heute(); kat.lieferanten.push(n); katalogSpeichern();
+            melde("„" + x.name + "“ eingetragen, geprüft am " + datumDe(n.geprueftAm) + ". „Für“, „Konto nötig“ und Notiz im Katalog anpassen, wenn es anders ist.", "");
+          }, "klein", { "data-vorschlag-uebernehmen": x.id })));
+      });
+      box.append(vb);
+    }
+    return box;
+  }
+
   /* ════ Katalog ════ */
   var FELDER = {
     gebiete: [["name", "Name", "text"]],
@@ -1016,21 +1204,35 @@
       ["breiteVorgabe", "Breite mm (Vorgabe)", "zahl"], ["hoeheVorgabe", "Höhe mm (Vorgabe)", "zahl"], ["abstandMm", "Abstand mm (Nesting)", "zahl"], ["farbenMax", "Farben höchstens", "zahl"],
       ["verfahrenWahl", "Verfahren (Auswahl)", "multi:verfahren"], ["verfahrenVorgabe", "Verfahren (Vorgabe)", "ref:verfahren"],
       ["versandArt", "Versand als", "wahl", ["stueck", "flach", "rolle", "keiner"]], ["volumenJeStueckL", "Volumen je Stück l", "zahl"], ["laengeMm", "Längstes Maß je Stück mm", "zahl"], ["dickeMm", "Dicke mm (flach/rolle)", "zahl"],
-      ["gewichtJeStueckG", "Zusatzgewicht je Stück g", "zahl"], ["zukaufEkCent", "Zukauf-EK je Stück € (Vergleich)", "cent"]],
+      ["gewichtJeStueckG", "Zusatzgewicht je Stück g", "zahl"], ["zukaufEkCent", "Zukauf-EK je Stück € (Vergleich)", "cent"],
+      ["einkaufsprodukt", "🛒 Einkaufsprodukt (fertig zugekauft) — steht dann nur noch auf der Seite Handelsware", "bool"]],
+    lieferanten: [["name", "Name", "text"], ["url", "Adresse (https://…)", "link"], ["fuer", "für", "wahl", ["wiederverkaeufer", "privat", "beides"]],
+      ["anmeldung", "Wiederverkäufer-Konto nötig", "bool"], ["notiz", "Notiz", "text"], ["geprueftAm", "geprüft am", "datum"]],
     verpackungen: [["name", "Name", "text"], ["innenL", "Innen L mm", "zahl"], ["innenB", "Innen B mm", "zahl"], ["innenH", "Innen H mm", "zahl"], ["eigengewichtG", "Eigengewicht g", "zahl"],
       ["ekCent", "Einkaufspreis €", "cent"], ["packMin", "Packen min", "zahl"], ["maxGewichtG", "max. Gewicht g", "zahl"]],
     versand: [["name", "Name", "text"], ["maxL", "max. Länge mm (0 = egal)", "zahl"], ["maxGurt", "max. Gurtmaß mm (0 = egal)", "zahl"], ["sperrgutCent", "Sperrgut-Zuschlag € (leer = keins)", "cent"], ["sperrgutMaxL", "Sperrgut bis Länge mm", "zahl"]],
   };
   var PREISFELDER = ["ekCent", "maschinensatzCent", "leistung", "ruestMin", "gewichtG", "verschnittPct", "packMin", "sperrgutCent"];
-  var KAT_NAMEN = { vorlagen: "Produktvorlagen", materialien: "Materialien", verfahren: "Verfahren", verpackungen: "Verpackungen", versand: "Versandtarife", gebiete: "Arbeitsgebiete" };
+  var KAT_NAMEN = { vorlagen: "Produktvorlagen", materialien: "Materialien", verfahren: "Verfahren", verpackungen: "Verpackungen", versand: "Versandtarife", gebiete: "Arbeitsgebiete", lieferanten: "Lieferanten" };
+  var FUER_TEXT = { wiederverkaeufer: "für Wiederverkäufer", privat: "für jeden (auch privat)", beides: "Wiederverkäufer und privat" };
 
   function eingabe(obj, key, typ, opt, onAenderung) {
     var w = obj[key];
-    function fertig(neu) { obj[key] = neu; var war = !!obj.platzhalter; if (PREISFELDER.indexOf(key) >= 0 || /Cent$/.test(key)) delete obj.platzhalter; katalogSpeichern(); if (onAenderung) onAenderung(); else if (war && !obj.platzhalter) zeichne(); }
+    function fertig(neu) {
+      if (key === "einkaufsprodukt") {
+        obj[key] = !!neu; if (neu) obj.einkauf = obj.einkauf || [];
+        katalogSpeichern();
+        melde(neu ? "„" + (obj.name || obj.id) + "“ ist jetzt ein Einkaufsprodukt und steht auf der Seite 🛒 Handelsware (nicht mehr unter den Produktvorlagen)." : "„" + (obj.name || obj.id) + "“ ist wieder ein selbst gefertigtes Produkt.", "");
+        return;
+      }
+      obj[key] = neu; var war = !!obj.platzhalter; if (PREISFELDER.indexOf(key) >= 0 || /Cent$/.test(key)) delete obj.platzhalter; katalogSpeichern(); if (onAenderung) onAenderung(); else if (war && !obj.platzhalter) zeichne(); }
     var at = { "data-kat-feld": key };
     if (typ === "text") return h("input", Object.assign(at, { value: w || "", onchange: function () { fertig(this.value); } }));
     if (typ === "zahl") return h("input", Object.assign(at, { inputmode: "decimal", value: w == null ? "" : deZahl(w), onchange: function () { fertig(zahlPunkt(this.value)); } }));
     if (typ === "cent") return h("input", Object.assign(at, { inputmode: "decimal", value: w == null || w === "" ? "" : G.formatCents(w), onchange: function () { var c = this.value.trim() === "" ? null : G.parseEuroToCents(this.value); fertig(Number.isFinite(c) ? c : null); } }));
+    if (typ === "link") return h("input", Object.assign(at, { type: "url", inputmode: "url", value: w || "", placeholder: "https://…", onchange: function () {
+      var v = this.value.trim(); if (v && !KAT.sichereAdresse(v)) { melde("Die Adresse muss mit https:// beginnen — nicht übernommen.", "bad"); return; } fertig(v); } }));
+    if (typ === "datum") return h("input", Object.assign(at, { type: "date", value: w || "", onchange: function () { fertig(this.value); } }));
     if (typ === "bool") return h("input", Object.assign(at, { type: "checkbox", checked: !!w, onchange: function () { fertig(this.checked); } }));
     if (typ === "wahl") return h("select", Object.assign(at, { onchange: function () { fertig(this.value); } }), opt.map(function (o) { return h("option", { value: o, text: o, selected: o === w }); }));
     if (typ === "gebiet") return h("select", Object.assign(at, { onchange: function () { fertig(this.value); } }), S.katalog.gebiete.map(function (gb) { return h("option", { value: gb.id, text: gb.name, selected: gb.id === w }); }));
@@ -1062,17 +1264,22 @@
         knopf("Startkatalog wiederherstellen", function () { if (confirm("Den ganzen Katalog durch den Startkatalog ersetzen? Eigene Einträge gehen verloren (vorher als Datei sichern).")) { S.katalog = kopie(WC.START); katalogSpeichern(); zeichne(); } }, "klein gefahr"))));
     main.append(gebieteKarte(kat));
     var nav = h("div", { class: "band", style: "margin-bottom:10px" });
-    Object.keys(KAT_NAMEN).forEach(function (k) { nav.append(knopf(KAT_NAMEN[k] + " (" + kat[k].length + ")", function () { S.katReiter = k; S.katOffen = null; zeichne(); }, "chip" + (S.katReiter === k ? " on" : ""), { "data-kat-reiter": k })); });
+    kat.lieferanten = kat.lieferanten || [];
+    Object.keys(KAT_NAMEN).forEach(function (k) { nav.append(knopf(KAT_NAMEN[k] + " (" + (k === "vorlagen" ? KAT.eigenfertigung(kat) : kat[k]).length + ")", function () { S.katReiter = k; S.katOffen = null; zeichne(); }, "chip" + (S.katReiter === k ? " on" : ""), { "data-kat-reiter": k })); });
     main.append(nav);
-    var liste = kat[S.katReiter] || [];
+    /* Einkaufsprodukte stehen auf der Seite „🛒 Handelsware“ — hier nur die selbst gefertigten. Gelöscht/kopiert wird in der GANZEN Liste. */
+    var alle = kat[S.katReiter] || [], liste = S.katReiter === "vorlagen" ? KAT.eigenfertigung(kat) : alle;
     var karte = h("div", { class: "karte katalog-liste" });
+    var nHw = KAT.handelsware(kat).length;
+    if (S.katReiter === "vorlagen" && nHw) karte.append(h("p", { class: "gedaempft klein", "data-kat-handel": String(nHw) }, nHw + " Einkaufsprodukt(e) stehen auf der Seite ", knopf("🛒 Handelsware", function () { geheZu("handel"); }, "klein"), "."));
+    if (S.katReiter === "lieferanten") karte.append(h("p", { class: "gedaempft klein", text: "Lieferanten für Handelsware (fertig eingekauft). Eintragen, was geprüft ist — Vorschläge stehen auf der Seite 🛒 Handelsware." }));
     liste.forEach(function (x) {
       var auf = S.katOffen === x.id;
       var kopfZ = h("div", { class: "band", style: "justify-content:space-between" },
         h("button", { type: "button", class: "btn klein", "data-kat-eintrag": x.id, onclick: function () { S.katOffen = auf ? null : x.id; zeichne(); } }, (auf ? "▾ " : "▸ ") + (x.name || x.id)),
         h("span", { class: "band" }, x.platzhalter ? h("span", { class: "platzhalter-marke", text: "Platzhalter" }) : null,
-          knopf("⧉", function () { var c = kopie(x); c.id = KAT.neueKennung(liste, x.id + "_kopie"); c.name = (x.name || "") + " (Kopie)"; c.verlauf = []; liste.push(c); katalogSpeichern(); S.katOffen = c.id; zeichne(); }, "klein", { "aria-label": "Kopieren", title: "Kopieren" }),
-          knopf("✕", function () { if (!confirm("„" + (x.name || x.id) + "“ löschen?")) return; S.katalog[S.katReiter] = liste.filter(function (q) { return q !== x; }); katalogSpeichern(); zeichne(); }, "klein gefahr", { "aria-label": "Löschen", title: "Löschen" })));
+          knopf("⧉", function () { var c = kopie(x); c.id = KAT.neueKennung(alle, x.id + "_kopie"); c.name = (x.name || "") + " (Kopie)"; c.verlauf = []; alle.push(c); katalogSpeichern(); S.katOffen = c.id; zeichne(); }, "klein", { "aria-label": "Kopieren", title: "Kopieren" }),
+          knopf("✕", function () { if (!confirm("„" + (x.name || x.id) + "“ löschen?")) return; S.katalog[S.katReiter] = alle.filter(function (q) { return q !== x; }); katalogSpeichern(); zeichne(); }, "klein gefahr", { "aria-label": "Löschen", title: "Löschen" })));
       var e = h("div", { class: "eintrag-kat", "data-kat-id": x.id }, kopfZ);
       if (auf) {
         e.append(felderFuer(x, FELDER[S.katReiter] || [], null));
@@ -1083,7 +1290,7 @@
       karte.append(e);
     });
     karte.append(knopf("＋ " + (KAT_NAMEN[S.katReiter] || "Eintrag"), function () {
-      var n = neuerEintrag(S.katReiter); liste.push(n); katalogSpeichern(); S.katOffen = n.id; zeichne();
+      var n = neuerEintrag(S.katReiter); alle.push(n); katalogSpeichern(); S.katOffen = n.id; zeichne();
     }, "pri", { id: "kat-neu" }));
     main.append(karte);
   }
@@ -1111,6 +1318,7 @@
     if (art === "verfahren") return { id: id, gebiet: gb, name: "Neues Verfahren", maschinensatzCent: null, leistung: 0, leistungEinheit: "stueck", ruestMin: 0, farbregel: "ein", jeFarbe: false };
     if (art === "vorlagen") return { id: id, gebiet: gb, name: "Neues Produkt", mengenregel: "stueck", verfahrenWahl: [], verfahrenVorgabe: "", farbenMax: 1, slots: [], schritte: [], staffelVorgabe: [1],
       versandArt: "stueck", volumenJeStueckL: 0, laengeMm: 0, markt: [], marktGrenzen: { online: 50, import: 500 }, verlauf: [], beispiele: [] };
+    if (art === "lieferanten") return { id: id, name: "Neuer Lieferant", url: "", fuer: "wiederverkaeufer", anmeldung: false, notiz: "", geprueftAm: "" };
     if (art === "verpackungen") return { id: id, name: "Neue Verpackung", innenL: 0, innenB: 0, innenH: 0, eigengewichtG: 0, ekCent: null, packMin: 0 };
     if (art === "versand") return { id: id, name: "Neuer Dienst", maxL: 0, maxGurt: 0, sperrgutCent: null, stufen: [] };
     return { id: id, name: "Neues Arbeitsgebiet", saetze: kopie(S.katalog.gebiete[0] ? S.katalog.gebiete[0].saetze : {}), klassen: kopie(S.katalog.gebiete[0] ? S.katalog.gebiete[0].klassen : {}) };
@@ -1324,6 +1532,12 @@
       lsSet(LS.thema, hell ? "light" : "dark"); zeichneKopf();
     });
     document.getElementById("neuladen").addEventListener("click", neuLaden);
+    var hkn = document.getElementById("handel-knopf"); if (hkn) hkn.addEventListener("click", function () { geheZu("handel"); });
+    if (location.hash === "#handel") S.reiter = "handel"; else if (S.reiter === "handel") adresseSetzen("handel");
+    window.addEventListener("hashchange", function () {
+      if (location.hash === "#handel") { if (S.reiter !== "handel") { S.reiter = "handel"; lsSet(LS.reiter, "handel"); S.meldung = null; zeichne(); } }
+      else if (S.reiter === "handel") { S.reiter = "angebote"; lsSet(LS.reiter, "angebote"); zeichne(); }
+    });
     glanz();
     Promise.all([dbAlle("angebote"), dbAlle("kunden")]).then(function (r) {
       S.angebote = r[0].sort(function (a, b) { return a.id < b.id ? 1 : -1; });

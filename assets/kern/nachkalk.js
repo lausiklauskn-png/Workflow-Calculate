@@ -2,14 +2,15 @@
    Rechnet nur; die Eingabe steht in app.js. Erfasst wird am GESTELLTEN Angebot (a.ist), gerechnet mit dessen
    eingefrorenem Stand — verglichen wird mit dem, was angeboten wurde, nicht mit dem heutigen Katalog.
 
-   a.ist = { pos: { "P-1": { minuten, materialCent, maschinenH } }, versandCent, datum, notiz }
+   a.ist = { pos: { "P-1": { minuten, materialCent, maschinenH, einkaufCent } }, versandCent, datum, notiz }
+   einkaufCent: nur bei Handelsware — der wirkliche Einkauf komplett inkl. Versand (Rechnung des Lieferanten).
    ⚠ Ein leeres Feld heißt „nicht erfasst“, nicht 0. Es zählt dann mit dem Plan, und das wird gesagt.
    ⚠ Ist-Minuten sind ARBEITSzeit (Lohn) — die Maschinenlaufzeit steht getrennt (maschinenH).
    Klassisches Skript: window.WC.nachkalk bzw. globalThis.WC.nachkalk. */
 (function (g) {
   "use strict";
   var WC = g.WC = g.WC || {};
-  var FELDER = ["minuten", "materialCent", "maschinenH"];
+  var FELDER = ["minuten", "materialCent", "maschinenH", "einkaufCent"];
   var PASST_PCT = 2;
   function zahl(x) { if (x === "" || x == null) return null; var n = Number(x); return Number.isFinite(n) && n >= 0 ? n : null; }
   function rund(x) { return Math.round(x); }
@@ -18,9 +19,25 @@
   function erfassteFelder(ist) { return FELDER.filter(function (f) { return zahl(ist[f]) != null; }); }
 
   /* Eine Position: erg = WC.kalk.position(…) des gestellten Angebots */
+  /* Handelsware: Ist-Einkauf statt Lohn/Material/Maschine; die Handlungskosten mit demselben Satz wie geplant */
+  function handelPosition(erg, ist) {
+    var ek = zahl(ist.einkaufCent), felder = ek != null ? ["einkaufCent"] : [];
+    var hdIst = WC.kalk.handel(ek != null ? rund(ek) : erg.handel.bezugspreis, erg.saetze);
+    return {
+      felder: felder, erfasst: felder.length > 0, handel: true,
+      plan: { minuten: 0, mek: erg.mek, fek: 0, maschine: 0, maschinenH: 0, einkauf: erg.handel.bezugspreis, selbstkosten: erg.selbstkosten },
+      ist: { minuten: null, mek: hdIst.bezugspreis, fek: 0, maschine: 0, maschinenH: null, einkauf: ek != null ? rund(ek) : null, selbstkosten: hdIst.selbstkosten },
+      netto: erg.netto,
+      dbPlan: erg.netto - erg.selbstkosten, dbIst: erg.netto - hdIst.selbstkosten,
+      skDiff: hdIst.selbstkosten - erg.selbstkosten,
+      einkaufDiff: ek != null ? rund(ek) - erg.handel.bezugspreis : null,
+      minutenPct: null,
+    };
+  }
   function position(erg, ist) {
     ist = ist || {};
-    var felder = erfassteFelder(ist);
+    if (erg.handel) return handelPosition(erg, ist);
+    var felder = erfassteFelder(ist).filter(function (f) { return f !== "einkaufCent"; });
     var min = zahl(ist.minuten), mat = zahl(ist.materialCent), mh = zahl(ist.maschinenH);
     var fek = min != null ? rund(min / 60 * erg.effektiv.lohnCent) : erg.fek;
     var mek = mat != null ? rund(mat) : erg.mek;

@@ -99,6 +99,55 @@
     return { bezugspreis: bez, handlungskosten: hk, selbstkosten: sk, gewinn: gew, netto: sk + gew };
   }
 
+  /* ── Handelsware (Einkaufsprodukt, Klaus 2026-10-13): fertig eingekauft, mit Aufschlag weiterverkauft ──
+     vorlage.einkauf = [{ menge, gesamtCent, lieferant, url, datum }] — Komplettpreis je Menge INKL. Versand.
+     Verkauf = handel(Einkauf) als EINE Position, ebenfalls inkl. Versand (kein eigener Versandposten, s. angebot.js).
+     ⚠ Zwischenmengen werden NICHT geschätzt: steht für die Menge kein Einkauf da, ist die Position offen.
+     Mehrere Einkäufe für dieselbe Menge (Lieferanten im Vergleich): der günstigste zählt, und es steht dabei. */
+  function einkaufFuer(vorlage, menge) {
+    var l = (vorlage.einkauf || []).filter(function (x) { return x && Math.round(+x.menge) === menge && zahl(x.gesamtCent) != null; });
+    l.sort(function (a, b) { return a.gesamtCent - b.gesamtCent; });
+    return { treffer: l[0] || null, anzahl: l.length };
+  }
+  function einkaufsMengen(vorlage) {
+    var m = (vorlage.einkauf || []).map(function (x) { return Math.round(+x.menge); }).filter(function (n) { return n > 0; });
+    return m.filter(function (n, i) { return m.indexOf(n) === i; }).sort(function (a, b) { return a - b; });
+  }
+  function handelPosition(kat, vorlage, pos, menge, sf, e) {
+    var offen = [], weg = [];
+    var ek = einkaufFuer(vorlage, menge), ein = ek.treffer, mengen = einkaufsMengen(vorlage), einh = " " + (vorlage.einheitText || "Stk.");
+    if (!ein) {
+      var stehtDa = (vorlage.einkauf || []).some(function (x) { return x && Math.round(+x.menge) === menge; });
+      offen.push(stehtDa ? "Einkaufspreis für " + menge + einh + " fehlt"
+        : "für " + menge + einh + " ist kein Einkauf eingetragen" + (mengen.length ? " (eingetragen: " + mengen.join(", ") + ")" : "") + " — Zwischenmengen werden nicht geschätzt");
+    }
+    var bez = ein ? Math.round(+ein.gesamtCent) : 0, hd = handel(bez, sf.s);
+    var lf = ein ? finde(kat.lieferanten, ein.lieferant) : null;
+    if (ein) {
+      weg.push("Einkauf " + menge + einh + " komplett inkl. Versand: " + (bez / 100).toFixed(2).replace(".", ",") + " €" + (lf ? " · " + lf.name : "") + (ein.datum ? " · Stand " + ein.datum : ""));
+      if (ek.anzahl > 1) weg.push(ek.anzahl + " Einkäufe für diese Menge eingetragen — der günstigste zählt");
+      weg.push("+ Handlungskosten " + r2(+sf.s.handlungskostenPct || 0) + " % · + Gewinn " + r2(+sf.s.gewinnPct || 0) + " % → Verkauf komplett inkl. Versand, ohne eigenen Versandposten");
+    }
+    var zeilen = [["bezugspreis", "Einkauf komplett inkl. Versand (Bezugspreis)", hd.bezugspreis], ["handlungskosten", "+ Handlungskosten " + r2(+sf.s.handlungskostenPct || 0) + " %", hd.handlungskosten],
+      ["selbstkosten", "= Selbstkosten", hd.selbstkosten], ["gewinn", "+ Gewinn " + r2(+sf.s.gewinnPct || 0) + " %", hd.gewinn], ["listenpreis", "= Verkauf komplett inkl. Versand netto", hd.netto]]
+      .map(function (z) { return { key: z[0], text: z[1], cent: z[2] }; });
+    var sch = { herstellkosten: hd.bezugspreis, selbstkosten: hd.selbstkosten, listenpreis: hd.netto, zeilen: zeilen };
+    var eigen = pos.eigen && zahl(pos.eigen[menge]) != null ? Math.round(+pos.eigen[menge]) : null;
+    var netto = eigen != null ? eigen : hd.netto;
+    return {
+      ok: offen.length === 0, offen: offen, vorlage: vorlage.id, menge: menge, farben: 1, farbFaktor: 1, stiche: 0,
+      material: [], zeiten: [], minuten: 0, maschinenH: 0, gewichtG: 0, m2Motiv: 0,
+      fek: 0, maschine: 0, mek: hd.bezugspreis, maschinensatzCent: null,
+      schema: sch, selbstkosten: hd.selbstkosten, herstellkosten: hd.bezugspreis, nettoKalk: hd.netto,
+      eigen: eigen, netto: netto, stueckCent: menge ? Math.round(netto / menge) : 0,
+      saetze: sf.s, effektiv: e, quelle: sf.quelle, klasse: sf.klasse, weg: weg,
+      platzhalter: !!(sf.gebiet.platzhalter || vorlage.platzhalter || (ein && ein.platzhalter)),
+      lage: lage(netto, sch), ustSatz: zahl(sf.s.ustSatz) == null ? 19 : +sf.s.ustSatz,
+      handel: { bezugspreis: hd.bezugspreis, handlungskosten: hd.handlungskosten, gewinn: hd.gewinn, lieferant: ein ? String(ein.lieferant || "") : "",
+        lieferantName: lf ? lf.name : "", url: ein ? String(ein.url || (lf && lf.url) || "") : "", datum: ein ? String(ein.datum || "") : "", mengen: mengen },
+    };
+  }
+
   /* ── Eine Position rechnen ──
      pos: { vorlage, menge, breiteMm, hoeheMm, farben, verfahren, wahl:{slotId: materialId|""}, zeiten:{schrittId:{…}}, saetze:{}, eigen:{menge: cent} }
      ctx: { angebot, kunde, menge } → Ergebnis mit ok/offen, allen Zeilen und dem Rechenweg */
@@ -108,6 +157,7 @@
     if (!vorlage) return { ok: false, offen: ["Vorlage fehlt"], weg: [] };
     var menge = Math.max(0, Math.round(Number(ctx.menge != null ? ctx.menge : pos.menge) || 0));
     var sf = saetzeFuer(kat, vorlage, pos, ctx.angebot, ctx.kunde), e = effektiv(sf.s);
+    if (vorlage.einkaufsprodukt) return handelPosition(kat, vorlage, pos, menge, sf, e);
     var offen = [], weg = [];
     var verfahren = finde(kat.verfahren, pos.verfahren || vorlage.verfahrenVorgabe);
     if ((vorlage.verfahrenWahl || []).length && !verfahren) offen.push("Verfahren fehlt");
@@ -276,5 +326,5 @@
 
   WC.kalk = { SATZ_KEYS: SATZ_KEYS, SATZ_LABEL: SATZ_LABEL, saetzeFuer: saetzeFuer, effektiv: effektiv, schema: schema, handel: handel,
     position: position, staffel: staffel, lage: lage, rueckrechnen: rueckrechnen, uebernehmen: uebernehmen, ruecknehmen: ruecknehmen,
-    stundensatzRechner: stundensatzRechner, zuschlagsRechner: zuschlagsRechner, finde: finde, kopie: kopie };
+    stundensatzRechner: stundensatzRechner, zuschlagsRechner: zuschlagsRechner, finde: finde, kopie: kopie, einkaufFuer: einkaufFuer, einkaufsMengen: einkaufsMengen };
 })(typeof window !== "undefined" ? window : globalThis);
