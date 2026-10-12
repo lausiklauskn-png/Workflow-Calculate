@@ -241,8 +241,10 @@ const FAELLE = [
   { name: "KLEIN-SEITE: Vorgabe kommt nicht in den Katalog", probe: B, erwartet: "KLEIN-SEITE: 2 Tassen",
     an: [["assets/app.js", "    katalogErgaenzen(S.katalog);\n", ""]] },
   /* ── Anfrage, Ähnlichkeit, Entwurf (Klaus 2026-10-13) ── */
+  /* zwei Riegel decken einander (Telefon-Filter und Warenwort-Regel) — der Fall nimmt beide zugleich weg */
   { name: "ANFRAGE: Telefon wird als Menge gelesen", probe: K, erwartet: "ANFRAGE: Datum, PLZ, Telefon",
-    an: [["assets/kern/anfrage.js", '.replace(/\\+?\\d[\\d /-]{6,}\\d/g, " ")', ""]] },
+    an: [["assets/kern/anfrage.js", '.replace(/\\+?\\d[\\d /-]{6,}\\d/g, " ")', ""],
+         ["assets/kern/anfrage.js", "      if (!einheit && !(wort && vokabel.indexOf(wort) >= 0)) continue;", "      if (!einheit && !wort) continue;"]] },
   { name: "ANFRAGE: Kundennummer wird ignoriert", probe: K, erwartet: "ANFRAGE: Kunde über die Kundennummer",
     an: [["assets/kern/anfrage.js", 'if (nr) { k = kunden.filter(', 'if (false) { k = kunden.filter(']] },
   { name: "ANFRAGE: .eml wird als Klartext gelesen", probe: K, erwartet: "ANFRAGE: .eml — Absender und Betreff dekodiert",
