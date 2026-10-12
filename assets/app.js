@@ -95,6 +95,13 @@
       img.src = url;
     });
   }
+  /* Unterlagen: Datei Byte für Byte (kein Verkleinern), mit Dateityp — Corel, PSD, AI, PDF, Bilder */
+  function dateiSpeichern(datei) {
+    var typ = WC.unterlagen.typVon(datei.name, datei.type);
+    var blob = new Blob([datei], { type: typ });
+    var id = "D-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    return dbPut("bilder", { id: id, blob: blob, name: datei.name || "" }).then(function () { bildUrls[id] = URL.createObjectURL(blob); return { id: id, typ: typ }; });
+  }
   /* Quelle eines Bildes: „svg:…“ (Zeichnung aus dem Startkatalog) oder „img:B-…“ bzw. „B-…“ (eigenes Foto) */
   function bildQuelle(ref) {
     ref = String(ref || "");
@@ -111,7 +118,7 @@
     var l = [];
     S.angebote.forEach(function (a) { a.positionen.forEach(function (p) { (p.bilder || []).forEach(function (b) { l.push(b); }); }); });
     (S.katalog.vorlagen || []).forEach(function (v) { (v.beispiele || []).forEach(function (b) { (b.ansichten || []).forEach(function (x) { if (/^img:/.test(x[1])) l.push(x[1].slice(4)); }); }); });
-    return l;
+    return l.concat(WC.unterlagen.dateiIds(S.angebote));
   }
 
   /* ── Hilfen ── */
@@ -210,15 +217,16 @@
     S.reiter = "angebot"; lsSet(LS.reiter, "angebot"); S.meldung = null; zeichne();
   }
   /* Vorhandene Kalkulation übernehmen (Klaus 2026-10-12: „nachfolgende Kalkulationen abkürzen“) */
-  function angebotKopieren(alt) {
+  function angebotKopieren(alt, andererKunde) {
     var a = A.neu(S.angebote);
     ["titel", "kundeId", "kunde", "saetze", "versand", "zaehler", "notiz"].forEach(function (k) { a[k] = kopie(alt[k]); });
+    if (andererKunde) { a.kundeId = ""; a.kunde = { name: "", anschrift: "", klasse: "B" }; }
     a.positionen = kopie(alt.positionen);
     a.fassung = 1; delete a.vorgaenger; delete a.ersetztDurch;
     a.notiz = "Übernommen aus " + alt.nummer;
     S.angebote.unshift(a); S.aktiv = a.id; lsSet(LS.aktiv, a.id); merken(a);
     S.reiter = "angebot"; lsSet(LS.reiter, "angebot");
-    melde("Neues Angebot " + a.nummer + " aus " + alt.nummer + " übernommen — gerechnet wird mit den aktuellen Katalogwerten. Kunde, Mengen, Material anpassen.", "");
+    melde("Neues Angebot " + a.nummer + " aus " + alt.nummer + " übernommen" + (andererKunde ? " — für einen anderen Kunden: oben den Kunden wählen" : "") + ". Gerechnet wird mit den aktuellen Katalogwerten; Bilder und Unterlagen sind mit dabei. Mengen und Material anpassen.", "");
   }
   function zAngebote(main) {
     main.append(h("div", { class: "karte held" },
@@ -249,8 +257,9 @@
       var r = A.rechne(a, kat, kundeVon(a), S.einst.kleinunternehmer);
       tb.append(h("tr", { "data-angebot-zeile": a.id, style: "cursor:pointer", onclick: function () { S.aktiv = a.id; lsSet(LS.aktiv, a.id); S.reiter = "angebot"; zeichne(); } },
         h("td", { text: a.nummer + (A.fassungVon(a) > 1 ? " · F" + A.fassungVon(a) : "") }), h("td", { text: (kundeVon(a) || {}).name || "—" }), h("td", { text: a.titel || "" }),
-        h("td", { text: a.ersetztDurch ? "ersetzt" : a.status === "gestellt" ? "gestellt 🔒" : "Entwurf" }), h("td", { class: "r", text: euro(r.summen.netto) }),
-        h("td", null, knopf("⧉ als neues Angebot", function (ev) { ev.stopPropagation(); angebotKopieren(a); }, "klein", { "data-kopieren": a.id, title: "Kalkulation übernehmen und anpassen" }))));
+        h("td", { text: a.ersetztDurch ? "ersetzt" : a.angenommen ? "angenommen ✅" : a.status === "gestellt" ? "gestellt 🔒" : "Entwurf" }), h("td", { class: "r", text: euro(r.summen.netto) }),
+        h("td", null, knopf("⧉ als neues Angebot", function (ev) { ev.stopPropagation(); angebotKopieren(a); }, "klein", { "data-kopieren": a.id, title: "Kalkulation übernehmen und anpassen" }), " ",
+          knopf("⧉ für anderen Kunden", function (ev) { ev.stopPropagation(); angebotKopieren(a, true); }, "klein", { "data-kopieren-anderer": a.id, title: "Positionen, Bilder und Unterlagen übernehmen, Kunde neu wählen" }))));
     });
     t.append(tb);
     main.append(h("div", { class: "karte" }, h("div", { class: "tabelle-huelle" }, t)));
@@ -444,6 +453,8 @@
           knopf("🖨 Drucken / PDF", function () { drucke(a); }, "pri klein", { id: "druck-angebot" }),
           knopf("📤 An WorkFloh übergeben", function () { uebergeben(a); }, "klein", { id: "uebergabe" }),
           knopf("🧾 An BookLedgerPro", function () { anBlp(a); }, "klein", { id: "an-blp" }),
+          a.status === "gestellt" && !a.ersetztDurch ? (a.angenommen ? h("span", { class: "badge ok", "data-angenommen": a.angenommen.datum }, "✅ angenommen " + datumDe(a.angenommen.datum))
+            : knopf("✅ Auftrag erteilt (angenommen)", function () { var r = WC.unterlagen.annehmen(a, A.heute()); if (!r.ok) { melde(r.grund, "warn"); return; } merken(a); melde("Als angenommen markiert. Jetzt Entwurf, Fotos des fertigen Produkts und Dateien unter „📎 Unterlagen“ anhängen.", ""); }, "klein", { id: "annehmen" })) : null,
           ro ? null : knopf("🔒 Angebot stellen", function () { A.stellen(a, S.katalog); merken(a); melde("Angebot gestellt — Sätze und Einkaufspreise sind jetzt eingefroren. Änderungen ergeben eine neue Fassung.", ""); }, "klein", { id: "stellen" }))),
       ro ? nurLesenBanner(a) : null,
       a.notiz ? h("p", { class: "gedaempft klein", "data-notiz": "" }, a.beispiel ? h("span", { class: "badge gelb", text: "Beispiel" }) : null, " " + a.notiz) : null,
@@ -630,10 +641,14 @@
     if (!d.positionen.length) { melde("Noch keine kalkulierte Position — nichts zu übergeben.", "warn"); return; }
     var auf = WC.uebergabe.auftrag(d);
     var ids = []; a.positionen.forEach(function (p) { (p.bilder || []).forEach(function (b) { if (ids.indexOf(b) < 0) ids.push(b); }); });
-    Promise.all(ids.map(function (id, i) { return dbGet("bilder", id).then(function (x) { return x && x.blob ? { name: a.nummer + "_Bild-" + (i + 1) + ".jpg", blob: x.blob } : null; }); }))
+    var ul = WC.unterlagen.fuerWorkFloh(a);
+    Promise.all(ids.map(function (id, i) { return dbGet("bilder", id).then(function (x) { return x && x.blob ? { name: a.nummer + "_Bild-" + (i + 1) + ".jpg", blob: x.blob } : null; }); })
+      .concat(ul.dateien.map(function (u) { return dbGet("bilder", u.datei).then(function (x) { return x && x.blob ? { name: u.name, blob: x.blob } : null; }); })))
       .then(function (l) { return WC.uebergabe.dateien(l.filter(Boolean)); })
       .then(function (fs) {
         auf.files = fs;
+        /* Unterlagen (Klaus: „Dateien mitgeben an WorkFloh“): Dateien hängen an, Links und Notizen stehen im Auftragstext */
+        if (ul.text) auf.data.beschreibung += "\n" + ul.text;
         var text = JSON.stringify(WC.uebergabe.buendel([auf]), null, 1);
         window.__wcUebergabe = text;
         herunterladen(WC.uebergabe.dateiname(d), text, "application/json");
@@ -699,6 +714,7 @@
       bildSpeichern(file).then(function (id) { vorher(a); p.bilder = (p.bilder || []).concat([id]); merken(a); zeichne(); }, function () { melde("Das Bild ließ sich nicht lesen.", "bad"); });
     } })));
     karte.append(h("div", { class: "zeile" }, h("span", { class: "gedaempft klein", text: "Bilder (Motiv, Mockup — das erste kommt aufs Angebot):" }), daumen));
+    karte.append(unterlagenFeld(a, p, v));
 
     /* Ergebnis */
     if (!e.ok) {
@@ -751,6 +767,52 @@
     if (S.offen[p.id + ":markt"]) karte.append(marktFeld(a, p, v, e));
     if (S.offen[p.id + ":bsp"]) karte.append(galerie(v, kat, ctx, null));
     return karte;
+  }
+  /* ── 📎 Unterlagen: Entwurf, fertiges Produkt (Ansichten), Dateien (Corel, PSD, AI, PDF), Links — intern, nie aufs Kundenblatt ── */
+  function unterlagenFeld(a, p, v) {
+    var U = WC.unterlagen, liste = p.unterlagen || [];
+    var box = h("details", { class: "erklaer-feld", "data-unterlagen": p.id, open: !!S.offen[p.id + ":ul"] || null,
+      ontoggle: function () { S.offen[p.id + ":ul"] = this.open; } },
+      h("summary", null, h("b", { text: "📎 Unterlagen" + (liste.length ? " (" + liste.length + ")" : "") }), " ",
+        h("span", { class: "badge intern", text: "🔒 intern · geht an WorkFloh mit" })));
+    function sag(t) { melde(t, "bad"); }
+    var bilder = liste.filter(U.istBild), andere = liste.filter(function (u) { return !U.istBild(u); });
+    if (bilder.length) box.append(h("div", { class: "daumen", "data-unterlagen-bilder": "" }, bilder.map(function (u) {
+      return h("figure", { "data-unterlage": u.id, style: "margin:0" }, h("img", { src: bildQuelle(u.datei), alt: u.name, style: "max-height:120px" }),
+        h("figcaption", { class: "klein" }, h("span", { class: "badge", text: U.ARTEN[u.art] }), " " + (u.notiz || u.name) + " ",
+          knopf("✕", function () { if (!confirm("„" + u.name + "“ entfernen?")) return; U.weg(p, u.id); merken(a); zeichne(); }, "klein", { "aria-label": "Unterlage entfernen" })));
+    })));
+    if (andere.length) box.append(h("ul", { class: "weg", "data-unterlagen-dateien": "" }, andere.map(function (u) {
+      return h("li", { "data-unterlage": u.id }, h("span", { class: "badge", text: U.ARTEN[u.art] }), " ",
+        u.art === "link" ? h("a", { href: u.url, target: "_blank", rel: "noopener noreferrer", text: u.name + " ↗" })
+          : h("a", { href: bildQuelle(u.datei) || "#", download: u.name, text: u.name + " (" + U.groesseText(u.groesse) + ") ⬇" }),
+        u.notiz ? " — " + u.notiz : "", " ",
+        knopf("✕", function () { if (!confirm("„" + u.name + "“ entfernen?")) return; U.weg(p, u.id); merken(a); zeichne(); }, "klein", { "aria-label": "Unterlage entfernen" }));
+    })));
+    var art = h("select", { "data-unterlage-art": p.id, "aria-label": "Art" }, [["entwurf", "Entwurf (Bild)"], ["fertig", "Fertiges Produkt (Bild)"], ["datei", "Datei (Corel, PSD, AI, PDF …)"]].map(function (x) { return h("option", { value: x[0], text: x[1] }); }));
+    var notiz = h("input", { placeholder: "Notiz (z. B. „Ansicht vorne“, „Freigabe 12.10.“)", "data-unterlage-notiz": p.id, style: "flex:1 1 200px;min-width:0" });
+    box.append(h("div", { class: "zeile" }, art, notiz, h("label", { class: "btn klein" }, "＋ Dateien wählen", h("input", { type: "file", multiple: true, hidden: true, "data-unterlage-datei": p.id, onchange: function () {
+      var files = Array.prototype.slice.call(this.files || []), gewaehlt = art.value, nz = notiz.value;
+      var fehler = [];
+      files.reduce(function (kette, f) {
+        return kette.then(function () {
+          var pr = U.pruefeDatei(f.name, f.size); if (!pr.ok) { fehler.push(pr.grund); return; }
+          return dateiSpeichern(f).then(function (d) { var r = U.dazu(p, { art: gewaehlt, name: f.name, typ: d.typ, groesse: f.size, datei: d.id, notiz: nz }, A.heute()); if (!r.ok) fehler.push(r.grund); });
+        });
+      }, Promise.resolve()).then(function () { merken(a); S.offen[p.id + ":ul"] = true; if (fehler.length) sag("Nicht angehängt: " + fehler.join(" · ")); else zeichne(); });
+    } }))));
+    var url = h("input", { type: "url", placeholder: "https://… (Datei in der Cloud, Bildgenerierung, Freigabe)", "data-unterlage-url": p.id, style: "flex:1 1 260px;min-width:0" });
+    box.append(h("div", { class: "zeile" }, url, knopf("＋ Link", function () {
+      var r = U.dazu(p, { art: "link", url: url.value, name: url.value, notiz: notiz.value }, A.heute());
+      if (!r.ok) { sag(r.grund); return; } merken(a); S.offen[p.id + ":ul"] = true; zeichne();
+    }, "klein", { "data-unterlage-link": p.id })));
+    if (bilder.length && v && !v.einkaufsprodukt) box.append(knopf("★ Als Beispiel in die Vorlage „" + v.name + "“", function () {
+      var vk = finde(S.katalog.vorlagen, v.id), r = U.beispielAus(a, p, vk);
+      if (!r.ok) { sag(r.grund); return; }
+      katalogSpeichern(); melde("Beispiel „" + r.beispiel.titel + "“ mit " + r.beispiel.ansichten.length + " Ansicht(en) steht jetzt in der Vorlage „" + v.name + "“ — bei „＋ Position“ zu sehen, der Preis wird dort frisch gerechnet.", "");
+    }, "klein", { "data-als-beispiel": p.id }));
+    box.append(h("p", { class: "gedaempft klein", text: "Höchstens " + U.groesseText(U.MAX_BYTES) + " je Datei, gespeichert unverändert auf diesem Gerät (in der Sicherung mit drin). Nie auf dem Kundenblatt; bei „An WorkFloh übergeben“ gehen sie mit." }));
+    return box;
   }
   function abstandText(e) {
     var d = e.eigen - e.nettoKalk, pct = e.nettoKalk ? Math.round(d / e.nettoKalk * 1000) / 10 : 0;

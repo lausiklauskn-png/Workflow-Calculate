@@ -557,6 +557,68 @@ try {
     await s12.ctx.close();
   }
 
+  /* ── 📎 Unterlagen am angenommenen Angebot: Entwurf, fertiges Produkt, Corel-Datei, Link ── */
+  {
+    const s13 = await seite(1200), q = s13.p;
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDK+mmyAAAAABJRU5ErkJggg==", "base64");
+    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await tippe(q, "#neues-angebot", "Neues Angebot");
+    await q.fill("#kunde-neu-name", "Sportverein Beispiel e.V."); await tippe(q, "#kunde-neu-anlegen", "Kunde anlegen");
+    await q.fill('[data-key="titel"]', "Vereinstassen");
+    await q.selectOption("#vorlage-wahl", "tasse"); await tippe(q, "#position-leer", "Leere Position");
+    await q.locator('[data-position="P-1"] [data-feld="menge"]').fill("50"); await q.locator('[data-position="P-1"] [data-feld="menge"]').press("Tab");
+    ok("UL-SEITE: am Entwurf gibt es noch kein „angenommen“", await q.locator("#annehmen").count() === 0);
+    await tippe(q, "#stellen", "Angebot stellen");
+    await tippe(q, "#annehmen", "Auftrag erteilt");
+    ok("UL-SEITE: gestellt → „✅ angenommen“ mit Datum", await q.locator("[data-angenommen]").count() === 1);
+    const nettoVor = await netto(q, "P-1");
+    /* fehlt das Feld (z. B. am gestellten Angebot gesperrt), wird es gemeldet statt 30 s zu warten */
+    const ulDa = await tippe(q, '[data-unterlagen="P-1"] summary', "Unterlagen aufklappen");
+    if (ulDa) {
+    await q.selectOption('[data-unterlage-art="P-1"]', "entwurf"); await q.fill('[data-unterlage-notiz="P-1"]', "Ansicht vorne");
+    await q.setInputFiles('[data-unterlage-datei="P-1"]', [{ name: "entwurf-vorne.png", mimeType: "image/png", buffer: png }]);
+    await q.waitForSelector('[data-unterlage="U-1"]', { timeout: 5000 }).catch(() => {});
+    await q.selectOption('[data-unterlage-art="P-1"]', "fertig"); await q.fill('[data-unterlage-notiz="P-1"]', "fertig, Foto");
+    await q.setInputFiles('[data-unterlage-datei="P-1"]', [{ name: "foto-fertig.png", mimeType: "image/png", buffer: png }]);
+    await q.waitForSelector('[data-unterlage="U-2"]', { timeout: 5000 }).catch(() => {});
+    await q.selectOption('[data-unterlage-art="P-1"]', "datei"); await q.fill('[data-unterlage-notiz="P-1"]', "");
+    await q.setInputFiles('[data-unterlage-datei="P-1"]', [{ name: "VEREINSLOGO-PRUEFWORT.cdr", mimeType: "", buffer: Buffer.from("CDR-PRUEFINHALT-0123456789") }]);
+    await q.waitForSelector('[data-unterlage="U-3"]', { timeout: 5000 }).catch(() => {});
+    await q.fill('[data-unterlage-url="P-1"]', "https://cloud.example/LINK-PRUEFWORT/motiv"); await q.fill('[data-unterlage-notiz="P-1"]', "Bildgenerierung");
+    await tippe(q, '[data-unterlage-link="P-1"]', "Link dazu");
+    }
+    ok("UL-SEITE: zwei Bilder (Entwurf, fertig), die Corel-Datei und der Link stehen am gestellten Angebot", await q.locator('[data-unterlagen-bilder] figure').count() === 2 &&
+      /VEREINSLOGO-PRUEFWORT\.cdr/.test(await q.textContent("[data-unterlagen-dateien]").catch(() => "")) && /LINK-PRUEFWORT/.test(await q.textContent("[data-unterlagen-dateien]").catch(() => "")));
+    ok("UL-SEITE: der Preis bleibt, das Angebot bleibt gestellt", await netto(q, "P-1") === nettoVor && await q.locator("[data-nur-lesen]").count() === 1);
+    const gespeichert = await q.evaluate(async () => { await window.WCApp.jetztSpeichern(); const a = window.WCApp.S.angebote[0]; return a.positionen[0].unterlagen.map((u) => u.art + ":" + u.typ); });
+    ok("UL-SEITE: gespeichert mit Art und Dateityp (Corel aus der Endung)", gespeichert.join() === "entwurf:image/png,fertig:image/png,datei:application/vnd.corel-draw,link:", gespeichert);
+    const bl = await druck(q, "#druck-angebot");
+    ok("UL-SEITE: nichts von den Unterlagen auf dem Kundenblatt", !/PRUEFWORT|Bildgenerierung|Ansicht vorne|entwurf-vorne|foto-fertig/.test(bl.html));
+    await q.evaluate(() => { window.__wcUebergabe = null; });
+    await tippe(q, "#uebergabe", "An WorkFloh übergeben");
+    await q.waitForFunction(() => !!window.__wcUebergabe, null, { timeout: 5000 }).catch(() => {});
+    const bu = JSON.parse(await q.evaluate(() => window.__wcUebergabe || "{}") || "{}"), auf = (bu.auftraege || [])[0] || { files: [], data: {} };
+    const cdr = (auf.files || []).find((f) => /VEREINSLOGO-PRUEFWORT\.cdr$/.test(f.name));
+    ok("UL-SEITE: an WorkFloh gehen die Corel-Datei (Byte für Byte) und beide Bilder mit, der Link steht im Text",
+      !!cdr && cdr.mime === "application/vnd.corel-draw" && Buffer.from(cdr.data.split(",")[1], "base64").toString() === "CDR-PRUEFINHALT-0123456789" &&
+      (auf.files || []).filter((f) => /\.png$/.test(f.name)).length === 2 && /LINK-PRUEFWORT\/motiv \(Bildgenerierung\)/.test(auf.data.beschreibung || ""), (auf.files || []).map((f) => f.name));
+    await tippe(q, '[data-als-beispiel="P-1"]', "Als Beispiel in die Vorlage");
+    const bsp = await q.evaluate(() => { const v = window.WCApp.S.katalog.vorlagen.find((x) => x.id === "tasse"); return v.beispiele[v.beispiele.length - 1]; });
+    ok("UL-SEITE: als Beispiel in der Vorlage „Tasse“ — fertig zuerst, zwei Ansichten, Menge 50", bsp && bsp.menge === 50 && bsp.ansichten.length === 2 && /^Fertiges Produkt/.test(bsp.ansichten[0][0]), bsp);
+    await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
+    await q.fill("#angebot-suche", "vereinslogo");
+    ok("SUCHE-SEITE: findet das Angebot über den Namen der Corel-Datei", await q.locator("[data-treffer-zeile]").count() === 1);
+    await q.fill("#angebot-suche", "");
+    const altId = await q.evaluate(() => window.WCApp.S.aktiv);
+    await tippe(q, '[data-kopieren-anderer="' + altId + '"]', "für anderen Kunden");
+    ok("UL-SEITE: „für anderen Kunden“ — neues Angebot ohne Kunde, mit Position und allen Unterlagen", await q.inputValue("#kunde-wahl").catch(() => "x") === "" &&
+      await q.locator('[data-position="P-1"]').count() === 1 && /\(4\)/.test(await q.textContent('[data-unterlagen="P-1"] summary').catch(() => "")));
+    await q.selectOption("#vorlage-wahl", "tasse");
+    ok("UL-SEITE: das neue Beispiel steht in der Galerie mit Foto und frisch gerechnetem Preis", await q.locator('[data-galerie="tasse"] [data-beispiel] img.gross').count() >= 2 &&
+      await q.locator('[data-galerie="tasse"] [data-beispiel-preis]').count() >= 2);
+    await s13.ctx.close();
+  }
+
   /* ── Vollbild: die Arbeitsfläche nutzt jede Breite (Klaus 2026-10-12) ── */
   {
     const v = await seite(1920), q = v.p;

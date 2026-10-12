@@ -28,8 +28,12 @@
   function stamm(w) { w = STAMM[w] || w; if (w.length >= 6) w = w.replace(/(?:en|er|es|n|s|e)$/, ""); return w; }
   function woerter(s) {
     var l = falte(s).replace(/[^a-z0-9-]+/g, " ").split(/\s+/), out = [];
+    /* Bindestrich-Wörter zählen ganz UND in Teilen („vereinslogo-final“ findet „vereinslogo“); „t-shirt“ bleibt über STAMM ein Wort */
+    var mitTeilen = [];
+    l.forEach(function (w) { w = w.replace(/^-+|-+$/g, ""); if (!w) return; mitTeilen.push(w); if (w.indexOf("-") > 0 && !STAMM[w]) w.split("-").forEach(function (t) { mitTeilen.push(t); }); });
+    l = mitTeilen;
     l.forEach(function (w) {
-      w = w.replace(/^-+|-+$/g, ""); if (!w) return;
+      if (!w) return;
       var st = stamm(w);
       if (st.length < 3 || /^\d+$/.test(st) || STOPP.indexOf(st) >= 0 || STOPP.indexOf(w) >= 0) return;
       if (out.indexOf(st) < 0) out.push(st);
@@ -132,7 +136,7 @@
   /* ── Ähnlichkeit: welches alte Angebot kommt der Anfrage (oder einem Suchtext) am nächsten? ──
      q = lesen(…) oder { woerter, kunde, produkte, mengen } · → [{ angebot, wert 0–100, gruende[] }], beste zuerst */
   function angebotWoerter(a, kat) {
-    var t = [a.titel, a.nummer, (a.kunde || {}).name, a.notiz];
+    var t = [a.titel, a.nummer, (a.kunde || {}).name, a.notiz, WC.unterlagen ? WC.unterlagen.suchText(a) : ""];
     a.positionen.forEach(function (p) { var v = kat ? (kat.vorlagen || []).filter(function (x) { return x.id === p.vorlage; })[0] : null; t.push(p.titel, p.beschreibung, v ? v.name : p.vorlage); });
     return woerter(t.join(" "));
   }

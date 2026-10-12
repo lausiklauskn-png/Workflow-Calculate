@@ -99,6 +99,23 @@ Workflow PDF beachtet wird … dass … nicht von einer KI personifizierte Daten
   ⚠ Verdecken ist keine Verschlüsselung: was kein Muster hat und nicht im Kundenstamm steht („die Filialleiterin in Kiel“), bleibt
   stehen — darum steht der verdeckte Text vor dem Senden sichtbar da.
 
+## Nachtrag: Unterlagen am angenommenen Angebot
+
+Klaus: *„Ist ein entsprechendes Angebot akzeptiert worden, soll der … Entwurf als Beispielbild mit eingefügt werden können. Also
+verschiedene Ansichten, hergestelltes Produkt … eine Coreldatei … Bildbearbeitungsprogramm … PDF … Link für die Bildgenerierung …
+genau dieses Angebot … wiederholen … für andere Kunden übernehmen“* · *„Dateien mitgeben an WorkFloh, 50 MB passt“*.
+
+- Gestelltes Angebot → **„✅ Auftrag erteilt (angenommen)“** mit Datum; in der Liste „angenommen ✅“.
+- Je Position **„📎 Unterlagen“**: Bilder als **Entwurf** oder **fertiges Produkt** (mehrere Ansichten, je mit Notiz), **Dateien**
+  (Corel `.cdr`, Photoshop `.psd`, Illustrator `.ai`, PDF, SVG …, höchstens 50 MB, Byte für Byte) und **Links** (Cloud, Bildgenerierung).
+  Auch am gestellten Angebot — der Preis ändert sich nicht. In der verschlüsselten Sicherung mit drin.
+- **Nie auf dem Kundenblatt.** **An WorkFloh** gehen alle Dateien mit sprechendem Namen mit (`AN-…_P-1_Datei_logo.cdr`), Links stehen im Auftragstext.
+- **„★ Als Beispiel in die Vorlage“**: die Fotos (fertig zuerst) erscheinen in der Galerie der Produktvorlage; der Preis wird dort frisch gerechnet.
+- **„⧉ für anderen Kunden“** in der Liste: Positionen, Bilder und Unterlagen kommen mit, der Kunde wird neu gewählt.
+  Die **Suche** findet ein Angebot auch über Dateinamen und Notizen der Unterlagen.
+- Gefunden beim Bauen: Browser melden eine Corel-Datei als `application/octet-stream` — der Typ kommt dann aus der Endung.
+- ⚠ Nicht gemessen: echte große Dateien (50 MB) am Tablet — Speicher und Dauer der WorkFloh-Datei (Dateien gehen als data-URL in die JSON, also ~⅓ größer).
+
 ## Lieferanten — ehrlich
 
 Der Brief verlangt: jede Adresse vorher abrufen, nichts Ungeprüftes eintragen. **Abrufen ging nicht**: der
