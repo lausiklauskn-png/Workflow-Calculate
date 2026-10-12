@@ -28,6 +28,11 @@ unterscheiden), Violett = intern wie dort.
 | `assets/kern/pruefer-mail.js` | **byte-1:1 aus Workflow-PDF** (dort aus dem Auslieferungsprüfer, gleich in Mein-WorkFloh), SHA in `tests/kern.mjs`. Nie hier abwandeln |
 | `assets/kern/unterlagen.js` | **Unterlagen am Angebot** (2026-10-12): je Position Entwurf / fertiges Produkt (Bilder, Ansichten), Dateien (Corel, PSD, AI, PDF …, ≤ 50 MB, Byte für Byte) und Links; „angenommen“ am gestellten Angebot; an WorkFloh mit (Klaus' Ja), nie aufs Kundenblatt; „★ als Beispiel in die Vorlage“ |
 | `assets/kern/nachkalk.js` | **Nachkalkulation** (Stufe 3): Plan gegen Ist am gestellten Angebot, Faktor je Vorlage, Übernahme ins Zeit-Muster (einmal je Befund) |
+| `assets/kern/suche.js` | **🔎 Suche — die Startseite** (2026-10-12): Füllwörter weg und benennen, Frage über `anfrage.lesen`, Vorlagen nach Wörtern (+ Gelerntes) ordnen, **Preis über `WC.angebot.rechne`** (ein Angebot mit einer Position — keine zweite Rechnung), Lernen aus jeder bestätigten Antwort, Rückrichtung Produkt → Fragen/Angebote |
+| `assets/kern/tabelle.js` | **⇅ Daten** (2026-10-12): CSV lesen (Trenner selbst erkannt), Spalten einordnen — **Personendaten nach Kopf UND Inhalt weg** —, Zeilen offline zuordnen, Angebote bauen (Entwurf, `import`, alter Preis als `pos.eigen`), CSV hinaus (intern / ohne Kundendaten), Text und Rückweg für die KI-Zuordnung |
+| `assets/wfpdf/suche.js` · `bedeutung.js` · `sprechen.js` | **byte-1:1 aus Workflow-PDF** (Wortsuche-Angleichung, Rangfolge der Bedeutungssuche, Spracheingabe mit Laufbalken), SHA in `tests/kern.mjs`. Nie hier abwandeln |
+| `vendor/sbkim/03_embedding.js` · `04_match.js` | **Sage-Module 03/04 byte-1:1** (über Workflow-PDF), SHA in `tests/kern.mjs`; geladen erst auf „🧠 Auch nach Bedeutung suchen“, nicht im Vorrat |
+| `assets/daten/beispiel-fragen.js` | **10 Beispiel-Fragen** (10 Produkte, 10 Mengen, alle fünf Gebiete, Klaus' Tassen-Frage wörtlich); `vorlage`/`menge` sind die Erwartung, die die Probe nachrechnet; `lehre` = der Satz beim „▶ Durchspielen“ |
 | `assets/daten/werbetechnik.js` | Startkatalog — **alle Zahlen Platzhalter** (`platzhalter: true`); registriert `WC.STARTKATALOGE` |
 | `assets/daten/stickerei.js` · `dienstleistung.js` | weitere Arbeitsgebiete (Stufe 3), Platzhalter; Stickerei rechnet nach **Stichzahl** (`stiche`, Einheit `tsd_stiche`) |
 | `assets/daten/handelsware.js` | **Handelsware** (2026-10-12): Arbeitsgebiet mit Einkaufsprodukten (Kulis 500, Visitenkarten 250/500/1000, Preise Platzhalter), **keine** Lieferanten eingetragen; `WC.LIEFERANTEN_VORSCHLAEGE` = per Websuche gefundene Kandidaten, erst Klaus' „✓ geprüft“ trägt sie ein |
@@ -50,6 +55,8 @@ Unterlagen (2026-10-12): an der Position `unterlagen = [{id "U-n", art entwurf|f
 Anfrage (2026-10-12): am Kunden `nr` (Kundennummer), `email`; am Angebot `anfrage = {von, betreff, datum, kundennr}` (nur intern, nie hinaus).
 Kleinmengenzuschlag (2026-10-12): im Katalog `kleinmenge = {grenze, cent, text}` (fehlt er, ergänzt die App die Vorgabe 10 Stk. / 12,00 € —
 Klaus' Wert, bestätigt 2026-10-12 — nur im LIVE-Katalog), am Angebot `kleinmengeAus` (für dieses Angebot weggelassen).
+Suche (2026-10-12): in den Einstellungen `suche = {fuellwoerter: [...], beispieleWeg: ["f01"…], gelernt: [{w, vorlage, gut, n, zuletzt, frage}]}`
+(reist mit der Sicherung, höchstens 300 Einträge), am Angebot `import = {datei, zeilen, nummer}` (aus einer Tabelle eingelesen).
 Fremdfertigung (2026-10-12): am Verfahren `vorhanden` (fehlt = da), an der Vorlage `fremdVorlage`, `titelVorgabe` (was der Kunde liest), `herstellung` (intern).
 
 ## Was hier leicht kaputtgeht
@@ -101,6 +108,25 @@ Fremdfertigung (2026-10-12): am Verfahren `vorhanden` (fehlt = da), an der Vorla
   `kleinmenge` bleibt ohne Zuschlag — gestellte Angebote ändern sich nicht.
   **Vollbild auch hier** (Klaus 2026-10-12): Seite so breit wie das Fenster auf Handy hoch/quer, Tablet, großem Schirm; die Spalten
   „Menge + ins Angebot“ und „Verkauf“ stehen vorn, damit sie am Handy ohne Wischen da sind; ab 1024 px passt die ganze Tabelle.
+- **🔎 Suche ist die Startseite** (Klaus 2026-10-12): die App öffnet IMMER auf der Suche; nur ⟳ Neu laden (`?frisch=`) bleibt auf dem
+  Reiter von vorher, `#handel` öffnet die Handelsware, `?q=…` belegt die Frage vor (Link aus Tomys Hub / WorkFloh — Klaus: „reicht“).
+  ⚠ Tafel-Evolution: bis dahin öffnete sie auf dem zuletzt gewählten Reiter (`workflowcalculate_reiter`, Vorgabe „Angebote“).
+  Karte = **Produkt · Menge · Preis** (netto, brutto, je Stück — inkl. Versand und Kleinmengenzuschlag, genau wie im Angebot);
+  Kalkulation nur nach Tipp auf „Zusammensetzung“, **auf derselben Seite**. Nichts springt von selbst; „＋ Angebot“ legt ein NEUES
+  Angebot an (mit dem versteckt gewählten Kunden). Das Suchfeld ist EIN bleibendes Element (`SU.kopf`), weil die Spracheingabe
+  ihren Laufbalken hineinhängt — beim Tippen wird nur `#suche-ergebnis` neu gezeichnet.
+  **Kunde versteckt** (Klaus: „Kürzel gut“): zugeklappt nur `◦<frühere Angebote>/<1|2|3>`, Klartext erst auf Tipp; „Kunde Becker
+  wünscht“ findet Becker im Kundenstamm still. **Lernen** (Klaus: „soll sich selbst verbessern mit jeder Frage“): Menge ändern,
+  Zusammensetzung öffnen, „＋ Angebot“, ✓ = passt; ✕ = passt nicht. Je Frage und Produkt einmal je Sitzung. **Bidirektional**
+  (Klaus: „beides“): Frage → Produkt, und an der Zusammensetzung Produkt → gelernte Fragen, Beispiel-Fragen, Angebote; die Bedeutungs-
+  suche ordnet jede Vorlage MIT ihren gelernten Fragen ein. Ein Zukauf ohne Einkauf für genau die Menge bekommt halbe Punkte
+  (sonst stünde „Kugelschreiber (Zukauf, nur 500)“ vor dem eigenen Kuli). Gezeigt: bis 4 Karten ab halber Punktzahl des besten;
+  Produkte aus noch nicht geholten Gebieten klein als „Auch möglich: … ＋ Gebiet“.
+  ⚠ Punkte (1 je Wort, 0,6 Teilwort, +0,5 erkannt, Lernen bis 3, „passt nicht“ × 1,5) sind **gewählt, nicht gemessen**.
+- **⇅ Daten** (Klaus: „eigener Reiter“, „zwei Knöpfe“): Sicherung (dieselbe Karte wie in den Einstellungen), CSV „intern, mit Kunde“
+  und „ohne Kundendaten“ (ohne Titel und Positions-Text — dort stehen oft Namen), Tabelle einlesen mit Vorschau. XLSX wird nicht
+  gelesen und das gesagt. KI-Zuordnung nur über `ki-anfrage.js` (prüfen, verdecken, `findLeak`, einmal anhalten); gilt nur, wenn
+  Zeilennummer UND Menge im Zitat stehen.
 - **← Zurück** (Klaus 2026-10-12: „die App schließt automatisch … einen Button wie bei meinem Rezeptbuch, mehrmals zurück“):
   jeder Wechsel der Ansicht (Reiter, Katalog-Reiter, aufgeklappter Katalog-Eintrag, offenes Angebot) legt EINEN Eintrag in den
   Verlauf (`verlaufMerken`, nur am Ende von `zeichne` — nirgends sonst `pushState`). Der Knopf `#seite-zurueck` oben und die

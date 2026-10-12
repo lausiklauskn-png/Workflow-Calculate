@@ -1,0 +1,5 @@
+Angebotsnr;Datum;Kunde;Ansprechpartner;Straße;Telefon;Info;Artikel;Menge;Einzelpreis;Gesamt
+A-17;03.05.2025;Bäckerei Prüfwort-Kunde;Erika Musterfrau;Musterweg 7;030 23125 111;erika@beispiel.example;Tasse bedruckt, Logo;50;9,50;475,00
+A-17;03.05.2025;Bäckerei Prüfwort-Kunde;Erika Musterfrau;Musterweg 7;030 23125 111;erika@beispiel.example;Kugelschreiber bedruckt;250;0,90;225,00
+A-18;12.06.2025;Sportverein Prüfwort;Max Mustermann;Am Platz 3;030 23125 222;max@verein.example;"T-Shirt mit Vereinslogo; Brust";25;14,00;350,00
+A-19;01.07.2025;Hochzeit Prüfwort;Anna Beispiel;Ringstraße 9;030 23125 333;anna@hochzeit.example;Wunderkerzen-Set;40;2,50;100,00

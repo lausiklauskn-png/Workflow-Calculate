@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const WURZEL = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const KERN = ["assets/kern/geld.js", "assets/kern/mengen.js", "assets/kern/kalkulation.js", "assets/kern/versand.js", "assets/kern/markt.js",
-  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/kern/nachkalk.js", "assets/kern/recherche.js", "assets/kern/mail.js", "assets/kern/unterlagen.js", "assets/kern/anfrage.js", "modules/25_pseudonym.js", "assets/kern/pruefer-mail.js", "assets/kern/ki-anfrage.js", "assets/daten/werbetechnik.js", "assets/daten/stickerei.js", "assets/daten/dienstleistung.js", "assets/daten/handelsware.js", "assets/daten/laser.js", "assets/daten/beispiel-angebote.js", "assets/daten/bilder.js"];
+  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/kern/nachkalk.js", "assets/kern/recherche.js", "assets/kern/mail.js", "assets/kern/unterlagen.js", "assets/kern/anfrage.js", "modules/25_pseudonym.js", "assets/kern/pruefer-mail.js", "assets/kern/ki-anfrage.js", "assets/wfpdf/suche.js", "assets/wfpdf/bedeutung.js", "assets/kern/suche.js", "assets/kern/tabelle.js", "assets/daten/werbetechnik.js", "assets/daten/stickerei.js", "assets/daten/dienstleistung.js", "assets/daten/handelsware.js", "assets/daten/laser.js", "assets/daten/beispiel-angebote.js", "assets/daten/bilder.js", "assets/daten/beispiel-fragen.js"];
 for (const f of KERN) require(join(WURZEL, f));
 const WC = globalThis.WC, K = WC.kalk, M = WC.mengen, A = WC.angebot, V = WC.versand, MK = WC.markt;
 
@@ -696,6 +696,81 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   ok("UNTERLAGEN → Beispiel: der Preis wird in der Galerie frisch gerechnet (kein Preis gespeichert)", !("netto" in b.beispiel) && K.position(kat, Object.assign(pos(kat, "tasse"), { menge: b.beispiel.menge }), {}).ok);
   ok("UNTERLAGEN: alle Datei-Kennungen für Vorladen und Sicherung", U.dateiIds([a]).join() === "D-1,D-2,D-3", U.dateiIds([a]));
   ok("SUCHE: findet das Angebot über den Dateinamen der Unterlage (auch ein Teil des Namens)", (WC.anfrage.suche("vereinslogo", [a], [], kat)[0] || {}).angebot === a);
+}
+
+/* ── 🔎 SUCHE — Startseite (Klaus 2026-10-12) ── */
+{
+  const SU = WC.suche, T = WC.tabelle;
+  ok("PIN: suche.js · bedeutung.js · sprechen.js sind byte-gleich mit Workflow PDF", sha("assets/wfpdf/suche.js") === "df5e2cb9473d24f630ead34706281d666e8644c0831f3c7f94300cf7607380e6" &&
+    sha("assets/wfpdf/bedeutung.js") === "749cea778b0bcc9bb86c733827aa7467a8468286cf78f22f7f189f465223ac7d" && sha("assets/wfpdf/sprechen.js") === "9e4feb404f9b729fa12e6e5aa5d7a87192e9e89595585504f22669b90c64da52");
+  ok("PIN: Sage-Module 03/04 sind byte-gleich (über Workflow PDF)", sha("vendor/sbkim/03_embedding.js") === "e4bb8bd6a237914e7841cab5165912daf636adf0ee90c5d4ffd0c74cc5d706e5" &&
+    sha("vendor/sbkim/04_match.js") === "5de95923c3f62f141e94f576feebcac0eecc55c60e40b564540a56420436a4cd");
+  const kat = kopie(WC.START); kat.kleinmenge = Object.assign({}, A.KLEINMENGE_VORGABE);
+  Object.keys(WC.STARTKATALOGE).forEach((gid) => WC.katalog.gebietHinzufuegen(kat, WC.STARTKATALOGE[gid]));
+  ok("MENGE: „in 2 Wochen“ ist keine Menge, „30 Kaffeepötte“ schon (eine Zahl, kein Warenwort)", SU.lesen("Tassen in 2 Wochen", kat).mengen.length === 0 && SU.lesen("30 Kaffeepötte", kat).mengen.join() === "30");
+  const f1 = SU.fuellweg("Der Kunde möchte 10 Tassen im Sublimationsdruck, beidseitig bedruckt, kein Sondermaß. Wie viel kostet das?");
+  ok("FÜLLWÖRTER: „der Kunde möchte“ und „wie viel kostet das“ werden weggenommen und genannt", f1.ignoriert.join("|") === "Der Kunde möchte|Wie viel kostet das" && /^10 Tassen im Sublimationsdruck/.test(f1.rest) && !/kunde|kostet/i.test(f1.rest), f1);
+  const f2 = SU.fuellweg("Kunde Becker wünscht 25 T-Shirts mit Vereinslogo");
+  ok("FÜLLWÖRTER: „Kunde … wünscht“ — der Name wird nicht gesucht, aber zurückgegeben", f2.kundeName === "Becker" && f2.rest === "25 T-Shirts mit Vereinslogo", f2);
+  ok("FÜLLWÖRTER: die Liste ist editierbar (eigene Liste gilt, leere Liste nimmt nichts weg)", SU.fuellweg("Frau Pruef braucht 5 Schilder", ["Frau … braucht"]).rest === "5 Schilder" && SU.fuellweg("Der Kunde möchte 5 Schilder", []).ignoriert.length === 0);
+  const B = WC.BEISPIEL_FRAGEN;
+  ok("BEISPIELE: 10 Fragen, 10 Produkte, 10 Mengen, alle fünf Arbeitsgebiete, eine davon Klaus' Tassen-Frage", B.length === 10 && new Set(B.map((b) => b.vorlage)).size === 10 && new Set(B.map((b) => b.menge)).size === 10 &&
+    ["werbetechnik", "stickerei", "dienstleistung", "handelsware", "laser"].every((g) => B.some((b) => b.gebiet === g)) && B.some((b) => /10 Tassen im Sublimationsdruck, beidseitig bedruckt, kein Sondermaß/.test(b.frage)));
+  const durch = B.map((b) => { const q = SU.lesen(b.frage, kat, null, []), c = SU.kandidaten(q, kat, {})[0] || {}, p = c.vorlage ? SU.preis(kat, c.vorlage, c.menge.menge, { masse: q.masse }) : {}; return { id: b.id, v: c.vorlage, m: c.menge && c.menge.menge, ok: p.ok, gebiet: K.finde(kat.vorlagen, c.vorlage || "") ? K.finde(kat.vorlagen, c.vorlage).gebiet : "" }; });
+  ok("BEISPIELE: jede Frage findet als ERSTES ihr Produkt mit ihrer Menge", durch.every((x, i) => x.v === B[i].vorlage && x.m === B[i].menge), durch.filter((x, i) => x.v !== B[i].vorlage || x.m !== B[i].menge));
+  ok("BEISPIELE: jede Frage hat einen Preis (durchspielbar mit dem mitgelieferten Katalog)", durch.every((x) => x.ok), durch.filter((x) => !x.ok));
+  ok("BEISPIELE: das Gebiet jeder Frage stimmt mit dem Katalog überein (wird beim Antippen geholt)", durch.every((x, i) => x.gebiet === B[i].gebiet), durch);
+  /* derselbe Preis wie im Angebot */
+  const a = A.neu([]), p = A.neuePosition(a, kat, "tasse"); p.menge = 10; p.staffeln = [10];
+  const r = A.rechne(a, kat, null, false), pr = SU.preis(kat, "tasse", 10, {});
+  ok("PREIS: die Karte rechnet genau wie das Angebot (netto, brutto, inkl. Versand)", pr.netto === r.summen.netto && pr.brutto === r.summen.brutto && pr.stueck === Math.round(r.summen.netto / 10), [pr.netto, r.summen.netto]);
+  const p1 = SU.preis(kat, "tasse", 1, {});
+  ok("PREIS: 1 Tasse — Kleinmengenzuschlag ist dabei (wie im Angebot)", p1.ok && p1.r.kleinmenge.aktiv && p1.netto === A.rechne((() => { const b2 = A.neu([]), q2 = A.neuePosition(b2, kat, "tasse"); q2.menge = 1; q2.staffeln = [1]; return b2; })(), kat, null, false).summen.netto);
+  const kk = kopie(kat); kk.gebiete.find((g) => g.id === "werbetechnik").klassen = { A: { name: "A", stundenPct: -10, gewinnPct: -5 }, B: { name: "B", stundenPct: 0, gewinnPct: 0 }, C: { name: "C", stundenPct: 10, gewinnPct: 5 } };
+  const pa = SU.preis(kk, "tasse", 10, { kunde: { id: "K-1", name: "x", klasse: "A" } }), pb = SU.preis(kk, "tasse", 10, { kunde: { id: "K-1", name: "x", klasse: "B" } }), pc = SU.preis(kk, "tasse", 10, { klasse: "C" });
+  ok("KLASSE: die versteckte Kundenklasse wirkt auf den Preis (A < B < C)", pa.netto < pb.netto && pb.netto < pc.netto, [pa.netto, pb.netto, pc.netto]);
+  ok("PREIS: fehlt die Vorlage im Katalog, wird das Gebiet genannt statt geschätzt", SU.preis(kopie(WC.START), "polo_stick", 10, {}).fehltGebiet === "stickerei");
+  const nk = SU.preis(kat, "kuli_zukauf", 250, {});
+  ok("PREIS: Zukauf ohne Einkauf für die Menge bleibt offen (nichts geschätzt)", !nk.ok && /kein Einkauf/.test(nk.offen[0]), nk.offen);
+  /* Lernen */
+  const qa = SU.lesen("12 Kaffeepötte mit Familienfoto", kat, null, []);
+  ok("LERNEN: unbekannte Wörter finden zuerst nichts", !SU.kandidaten(qa, kat, {}).some((c) => c.vorlage === "tasse"));
+  let gel = SU.lernen([], qa.rest, "tasse", true, "2026-10-12");
+  const qb = SU.lesen("Was kosten 30 Kaffeepötte mit Familienfoto?", kat, null, []), kb = SU.kandidaten(qb, kat, { gelernt: gel });
+  ok("LERNEN: nach einer bestätigten Frage findet dieselbe Frage (andere Menge) das Produkt zuerst", kb[0] && kb[0].vorlage === "tasse" && kb[0].menge.menge === 30 && kb[0].gruende.some((g) => /gelernt/.test(g)), kb.slice(0, 2));
+  const qt = SU.lesen(B[0].frage, kat, null, []);
+  const vorher = SU.kandidaten(qt, kat, {}).findIndex((c) => c.vorlage === "tasse_sublimation_zukauf");
+  gel = SU.lernen(gel, qt.rest, "tasse_sublimation_zukauf", false, "2026-10-12");
+  const nachher = SU.kandidaten(qt, kat, { gelernt: gel }).findIndex((c) => c.vorlage === "tasse_sublimation_zukauf");
+  ok("LERNEN: „passt nicht“ schiebt das Produkt bei derselben Frage nach hinten (oder ganz weg)", vorher >= 0 && (nachher < 0 || nachher > vorher), [vorher, nachher]);
+  ok("LERNEN: dieselbe Frage zweimal ist EIN Eintrag, der zählt hoch", SU.lernen(SU.lernen([], "12 Kaffeepötte", "tasse", true), "12 Kaffeepötte", "tasse", true).map((e) => e.n).join() === "2");
+  let viel = []; for (let i = 0; i < SU.LERN_MAX + 20; i++) viel = SU.lernen(viel, "Wortprobe" + i + " Becher", "tasse", true, "2026-10-" + String(10 + (i % 20)).padStart(2, "0"));
+  ok("LERNEN: höchstens " + SU.LERN_MAX + " Einträge", viel.length === SU.LERN_MAX);
+  const rr = SU.rueckrichtung("tasse", gel, B, [a]);
+  ok("RÜCKRICHTUNG: vom Produkt zu gelernten Fragen, Beispiel-Fragen und Angeboten", rr.fragen.includes("12 Kaffeepötte mit Familienfoto") && rr.fragen.includes(B[0].frage) && rr.angebote.length === 1 && !rr.fragen.some((f) => /Sublimation/.test(f) && f !== B[0].frage && /zukauf/.test(f)), rr);
+
+  /* ⇅ Tabelle */
+  const csv = lies("tests/daten/tabelle/alte-angebote.csv"), tab = T.lesenCsv(csv), sp = T.spalten(tab);
+  const art = Object.fromEntries(sp.map((s) => [s.kopf, s.art]));
+  ok("TABELLE: Trenner und Anführungszeichen (Semikolon im Feld) werden gelesen", tab.trenner === ";" && tab.daten.length === 4 && tab.daten[2][7] === "T-Shirt mit Vereinslogo; Brust", tab.daten[2]);
+  ok("TABELLE: Spalten mit Personendaten werden NICHT übernommen (Kunde, Ansprechpartner, Straße, Telefon)", ["Kunde", "Ansprechpartner", "Straße", "Telefon"].every((k) => art[k] === "person"), art);
+  ok("TABELLE: eine harmlos benannte Spalte voller E-Mails fällt auch weg (Inhalt)", art.Info === "person" && /E-Mail \(Inhalt\)/.test(sp.find((s) => s.kopf === "Info").grund), sp.find((s) => s.kopf === "Info"));
+  ok("TABELLE: Produkt, Menge, Einzel-, Gesamtpreis, Datum, Angebotsnummer erkannt", art.Artikel === "produkt" && art.Menge === "menge" && art.Einzelpreis === "einzel" && art.Gesamt === "gesamt" && art.Datum === "datum" && art.Angebotsnr === "nummer", art);
+  const zl = T.zeilen(tab, sp, kat, {});
+  ok("TABELLE: Zeilen offline zugeordnet (Tasse, Kuli, Shirt), Unbekanntes bleibt ohne Vorlage", zl.map((z) => z.vorlage).join() === "tasse,kuli,shirt," && zl[0].menge === 50 && zl[0].gesamtCent === 47500 && zl[0].datum === "2025-05-03", zl.map((z) => [z.vorlage, z.menge, z.gesamtCent]));
+  zl.forEach((z) => { z.uebernehmen = !!z.vorlage; });
+  const imp = T.angeboteAus(zl, kat, [], "alte-angebote.csv", "2026-10-12"), ij = JSON.stringify(imp.angebote);
+  ok("TABELLE: gleiche Angebotsnummer = EIN Angebot, der alte Preis steht als eigener Preis", imp.angebote.length === 2 && imp.angebote[0].positionen.length === 2 && imp.angebote[0].positionen[0].eigen[50] === 47500 &&
+    A.rechne(imp.angebote[0], kat, null, false).positionen[0].erg.netto === 47500 && imp.angebote.every((x) => x.status === "entwurf" && x.import), imp.angebote.map((x) => x.positionen.length));
+  ok("TABELLE: in den eingelesenen Angeboten steht keine Personenangabe", !/Prüfwort|Musterfrau|Mustermann|Musterweg|23125|@|Erika|Anna/.test(ij), ij.match(/Prüfwort|Musterfrau|Mustermann|Musterweg|23125|@|Erika|Anna/));
+  const kt = T.kiText(zl);
+  ok("TABELLE → KI: der Text für die KI trägt keine Personenspalte", /Zeile 5: 40 Stk\. Wunderkerzen-Set/.test(kt) && !/Prüfwort|Musterfrau|23125|@/.test(kt), kt);
+  const zk = zl.map((z) => Object.assign({}, z)), nKi = T.kiZuordnen(zk, [{ vorlage: "tasse", menge: 40, zitat: "Zeile 5: 40 Stk. Wunderkerzen-Set", name: "Tasse" }, { vorlage: "kuli", menge: 99, zitat: "Zeile 2: 50 Stk.", name: "x" }]);
+  ok("TABELLE → KI: nur eine Zuordnung mit passender Zeile UND Menge zählt", nKi === 1 && zk[3].vorlage === "tasse" && zk[3].herkunft === "ki" && zk[0].vorlage === "tasse" && zk[0].herkunft === "offline");
+  const ak = A.neu([]); ak.kunde = { name: "Firma CSV-PRUEFWORT", anschrift: "Pruefgasse 1", klasse: "A" }; ak.titel = "Titel CSV-PRUEFWORT"; const pk = A.neuePosition(ak, kat, "tasse"); pk.titel = "Tasse für CSV-PRUEFWORT";
+  const ohne = T.csvAus([ak], kat, [], false, false), mit = T.csvAus([ak], kat, [], true, false);
+  ok("CSV: „ohne Kundendaten“ trägt weder Kunde noch Titel noch Positions-Text, aber Produkt, Menge, Preis", !/PRUEFWORT|Pruefgasse/.test(ohne) && /Tasse/.test(ohne) && /;10;Stk\./.test(ohne) && !/Kunde/.test(ohne.split("\r\n")[0]), ohne.slice(0, 300));
+  ok("CSV: „intern“ trägt den Kunden", /Firma CSV-PRUEFWORT/.test(mit) && /Pruefgasse 1/.test(mit));
 }
 
 /* ── STUFE 2: Klaus' Symbol ── */
