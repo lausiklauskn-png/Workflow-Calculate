@@ -17,7 +17,7 @@
   function neu(angebote, datum) {
     datum = datum || heute();
     var nr = naechsteNummer(angebote, datum);
-    return { id: nr, nummer: nr, datum: datum, gueltigBis: plusTage(datum, 30), status: "entwurf", titel: "", kundeId: "", kunde: { name: "", anschrift: "", klasse: "B" },
+    return { id: nr, nummer: nr, fassung: 1, datum: datum, gueltigBis: plusTage(datum, 30), status: "entwurf", titel: "", kundeId: "", kunde: { name: "", anschrift: "", klasse: "B" },
       saetze: {}, positionen: [], versand: {}, stand: null, zaehler: 0, notiz: "" };
   }
   function neuePosition(a, kat, vorlageId) {
@@ -40,6 +40,32 @@
     return a;
   }
   function zurueckZumEntwurf(a) { a.status = "entwurf"; a.stand = null; return a; }
+
+  /* Fassungen: ein GESTELLTES Angebot bleibt, wie es ist; Änderungen ergeben Fassung n+1 mit derselben Nummer.
+     Die neue Fassung ist ein Entwurf und rechnet mit dem aktuellen Katalog; die alte trägt `ersetztDurch`. */
+  function fassungVon(a) { return Number(a.fassung) || 1; }
+  function neueFassung(angebote, a, anlass, datum) {
+    if (a.status !== "gestellt") return { ok: false, grund: "nur ein gestelltes Angebot bekommt eine neue Fassung" };
+    if (a.ersetztDurch) return { ok: false, grund: "es gibt schon eine neuere Fassung" };
+    var n = JSON.parse(JSON.stringify(a)), f = fassungVon(a) + 1;
+    n.fassung = f; n.id = a.nummer + "-F" + f; n.status = "entwurf"; n.stand = null; n.ersetztDurch = null;
+    n.anlass = String(anlass || ""); n.datum = datum || heute(); n.gueltigBis = plusTage(n.datum, 30); n.vorgaenger = a.id;
+    a.ersetztDurch = n.id;
+    return { ok: true, angebot: n };
+  }
+  /* Vergleich zweier Rechnungen (rechne(…)) — je Position (über die Kennung P-n) und die Summe */
+  function vergleich(rAlt, rNeu) {
+    var zeilen = [], ids = {};
+    function netto(r, id) { var x = r.positionen.filter(function (q) { return q.pos.id === id; })[0]; return x && x.erg.ok ? x.erg.netto : null; }
+    function titel(r, id) { var x = r.positionen.filter(function (q) { return q.pos.id === id; })[0]; return x ? x.pos.titel : ""; }
+    rAlt.positionen.concat(rNeu.positionen).forEach(function (x) { if (!ids[x.pos.id]) { ids[x.pos.id] = 1; zeilen.push(x.pos.id); } });
+    var z = zeilen.map(function (id) {
+      var a = netto(rAlt, id), b = netto(rNeu, id);
+      return { id: id, titel: titel(rNeu, id) || titel(rAlt, id), alt: a, neu: b, art: a == null ? "neu" : b == null ? "entfallen" : a === b ? "gleich" : "geaendert" };
+    });
+    var va = rAlt.versand.ok ? rAlt.versand.cent || 0 : 0, vb = rNeu.versand.ok ? rNeu.versand.cent || 0 : 0;
+    return { zeilen: z, versand: { alt: va, neu: vb }, summe: { alt: rAlt.summen.netto, neu: rNeu.summen.netto, diff: rNeu.summen.netto - rAlt.summen.netto } };
+  }
 
   /* Beitrag einer Position zum Versand */
   function versandTeil(vorlage, pos, erg) {
@@ -90,5 +116,5 @@
   }
 
   WC.angebot = { heute: heute, plusTage: plusTage, naechsteNummer: naechsteNummer, neu: neu, neuePosition: neuePosition,
-    katalogFuer: katalogFuer, stellen: stellen, zurueckZumEntwurf: zurueckZumEntwurf, versandTeil: versandTeil, rechne: rechne };
+    katalogFuer: katalogFuer, stellen: stellen, zurueckZumEntwurf: zurueckZumEntwurf, fassungVon: fassungVon, neueFassung: neueFassung, vergleich: vergleich, versandTeil: versandTeil, rechne: rechne };
 })(typeof window !== "undefined" ? window : globalThis);

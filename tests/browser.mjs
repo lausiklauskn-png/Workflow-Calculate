@@ -159,7 +159,57 @@ try {
   await p.locator("[data-angebot-zeile]").last().click();
   await tippe(p, "#stellen", "Angebot stellen");
   ok("STELLEN: gestellt → nur lesen", await p.locator("[data-nur-lesen]").count() === 1 && await p.locator('[data-feld="menge"]:disabled').count() >= 1);
+
+  /* ── Stufe 2: Fassungen ── */
+  ok("FASSUNG: am gestellten Angebot steht der Weg zur neuen Fassung", await p.locator("#neue-fassung").count() === 1);
+  await tippe(p, "#neue-fassung", "Neue Fassung");
+  ok("FASSUNG: Fassung 2 ist offen (Entwurf) und nennt sich so", /Fassung 2/.test(await p.textContent("#app-unter")) && await p.locator("[data-nur-lesen]").count() === 0);
+  await p.locator('[data-position] [data-feld="menge"]').first().fill("7");
+  await p.locator('[data-position] [data-feld="menge"]').first().press("Tab");
+  ok("FASSUNG: Vergleich mit Fassung 1 zeigt die Änderung", await p.locator('[data-vergleich-zeile="geaendert"]').count() === 1 && Number(await p.getAttribute("[data-vergleich-diff]", "data-vergleich-diff")) !== 0);
+  const blatt2 = await druck(p, "#druck-angebot");
+  ok("FASSUNG: das Kundenblatt sagt „Fassung 2“", /Fassung 2/.test(blatt2.text));
+  await tippe(p, '[data-reiter="angebote"]', "Reiter Angebote");
+  ok("FASSUNG: in der Liste steht die alte als „ersetzt“", /ersetzt/.test(await p.textContent("table")) && /F2/.test(await p.textContent("table")));
+
+  /* ── Stufe 2: An BookLedgerPro ── */
+  await p.locator("[data-angebot-zeile]").first().click();
+  await p.evaluate(() => { window.__wcSprungAbfangen = true; window.__wcSprung = null; });
+  await tippe(p, "#an-blp", "An BookLedgerPro");
+  await p.waitForFunction(() => !!window.__wcSprung, null, { timeout: 5000 }).catch(() => {});
+  const sprung = await p.evaluate(() => window.__wcSprung || "");
+  let nl = null; try { const roh = new URL(sprung).searchParams.get("uebernahme").replace(/-/g, "+").replace(/_/g, "/"); nl = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(roh), (c) => c.charCodeAt(0)))); } catch { /* bleibt null */ }
+  ok("BLP: der Knopf springt nach BookLedgerPro mit ?uebernahme=", sprung.startsWith("https://lausiklauskn-png.github.io/BookLedgerPro/?uebernahme=") && nl && nl.quelle === "workflow-calculate");
+  ok("BLP: nichts Internes in der Adresse", nl && !/7,31|731|73,00|7300|selbstkost|klasse|MARKT-PRUEFWORT/i.test(JSON.stringify(nl)));
+
+  /* ── Stufe 2: Sicherung — sichern, in einem frischen Browser zurückholen ── */
+  await tippe(p, '[data-reiter="einstellungen"]', "Reiter Einstellungen");
+  await p.fill("#sicherung-pw", "kurz"); await p.fill("#sicherung-pw2", "kurz");
+  await tippe(p, "#sicherung-machen", "Sicherung (kurz)");
+  ok("SICHERUNG: zu kurzes Passwort wird gemeldet", /mindestens/.test(await p.textContent("#sicherung-meldung")));
+  await p.fill("#sicherung-pw", "pruef-passwort-123"); await p.fill("#sicherung-pw2", "pruef-passwort-123");
+  await tippe(p, "#sicherung-machen", "Sicherung");
+  await p.waitForFunction(() => !!window.__wcSicherung, null, { timeout: 30000 }).catch(() => {});
+  const sich = await p.evaluate(() => window.__wcSicherung || "");
+  ok("SICHERUNG: Datei entsteht, ohne Klartext", sich.length > 100 && !/Kunde Beispiel|AN-20|Prüf-Firma/.test(sich));
   await ctx.close();
+  const f = await seite(1200);
+  await f.p.goto(url); await f.p.waitForSelector("body[data-bereit]");
+  await f.p.click('[data-reiter="einstellungen"]');
+  await f.p.setInputFiles("#sicherung-datei", { name: "s.json", mimeType: "application/json", buffer: Buffer.from(sich) });
+  await f.p.waitForFunction(() => !document.getElementById("sicherung-zurueck-meldung").hidden);
+  await f.p.fill("#sicherung-pw-zurueck", "falsches-passwort-1");
+  await f.p.click("#sicherung-zurueck");
+  await f.p.waitForFunction(() => /passt nicht/.test(document.getElementById("sicherung-zurueck-meldung").textContent), null, { timeout: 30000 }).catch(() => {});
+  ok("SICHERUNG: falsches Passwort wird gemeldet", /passt nicht/.test(await f.p.textContent("#sicherung-zurueck-meldung")));
+  await f.p.fill("#sicherung-pw-zurueck", "pruef-passwort-123");
+  await f.p.click("#sicherung-zurueck");
+  await f.p.waitForSelector("[data-meldung]", { timeout: 30000 }).catch(() => {});
+  ok("SICHERUNG: Zurückholen meldet die Zahl der Angebote", /Zurückgeholt: 4 Angebote, 1 Kunden/.test(await f.p.textContent("[data-meldung]").catch(() => "")), await f.p.textContent("[data-meldung]").catch(() => ""));
+  await f.p.click('[data-reiter="angebote"]');
+  ok("SICHERUNG: die Angebote stehen im frischen Browser", await f.p.locator("[data-angebot-zeile]").count() === 4);
+  ok("SICHERUNG: der eigene Katalog (EK 7,31 €) kam mit", await f.p.evaluate(() => JSON.parse(localStorage.getItem("workflowcalculate_katalog") || "null")?.materialien.find((m) => m.id === "tasse_11").ekCent) === 731);
+  await f.ctx.close();
 
   /* ── Handy: keine waagerechte Rollbahn ── */
   const h = await seite(380);
