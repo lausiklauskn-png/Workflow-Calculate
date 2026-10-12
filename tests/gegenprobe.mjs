@@ -14,6 +14,11 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const WURZEL = join(dirname(fileURLToPath(import.meta.url)), "..");
+/* Die Kopie liegt unter /tmp — die Klone daneben (BookLedgerPro, die WorkFlohs) findet sie dort nicht.
+   Ohne diese Zeilen wären die Parser- und Import-Proben in jeder Kopie übersprungen und ihre Fälle blind. */
+for (const [k, rel] of [["BLP_KLON", "BookLedgerPro"], ["WORKFLOH_KLON", "Mein-WorkFloh"], ["TOMYS_KLON", "Tomys-Hub/workfloh"]]) {
+  if (!process.env[k] && existsSync(join(WURZEL, "..", rel))) process.env[k] = join(WURZEL, "..", rel);
+}
 const K = "kern", B = "browser";
 const FAELLE = [
   { name: "LEHRBUCH: Skonto nicht im Hundert gerechnet", probe: K, erwartet: "KALK: Lehrbuch — Zielverkaufspreis",
@@ -33,7 +38,7 @@ const FAELLE = [
   { name: "MENGE: Rolle wird nie gedreht", probe: K, erwartet: "MENGE: Rolle",
     an: [["assets/kern/mengen.js", "if (n1 > n2 || (n1 === n2 && h <= b)) return", "if (true) return"]] },
   { name: "WHITELIST: Selbstkosten im Kundenblatt", probe: K, erwartet: "WHITELIST: keine internen Felder",
-    an: [["assets/kern/aussen.js", "menge: c(x.erg.menge), stueckCent:", "menge: c(x.erg.menge), selbstkosten: c(x.erg.selbstkosten), stueckCent:"]] },
+    an: [["assets/kern/aussen.js", "menge: c(x.erg.menge), einheit: einheitVon(r, x.pos), stueckCent:", "menge: c(x.erg.menge), einheit: einheitVon(r, x.pos), selbstkosten: c(x.erg.selbstkosten), stueckCent:"]] },
   { name: "WHITELIST: Kundenklasse geht hinaus", probe: K, erwartet: "WHITELIST: keine internen Felder",
     an: [["assets/kern/aussen.js", "return { name: s(k.name), anschrift: s(k.anschrift) };", "return { name: s(k.name), anschrift: s(k.anschrift), klasse: s(k.klasse) };"]] },
   { name: "VERSAND: passt nichts → still 0", probe: K, erwartet: "VERSAND: passt nichts",
@@ -87,6 +92,46 @@ const FAELLE = [
     an: [["assets/kern/sicherung.js", "return { art: ART, fassung: FASSUNG, erstellt: erstellt, paket: paket };", "return { art: ART, fassung: FASSUNG, erstellt: erstellt, paket: paket, vorschau: inhalt.angebote };"]] },
   { name: "SICHERUNG: Katalog kommt nicht mit zurück", probe: B, erwartet: "SICHERUNG: der eigene Katalog",
     an: [["assets/app.js", "if (!lsGet(LS.katalog) && o.speicher.katalog) { lsSet(LS.katalog, o.speicher.katalog); katalogLaden(); }", ""]] },
+  /* ── Stufe 3 ── */
+  { name: "NACHKALK: leeres Feld zählt als 0", probe: K, erwartet: "NACHKALK: leeres Feld heißt nicht erfasst",
+    an: [["assets/kern/nachkalk.js", 'function zahl(x) { if (x === "" || x == null) return null;', "function zahl(x) { if (x == null) return null;"]] },
+  { name: "NACHKALK: Ist-Minuten werden ignoriert", probe: K, erwartet: "NACHKALK: 50 % mehr Arbeitszeit",
+    an: [["assets/kern/nachkalk.js", "var fek = min != null ? rund(min / 60 * erg.effektiv.lohnCent) : erg.fek;", "var fek = erg.fek;"]] },
+  { name: "NACHKALK: Versand Ist fehlt in den Selbstkosten", probe: K, erwartet: "NACHKALK: Versand Ist",
+    an: [["assets/kern/nachkalk.js", "var skPlan = vPlan, skIst = vIst, netto = vPlan;", "var skPlan = vPlan, skIst = vPlan, netto = vPlan;"]] },
+  { name: "NACHKALK: Entwürfe zählen im Faktor mit", probe: K, erwartet: "NACHKALK: nur gestellte Angebote",
+    an: [["assets/kern/nachkalk.js", 'if (a.status !== "gestellt" || !a.ist || !a.ist.pos) return;', "if (!a.ist || !a.ist.pos) return;"]] },
+  { name: "NACHKALK: derselbe Befund wird zweimal übernommen", probe: K, erwartet: "NACHKALK: derselbe Befund wird nur einmal",
+    an: [["assets/kern/nachkalk.js", 'if (schonUebernommen(kat, z)) return { ok: false, grund: "schon übernommen" };', ""]] },
+  { name: "NACHKALK: kleine Abweichung wird trotzdem übernommen", probe: K, erwartet: "NACHKALK: unter 2 %",
+    an: [["assets/kern/nachkalk.js", 'if (z.passt) return { ok: false, grund: "passt schon (Abweichung unter " + PASST_PCT + " %)" };', ""]] },
+  { name: "NACHKALK: Ist-Werte gehen aufs Kundenblatt", probe: K, erwartet: "WHITELIST: Nachkalkulation und Stichzahl bleiben intern",
+    an: [["assets/kern/aussen.js", "      kleinunternehmer: !!kleinunternehmer,", "      kleinunternehmer: !!kleinunternehmer, ist: a.ist || null,"]] },
+  { name: "STICK: Maschinenzeit hängt nicht an der Stichzahl", probe: K, erwartet: "STICK: Maschinenzeit aus der Stichzahl",
+    an: [["assets/kern/kalkulation.js", ': verfahren.leistungEinheit === "tsd_stiche" ? tsdStiche : menge;', ": menge;"]] },
+  { name: "STICK: fehlende Stichzahl wird still 0", probe: K, erwartet: "STICK: fehlende Stichzahl",
+    an: [["assets/kern/kalkulation.js", 'if (vorlage.stiche && !(stiche > 0)) offen.push("Stichzahl fehlt");', ""]] },
+  { name: "GEBIET: Hinzufügen überschreibt eigene Zahlen", probe: K, erwartet: "GEBIET: eigene Zahlen bleiben",
+    an: [["assets/kern/katalog.js", "if (kat[l].some(function (y) { return y.id === x.id; })) { schonDa++; return; }",
+      "kat[l] = kat[l].filter(function (y) { return y.id !== x.id; });"]] },
+  { name: "EINHEIT: immer Stk. auf dem Blatt", probe: K, erwartet: "EINHEIT: Std. und Stk.",
+    an: [["assets/kern/aussen.js", 'return s(v && v.einheitText) || "Stk.";', 'return "Stk.";']] },
+  { name: "NK-SEITE: keine Nachkalkulation am gestellten Angebot", probe: B, erwartet: "NK-SEITE: am gestellten Angebot steht die Nachkalkulation",
+    an: [["assets/app.js", 'if (a.status === "gestellt") main.append(nachkalkKarte(a, r));', "if (false) main.append(nachkalkKarte(a, r));"]] },
+  { name: "NK-SEITE: Übernehmen-Knopf bleibt nach dem Übernehmen", probe: B, erwartet: "NK-SEITE: danach kein zweites Übernehmen",
+    an: [["assets/app.js", ': WC.nachkalk.schonUebernommen(S.katalog, z) ? h("span",', ': false ? h("span",']] },
+  { name: "GEBIET-SEITE: der Knopf fügt nichts hinzu", probe: B, erwartet: "GEBIET-SEITE: Stickerei steht danach im Katalog",
+    an: [["assets/app.js", "var r = KAT.gebietHinzufuegen(S.katalog, pk);", "var r = KAT.gebietHinzufuegen({}, pk);"]] },
+  { name: "STICK-SEITE: das Feld Stichzahl ändert nichts", probe: B, erwartet: "STICK-SEITE: doppelte Stichzahl",
+    an: [["assets/app.js", 'p.stiche = n > 0 ? n : ""; })', "void n; })"]] },
+  { name: "BEISPIEL: dasselbe Beispiel wird doppelt angelegt", probe: K, erwartet: "BEISPIEL: ein Beispiel wird nicht doppelt geladen",
+    an: [["assets/daten/beispiel-angebote.js", 'if ((angebote || []).some(function (a) { return a.beispiel === bid; })) return { ok: false, grund: "schon geladen" };', ""]] },
+  { name: "BEISPIEL: fehlende Arbeitsgebiete werden nicht mitgeholt", probe: K, erwartet: "BEISPIEL: fehlende Arbeitsgebiete",
+    an: [["assets/daten/beispiel-angebote.js", "      if (gid) { WC.katalog.gebietHinzufuegen", "      if (false) { WC.katalog.gebietHinzufuegen"]] },
+  { name: "BEISPIEL-SEITE: „Alle laden“ lädt nur eines", probe: B, erwartet: "BEISPIEL-SEITE: vier Angebote",
+    an: [["assets/app.js", "beispielLaden(L.map(function (b) { return b.bid; }));", "beispielLaden([L[0].bid]);"]] },
+  { name: "WORKFLOH-IMPORT: Kunde unter falschem Feldnamen", probe: B, erwartet: "WORKFLOH-IMPORT: Mein WorkFloh",
+    an: [["assets/kern/uebergabe.js", "data: { nameFirma: d.kunde.name,", "data: { firma: d.kunde.name,"]] },
 ];
 
 function vorkommen(text, teil) { let n = 0, i = 0; while ((i = text.indexOf(teil, i)) >= 0) { n++; i += teil.length; } return n; }

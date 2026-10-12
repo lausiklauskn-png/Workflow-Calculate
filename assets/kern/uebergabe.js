@@ -23,8 +23,8 @@
     var stueck = 0;
     d.positionen.forEach(function (p) {
       stueck += p.menge;
-      z.push("• " + p.titel + (p.beschreibung ? " — " + p.beschreibung : "") + ": " + p.menge + " Stk. à " + eur(p.stueckCent) + " = " + eur(p.gesamtCent) + " netto");
-      if (p.staffel.length) z.push("  Staffel: " + p.staffel.map(function (s) { return s.menge + " Stk. à " + eur(s.stueckCent); }).join(" · "));
+      z.push("• " + p.titel + (p.beschreibung ? " — " + p.beschreibung : "") + ": " + p.menge + " " + (p.einheit || "Stk.") + " à " + eur(p.stueckCent) + " = " + eur(p.gesamtCent) + " netto");
+      if (p.staffel.length) z.push("  Staffel: " + p.staffel.map(function (s) { return s.menge + " " + (p.einheit || "Stk.") + " à " + eur(s.stueckCent); }).join(" · "));
     });
     if (d.versand) z.push("• " + d.versand.text + ": " + eur(d.versand.nettoCent) + " netto");
     z.push("", "Summe netto " + eur(d.summen.netto) + (d.kleinunternehmer ? " · § 19 UStG, keine Umsatzsteuer" : " · USt " + eur(d.summen.ust)) + " · brutto " + eur(d.summen.brutto));
@@ -69,7 +69,7 @@
       var text = p.titel + (p.beschreibung ? " — " + p.beschreibung : "");
       var glatt = p.menge > 0 && p.gesamtCent % p.menge === 0;
       return glatt ? { beschreibung: kappe(text, 140), menge: p.menge, einzelpreisCent: p.gesamtCent / p.menge, ustSatz: p.ustSatz }
-        : { beschreibung: kappe(p.menge + " Stk. " + text, 140), menge: 1, einzelpreisCent: p.gesamtCent, ustSatz: p.ustSatz };
+        : { beschreibung: kappe(p.menge + " " + (p.einheit || "Stk.") + " " + text, 140), menge: 1, einzelpreisCent: p.gesamtCent, ustSatz: p.ustSatz };
     });
     if (d.versand) pos.push({ beschreibung: d.versand.text, menge: 1, einzelpreisCent: d.versand.nettoCent, ustSatz: d.kleinunternehmer ? 0 : 19 });
     return { v: 1, quelle: "workflow-calculate", modus: "angebot", titel: kappe(d.titel || (d.positionen[0] ? d.positionen[0].titel : d.nummer), 140),

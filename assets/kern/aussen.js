@@ -16,13 +16,18 @@
   }
   function kundeExtern(k) { k = k || {}; return { name: s(k.name), anschrift: s(k.anschrift) }; }
 
+  /* Einheit der Menge („Stk.“, „Std.“, „km“) — aus der Vorlage, nie aus der Rechnung */
+  function einheitVon(r, p) {
+    var v = (r.kat && r.kat.vorlagen || []).filter(function (x) { return x.id === p.vorlage; })[0];
+    return s(v && v.einheitText) || "Stk.";
+  }
   /* r = WC.angebot.rechne(…) · a = das Angebot */
   function angebotExtern(a, r, firma, kleinunternehmer) {
     var positionen = r.positionen.filter(function (x) { return x.erg.ok; }).map(function (x) {
       return {
         titel: s(x.pos.titel), beschreibung: s(x.pos.beschreibung),
         bild: Array.isArray(x.pos.bilder) && x.pos.bilder.length ? s(x.pos.bilder[0]) : "",
-        menge: c(x.erg.menge), stueckCent: c(x.erg.stueckCent), gesamtCent: c(x.erg.netto), ustSatz: kleinunternehmer ? 0 : c(x.erg.ustSatz),
+        menge: c(x.erg.menge), einheit: einheitVon(r, x.pos), stueckCent: c(x.erg.stueckCent), gesamtCent: c(x.erg.netto), ustSatz: kleinunternehmer ? 0 : c(x.erg.ustSatz),
         staffel: x.staffel.length > 1 ? x.staffel.filter(function (e) { return e.ok; }).map(function (e) { return { menge: c(e.menge), stueckCent: c(e.stueckCent), gesamtCent: c(e.netto) }; }) : [],
       };
     });

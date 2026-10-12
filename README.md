@@ -20,6 +20,10 @@ Adresse: <https://lausiklauskn-png.github.io/Workflow-Calculate/> · offline, oh
 Ändern nach dem Stellen ergibt eine **neue Fassung** (dieselbe Nummer, Vergleich mit der alten).
 **🔐 Sicherung** (Einstellungen): alles in einer verschlüsselten Datei, Zurückholen fügt hinzu.
 
+**Stufe 3:** Arbeitsgebiete Stickerei (nach Stichzahl) und Montage & Dienstleistung (Std., km) im Katalog hinzufügen ·
+**📏 Nachkalkulation** am gestellten Angebot (Ist-Zeit, -Material, -Maschine, -Versand) und je Vorlage ins Zeit-Muster übernehmen ·
+**Beispiele** im Reiter „Angebote“: 4 Angebote mit 15 Positionen zum Ansehen und zum Testen der Übergaben.
+
 Abkürzen: ein Angebot „⧉ als neues Angebot“ übernehmen, oder eine Position aus einem früheren Angebot.
 
 ## Prüfen

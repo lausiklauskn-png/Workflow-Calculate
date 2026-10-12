@@ -121,6 +121,11 @@
     var basis = M().rechne(vorlage.mengenregel === "stueck" ? "stueck" : "flaeche", eing, {});
     if (!basis.ok && vorlage.mengenregel !== "stueck") offen.push(basis.fehler);
     var m2Motiv = basis.ok ? basis.m2Motiv : 0;
+    /* Stickerei: Stichzahl je Stück (Garn, Vlies und Maschinenzeit hängen daran, nicht an der Fläche) */
+    var stiche = vorlage.stiche ? Math.max(0, Number(pos.stiche != null && pos.stiche !== "" ? pos.stiche : vorlage.sticheVorgabe) || 0) : 0;
+    if (vorlage.stiche && !(stiche > 0)) offen.push("Stichzahl fehlt");
+    var tsdStiche = stiche * menge / 1000;
+    if (stiche > 0) weg.push(menge + " × " + stiche + " Stiche = " + String(Math.round(tsdStiche * 1000) / 1000).replace(".", ",") + " Tausend Stiche");
 
     /* Material */
     var mek = 0, gewichtG = 0, material = [];
@@ -131,8 +136,8 @@
       var mat = finde(kat.materialien, wahl);
       if (!mat) { offen.push(sl.name + ": Material „" + wahl + "“ fehlt im Katalog"); return; }
       var r = sl.bezug === "regel" ? M().rechne(vorlage.mengenregel, eing, mat) : basis;
-      if (!r.ok) { offen.push(sl.name + ": " + r.fehler); return; }
-      var q = M().mengeFuer(mat.einheit, sl.bezug || "regel", r, eing);
+      if (!r.ok && sl.bezug !== "stiche") { offen.push(sl.name + ": " + r.fehler); return; }
+      var q = sl.bezug === "stiche" ? (mat.einheit === "tsd_stiche" ? tsdStiche : null) : M().mengeFuer(mat.einheit, sl.bezug || "regel", r, eing);
       if (q == null) { offen.push(sl.name + ": Einheit „" + mat.einheit + "“ passt nicht zur Mengenregel"); return; }
       var fak = sl.jeFarbe ? ff : 1;
       var ek = zahl(mat.ekCent);
@@ -144,7 +149,7 @@
       material.push({ slot: sl.id, name: mat.name, menge: Math.round(q * fak * 1000) / 1000, einheit: mat.einheit, cent: cent, platzhalter: !!mat.platzhalter });
       weg.push(sl.name + ": " + mat.name + " " + String(Math.round(q * fak * 1000) / 1000).replace(".", ",") + " " + mat.einheit +
         (fak > 1 ? " (" + fak + " Farben)" : "") + " × " + (ek / 100).toFixed(2).replace(".", ",") + " €" +
-        (+mat.verschnittPct ? " + " + mat.verschnittPct + " % Verschnitt" : "") + (r.weg[0] && sl.bezug === "regel" ? " · " + r.weg[0] : ""));
+        (+mat.verschnittPct ? " + " + mat.verschnittPct + " % Verschnitt" : "") + (r.weg && r.weg[0] && sl.bezug === "regel" ? " · " + r.weg[0] : ""));
     });
     gewichtG += menge * (+vorlage.gewichtJeStueckG || 0);
 
@@ -170,7 +175,7 @@
     if (verfahren) {
       var ms = zahl(verfahren.maschinensatzCent);
       var leist = +verfahren.leistung || 0;
-      var arbeit = verfahren.leistungEinheit === "m2" ? m2Motiv : menge;
+      var arbeit = verfahren.leistungEinheit === "m2" ? m2Motiv : verfahren.leistungEinheit === "tsd_stiche" ? tsdStiche : menge;
       maschinenH = (leist > 0 ? arbeit / leist : 0) + (+verfahren.ruestMin || 0) / 60;
       if (verfahren.jeFarbe) maschinenH *= ff;
       if (ms == null) { if (maschinenH > 0) offen.push(verfahren.name + ": Maschinenstundensatz fehlt"); }
@@ -182,9 +187,10 @@
     var netto = eigen != null ? eigen : sch.listenpreis;
     var platzhalter = !!(sf.gebiet.platzhalter || material.some(function (m) { return m.platzhalter; }) || (verfahren && verfahren.platzhalter));
     return {
-      ok: offen.length === 0, offen: offen, vorlage: vorlage.id, menge: menge, farben: farben, farbFaktor: ff,
+      ok: offen.length === 0, offen: offen, vorlage: vorlage.id, menge: menge, farben: farben, farbFaktor: ff, stiche: stiche,
       material: material, zeiten: zeiten, minuten: Math.round(minuten * 100) / 100, maschinenH: Math.round(maschinenH * 1000) / 1000,
       gewichtG: Math.round(gewichtG), m2Motiv: m2Motiv,
+      fek: fek, maschine: maschine, mek: mek, maschinensatzCent: verfahren ? zahl(verfahren.maschinensatzCent) : null,
       schema: sch, selbstkosten: sch.selbstkosten, herstellkosten: sch.herstellkosten, nettoKalk: sch.listenpreis,
       eigen: eigen, netto: netto, stueckCent: menge ? Math.round(netto / menge) : 0,
       saetze: sf.s, effektiv: e, quelle: sf.quelle, klasse: sf.klasse, platzhalter: platzhalter, weg: weg,
