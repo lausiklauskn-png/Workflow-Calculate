@@ -342,6 +342,36 @@ try {
     await s6.ctx.close();
   }
 
+  /* ── ← Zurück: Knopf und Android-Taste gehen dieselben Schritte zurück, die App schließt nicht (Klaus 2026-10-12) ── */
+  {
+    const sz = await seite(1200), q = sz.p;
+    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
+    const anfangTiefe = await q.getAttribute("#seite-zurueck", "data-tiefe"), anfangLaenge = await q.evaluate(() => history.length);
+    await tippe(q, '[data-reiter="katalog"]', "Reiter Katalog");
+    await tippe(q, '[data-kat-reiter="lieferanten"]', "Katalog-Reiter Lieferanten");
+    await tippe(q, '[data-kat-reiter="verfahren"]', "Katalog-Reiter Verfahren");
+    const erster = q.locator("[data-kat-eintrag]").first(), eid = await erster.getAttribute("data-kat-eintrag").catch(() => "");
+    await tippe(q, "[data-kat-eintrag]", "Katalog-Eintrag aufklappen");
+    await tippe(q, '[data-reiter="einstellungen"]', "Reiter Einstellungen");
+    await tippe(q, "#handel-knopf", "Knopf Handelsware");
+    const tiefe = Number(await q.getAttribute("#seite-zurueck", "data-tiefe")) - Number(anfangTiefe);
+    const laenge = (await q.evaluate(() => history.length)) - anfangLaenge;
+    ok("ZURÜCK: jeder Wechsel der Ansicht ist ein Schritt (6 Schritte gezählt, 6 im Verlauf des Browsers)", tiefe === 6 && laenge === 6 && !(await q.locator("#seite-zurueck").isDisabled()), { tiefe, laenge });
+    const wo = () => q.evaluate(() => { const st = history.state || {}; return [st.reiter, st.katReiter || "", st.katOffen || "", location.hash].join("|"); });
+    await tippe(q, "#seite-zurueck", "← Zurück 1");
+    ok("ZURÜCK: ← von Handelsware führt in die Einstellungen (Adresse ohne #handel)", (await wo()) === "einstellungen|||" && await q.locator('[data-reiter="einstellungen"].on').count() === 1, await wo());
+    await tippe(q, "#seite-zurueck", "← Zurück 2");
+    ok("ZURÜCK: ← führt in den Katalog mit dem aufgeklappten Eintrag", (await wo()) === "katalog|verfahren|" + eid + "|" && await q.locator('[data-kat-reiter="verfahren"].on').count() === 1, await wo());
+    await q.goBack(); await q.waitForTimeout(150);
+    ok("ZURÜCK: die Zurück-Taste des Geräts klappt den Eintrag wieder zu", (await wo()) === "katalog|verfahren||", await wo());
+    await tippe(q, "#seite-zurueck", "← Zurück 4");
+    ok("ZURÜCK: ← führt zum vorigen Katalog-Reiter (Lieferanten)", (await wo()) === "katalog|lieferanten||" && await q.locator('[data-kat-reiter="lieferanten"].on').count() === 1, await wo());
+    await tippe(q, "#seite-zurueck", "← Zurück 5"); await tippe(q, "#seite-zurueck", "← Zurück 6"); await q.waitForTimeout(150);
+    ok("ZURÜCK: nach allen Schritten steht die Startansicht da und ← ist grau (schließt nie die App)", (await wo()).startsWith("angebote|") && await q.locator("#seite-zurueck").isDisabled() && q.url().startsWith(url), await wo());
+    await sz.ctx.close();
+  }
+
   /* ── 🛒 Handelsware: eigene Seite #handel, Lieferanten, ins Angebot, nichts Internes hinaus ── */
   {
     const s7 = await seite(1200), q = s7.p;
