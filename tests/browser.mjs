@@ -2,9 +2,10 @@
    Rückgabe 0 = grün · 1 = rot · 2 = nicht lauffähig (kein playwright-core oder kein Chromium) — nie grün. */
 import { findeChromium } from "./chromium-finden.mjs";
 import { starteServer } from "./server.mjs";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+const WURZEL_T = join(dirname(fileURLToPath(import.meta.url)), "..");
 const NEBEN = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 let chromium;
@@ -37,6 +38,8 @@ async function druck(p, sel) {
   await p.click(sel);
   return p.evaluate(() => ({ text: document.getElementById("druck").textContent, html: document.getElementById("druck").innerHTML, n: window.__gedruckt || 0 }));
 }
+/* Seit 2026-10-12 öffnet die App auf der Suche — die alten Proben beginnen in „Angebote“ */
+async function zuAngeboten(p) { await p.click('[data-reiter="angebote"]'); }
 const K_kuli = (k) => ((k && k.vorlagen) || []).find((v) => v.id === "kuli_zukauf") || { einkauf: [{}] };
 const netto = (p, id) => p.evaluate((id) => Number((document.querySelector('[data-position="' + id + '"] [data-pos-netto]') || {}).dataset ? document.querySelector('[data-position="' + id + '"] [data-pos-netto]').dataset.posNetto : NaN), id);
 
@@ -199,7 +202,7 @@ try {
   ok("SICHERUNG: Datei entsteht, ohne Klartext", sich.length > 100 && !/Kunde Beispiel|AN-20|Prüf-Firma/.test(sich));
   await ctx.close();
   const f = await seite(1200);
-  await f.p.goto(url); await f.p.waitForSelector("body[data-bereit]");
+  await f.p.goto(url); await f.p.waitForSelector("body[data-bereit]"); await zuAngeboten(f.p);
   await f.p.click('[data-reiter="einstellungen"]');
   await f.p.setInputFiles("#sicherung-datei", { name: "s.json", mimeType: "application/json", buffer: Buffer.from(sich) });
   await f.p.waitForFunction(() => !document.getElementById("sicherung-zurueck-meldung").hidden);
@@ -219,7 +222,7 @@ try {
   /* ── Stufe 3: Arbeitsgebiete, Stickerei, Einheit, Nachkalkulation ── */
   {
     const s3 = await seite(1200), q = s3.p;
-    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await q.goto(url); await q.waitForSelector("body[data-bereit]"); await zuAngeboten(q);
     await tippe(q, '[data-reiter="katalog"]', "Reiter Katalog");
     ok("GEBIET-SEITE: Stickerei und Dienstleistung stehen zum Hinzufügen da", await q.locator('[data-gebiet-hinzu="stickerei"]').count() === 1 && await q.locator('[data-gebiet-hinzu="dienstleistung"]').count() === 1);
     await tippe(q, '[data-gebiet-hinzu="stickerei"]', "Stickerei hinzufügen");
@@ -276,7 +279,7 @@ try {
   /* ── Beispiel-Angebote: laden, ansehen, an WorkFloh und BookLedgerPro übergeben ── */
   {
     const s4 = await seite(1200), q = s4.p;
-    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await q.goto(url); await q.waitForSelector("body[data-bereit]"); await zuAngeboten(q);
     ok("BEISPIEL-SEITE: Auswahl und „Alle laden“ stehen gleich bei „＋ Neues Angebot“", await q.locator("[data-beispiel-angebote] #beispiel-wahl option").count() === 5);
     await tippe(q, "#beispiel-alle", "Alle Beispiele laden");
     ok("BEISPIEL-SEITE: fünf Angebote stehen in der Liste", await q.locator("[data-angebot-zeile]").count() === 5);
@@ -316,7 +319,7 @@ try {
   {
     const { teilA, teilB } = await import("./daten/ki-antwort.mjs");
     const s6 = await seite(1200), q = s6.p;
-    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await q.goto(url); await q.waitForSelector("body[data-bereit]"); await zuAngeboten(q);
     await tippe(q, "#neues-angebot", "Neues Angebot");
     await q.selectOption("#vorlage-wahl", "tasse"); await tippe(q, '[data-beispiel-nehmen="tasse:b1"]', "Beispiel Tasse");
     await q.fill('[data-position="P-1"] input[data-key="P-1-titel"]', "GEHEIM-TITEL Kunde Beispiel");
@@ -346,7 +349,6 @@ try {
   {
     const sz = await seite(1200), q = sz.p;
     await q.goto(url); await q.waitForSelector("body[data-bereit]");
-    await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
     const anfangTiefe = await q.getAttribute("#seite-zurueck", "data-tiefe"), anfangLaenge = await q.evaluate(() => history.length);
     await tippe(q, '[data-reiter="katalog"]', "Reiter Katalog");
     await tippe(q, '[data-kat-reiter="lieferanten"]', "Katalog-Reiter Lieferanten");
@@ -368,7 +370,7 @@ try {
     await tippe(q, "#seite-zurueck", "← Zurück 4");
     ok("ZURÜCK: ← führt zum vorigen Katalog-Reiter (Lieferanten)", (await wo()) === "katalog|lieferanten||" && await q.locator('[data-kat-reiter="lieferanten"].on').count() === 1, await wo());
     await tippe(q, "#seite-zurueck", "← Zurück 5"); await tippe(q, "#seite-zurueck", "← Zurück 6"); await q.waitForTimeout(150);
-    ok("ZURÜCK: nach allen Schritten steht die Startansicht da und ← ist grau (schließt nie die App)", (await wo()).startsWith("angebote|") && await q.locator("#seite-zurueck").isDisabled() && q.url().startsWith(url), await wo());
+    ok("ZURÜCK: nach allen Schritten steht die Startansicht (Suche) da und ← ist grau (schließt nie die App)", (await wo()).startsWith("suche|") && await q.locator("#seite-zurueck").isDisabled() && q.url().startsWith(url), await wo());
     await sz.ctx.close();
   }
 
@@ -476,7 +478,7 @@ try {
   /* ── Kleinmengenzuschlag: eigene Zeile unter 10 Stück ── */
   {
     const s10 = await seite(1200), q = s10.p;
-    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await q.goto(url); await q.waitForSelector("body[data-bereit]"); await zuAngeboten(q);
     await tippe(q, "#neues-angebot", "Neues Angebot");
     await q.selectOption("#vorlage-wahl", "tasse"); await tippe(q, "#position-leer", "Leere Position");
     await q.locator('[data-position="P-1"] [data-feld="menge"]').fill("2"); await q.locator('[data-position="P-1"] [data-feld="menge"]').press("Tab");
@@ -502,7 +504,7 @@ try {
     const { readFileSync } = await import("node:fs");
     const DAT = join(dirname(fileURLToPath(import.meta.url)), "daten", "anfragen");
     const s11 = await seite(1200), q = s11.p;
-    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await q.goto(url); await q.waitForSelector("body[data-bereit]"); await zuAngeboten(q);
     await tippe(q, '[data-reiter="kunden"]', "Reiter Kunden");
     await tippe(q, "#neuer-kunde", "Neuer Kunde");
     await q.locator('[data-kunde="K-1"] input').first().fill("Sportverein Beispiel e.V.");
@@ -554,7 +556,7 @@ try {
     const { readFileSync } = await import("node:fs");
     const DAT = join(dirname(fileURLToPath(import.meta.url)), "daten", "anfragen");
     const s12 = await seite(1200), q = s12.p;
-    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await q.goto(url); await q.waitForSelector("body[data-bereit]"); await zuAngeboten(q);
     await tippe(q, '[data-reiter="kunden"]', "Reiter Kunden");
     await tippe(q, "#neuer-kunde", "Neuer Kunde");
     await q.locator('[data-kunde="K-1"] input').first().fill("Sportverein Beispiel e.V.");
@@ -591,7 +593,7 @@ try {
   {
     const s13 = await seite(1200), q = s13.p;
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDK+mmyAAAAABJRU5ErkJggg==", "base64");
-    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await q.goto(url); await q.waitForSelector("body[data-bereit]"); await zuAngeboten(q);
     await tippe(q, "#neues-angebot", "Neues Angebot");
     await q.fill("#kunde-neu-name", "Sportverein Beispiel e.V."); await tippe(q, "#kunde-neu-anlegen", "Kunde anlegen");
     await q.fill('[data-key="titel"]', "Vereinstassen");
@@ -652,7 +654,7 @@ try {
   /* ── Vollbild: die Arbeitsfläche nutzt jede Breite (Klaus 2026-10-12) ── */
   {
     const v = await seite(1920), q = v.p;
-    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await q.goto(url); await q.waitForSelector("body[data-bereit]"); await zuAngeboten(q);
     await tippe(q, "#beispiel-laden", "Beispiel laden");
     const masse = [];
     for (const [b, hh] of [[360, 740], [740, 360], [1024, 768], [1920, 1080]]) {
@@ -686,9 +688,161 @@ try {
     await v.ctx.close();
   }
 
+  /* ── 🔎 SUCHE — die Startseite (Klaus 2026-10-12) ── */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 } });
+    /* gestellte Spracherkennung (wie Workflow PDF tests/sprechen.mjs) und ein gestelltes Modell für die Bedeutung */
+    await ctx.addInitScript(() => {
+      window.__rec = [];
+      class Stub { constructor() { window.__rec.push(this); } start() {} stop() { setTimeout(() => this.onend && this.onend(), 20); } abort() {} }
+      window.SpeechRecognition = Stub;
+      window.__sag = (t, fertig) => { const r = window.__rec[window.__rec.length - 1]; const a = [{ transcript: t }]; a.isFinal = !!fertig; r.onresult({ resultIndex: 0, results: [a] }); };
+    });
+    const q = await ctx.newPage(); q.on("pageerror", (e) => fehler.push(e.message));
+    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    ok("SUCHE: die App öffnet auf der Suche (Startseite)", await q.locator('[data-reiter="suche"].on').count() === 1 && await q.locator("[data-suche-seite] #suche-feld").count() === 1);
+    ok("SUCHE: Mikrofon steht IM Suchfeld", await q.evaluate(() => { const f = document.querySelector(".su-form"); return !!f && !!f.querySelector("#suche-mic") && !document.getElementById("suche-mic").disabled; }));
+    ok("BEISPIELE: 10 Beispiel-Fragen unter dem Suchfeld", await q.locator("[data-su-beispiel]").count() === 10);
+    const vorherAngebote = await q.evaluate(() => WCApp.S.angebote.length);
+    await tippe(q, '[data-su-beispiel="f01"] .su-vorschlag-text', "Beispiel Tassen-Frage");
+    await q.waitForSelector("[data-su-karte]");
+    ok("SUCHE: Klaus' Tassen-Frage → erste Karte ist die Tasse, 10 Stk., mit Preis netto/brutto/je Stück", await q.evaluate(() => {
+      const k = document.querySelector("[data-su-karte]"), p = k.querySelector("[data-su-netto]");
+      return k.dataset.suKarte === "tasse" && k.querySelector("[data-su-menge]").value === "10" && !!p && +p.dataset.suNetto > 0 && +p.dataset.suBrutto > +p.dataset.suNetto && /je Stk\./.test(p.textContent); }));
+    ok("FÜLLWÖRTER: „ignoriert: …“ steht da, nicht still", /Der Kunde möchte/.test(await q.locator("[data-ignoriert]").textContent().catch(() => "")) && /Wie viel kostet das/i.test(await q.locator("[data-ignoriert]").textContent().catch(() => "")));
+    ok("SUCHE: kein Kalkulationsdetail auf der Karte (Selbstkosten, Gewinn, Material nur nach Tipp)", !/Selbstkosten|Gewinn|Material/.test(await q.locator('[data-su-karte="tasse"]').textContent()));
+    ok("KEIN SPRUNG: die Suche öffnet nichts von selbst (Reiter Suche, kein neues Angebot)", await q.locator('[data-reiter="suche"].on').count() === 1 && (await q.evaluate(() => WCApp.S.angebote.length)) === vorherAngebote);
+    await tippe(q, '[data-su-zusammensetzung="tasse"]', "Zusammensetzung");
+    ok("ZUSAMMENSETZUNG: klappt auf derselben Seite auf (Selbstkosten, Versand, brutto)", await q.locator('[data-reiter="suche"].on').count() === 1 && /Selbstkosten/.test(await q.locator('[data-su-zus="tasse"]').textContent().catch(() => "")) && await q.locator('[data-su-zus="tasse"] [data-su-versand]').count() === 1);
+    ok("RÜCKRICHTUNG: an der Tasse stehen die Fragen dazu (bidirektional)", await q.locator('[data-su-zus="tasse"] [data-su-rueck-fragen]').count() === 1);
+    const n10 = +(await q.getAttribute('[data-su-karte="tasse"] [data-su-netto]', "data-su-netto"));
+    await q.fill('[data-su-menge="tasse"]', "1"); await q.press('[data-su-menge="tasse"]', "Enter");
+    await q.waitForFunction(() => document.querySelector('[data-su-karte="tasse"] [data-su-menge]').value === "1", null, { timeout: 4000 }).catch(() => {});
+    const n1 = +(await q.getAttribute('[data-su-karte="tasse"] [data-su-netto]', "data-su-netto"));
+    ok("KORREKTUR: „und bei 1 Tasse?“ — Menge auf der Karte, Preis rechnet sofort neu (mit Kleinmengenzuschlag)", n1 > 0 && n1 < n10 && await q.locator('[data-su-zus="tasse"] [data-su-kleinmenge]').count() === 1, [n10, n1]);
+    ok("LERNEN: Zusammensetzung und Menge merken sich die Frage am Produkt", await q.evaluate(() => (WCApp.S.einst.suche.gelernt || []).some((e) => e.vorlage === "tasse" && e.gut)));
+    /* derselbe Preis wie im Angebot */
+    await tippe(q, '[data-su-angebot-neu="tasse"]', "＋ Angebot");
+    const vgl = await q.evaluate(() => { const a = WCApp.S.angebote[0], r = WC.angebot.rechne(a, WCApp.S.katalog, a.kunde, WCApp.S.einst.kleinunternehmer); return { netto: r.summen.netto, menge: a.positionen[0].menge, v: a.positionen[0].vorlage, reiter: WCApp.S.reiter }; });
+    ok("PREIS: „＋ Angebot“ legt genau das an, was die Karte zeigte (gleicher Preis wie im Angebot)", vgl.netto === n1 && vgl.menge === 1 && vgl.v === "tasse" && vgl.reiter === "angebot", [vgl, n1]);
+    /* ✕ an einem Beispiel, wiederherstellen in den Einstellungen */
+    await tippe(q, '[data-reiter="suche"]', "Reiter Suche");
+    await q.fill("#suche-feld", ""); await q.dispatchEvent("#suche-feld", "input");
+    await tippe(q, '[data-su-beispiel-weg="f10"]', "Beispiel ✕");
+    ok("BEISPIELE: ✕ nimmt genau ein Beispiel weg", await q.locator("[data-su-beispiel]").count() === 9 && await q.locator('[data-su-beispiel="f10"]').count() === 0);
+    await q.reload(); await q.waitForSelector("body[data-bereit]");
+    ok("BEISPIELE: ein gelöschtes Beispiel bleibt nach dem Neuladen weg", await q.locator("[data-su-beispiel]").count() === 9);
+    await tippe(q, '[data-reiter="einstellungen"]', "Reiter Einstellungen");
+    await tippe(q, "#beispiele-wiederherstellen", "Beispiele wiederherstellen");
+    await tippe(q, '[data-reiter="suche"]', "Reiter Suche");
+    ok("BEISPIELE: „Beispiele wiederherstellen“ bringt alle 10 zurück", await q.locator("[data-su-beispiel]").count() === 10);
+    /* ▶ Durchspielen: alle 10 nacheinander, jedes rechnet (fehlende Gebiete werden geholt) */
+    await tippe(q, "#su-durchspielen", "▶ Durchspielen");
+    const lauf = [];
+    for (let i = 0; i < 10; i++) {
+      await q.waitForSelector("[data-su-uebung]");
+      lauf.push(await q.evaluate(() => { const k = document.querySelector("[data-su-karte]"); return { schritt: document.querySelector("[data-su-uebung]").dataset.suUebung, v: k && k.dataset.suKarte, preis: !!(k && k.querySelector("[data-su-netto]")), menge: k && (k.querySelector("[data-su-menge]") || {}).value }; }));
+      if (i < 9) await tippe(q, "[data-su-weiter]", "Weiter ›");
+    }
+    const erwartet = await q.evaluate(() => WC.BEISPIEL_FRAGEN.map((b) => b.vorlage + ":" + b.menge));
+    ok("DURCHSPIELEN: alle 10 Beispiele nacheinander — richtiges Produkt, richtige Menge, jedes mit Preis", lauf.every((x, i) => x.schritt === String(i + 1) && x.v + ":" + x.menge === erwartet[i] && x.preis), lauf);
+    await tippe(q, "[data-su-fertig]", "Fertig ✓");
+    ok("DURCHSPIELEN: die fehlenden Arbeitsgebiete sind dazugeholt", await q.evaluate(() => ["stickerei", "laser", "handelsware", "dienstleistung"].every((g) => WCApp.S.katalog.gebiete.some((x) => x.id === g))));
+    /* Kunde versteckt: Klasse wirkt, Klartext erst auf Tipp */
+    await q.evaluate(() => { WCApp.S.kunden.push({ id: "K-9", name: "Pruefer", anschrift: "", klasse: "A" }); WCApp.S.katalog.gebiete.find((g) => g.id === "werbetechnik").klassen.A = { name: "A", stundenPct: -10, gewinnPct: -5 }; });
+    await q.fill("#suche-feld", "10 Tassen"); await q.dispatchEvent("#suche-feld", "input");
+    const ohneK = +(await q.getAttribute('[data-su-karte="tasse"] [data-su-netto]', "data-su-netto"));
+    await q.fill("#suche-feld", "Kunde Pruefer wünscht 10 Tassen"); await q.dispatchEvent("#suche-feld", "input");
+    const mitK = +(await q.getAttribute('[data-su-karte="tasse"] [data-su-netto]', "data-su-netto"));
+    const sicht = await q.evaluate(() => document.getElementById("inhalt").innerText);
+    ok("KUNDE: „Kunde Pruefer wünscht“ findet den Kunden — die Klasse wirkt auf den Preis", mitK > 0 && mitK < ohneK, [ohneK, mitK]);
+    ok("KUNDE: zugeklappt nur ein Kürzel — kein „Klasse A“, kein „A-Kunde“ auf dem Schirm", /^◦\d+\/1$/.test(await q.getAttribute("[data-su-kuerzel]", "data-su-kuerzel")) && !/Klasse A|A-Kunde|frühere Angebote/.test(sicht), await q.getAttribute("[data-su-kuerzel]", "data-su-kuerzel"));
+    await tippe(q, "[data-su-kuerzel]", "Kürzel");
+    ok("KUNDE: erst ein Tipp aufs Kürzel zeigt Klasse und frühere Angebote", /Klasse A/.test(await q.locator("[data-su-kunde-info]").textContent().catch(() => "")));
+    /* ✕ passt nicht */
+    await q.fill("#suche-feld", "10 Tassen mit Namen"); await q.dispatchEvent("#suche-feld", "input");
+    const vorX = await q.evaluate(() => [...document.querySelectorAll("[data-su-karte]")].map((k) => k.dataset.suKarte));
+    const weg = vorX.find((v) => v !== "tasse") || vorX[0];
+    await tippe(q, `[data-su-passt-nicht="${weg}"]`, "✕ passt nicht");
+    const nachX = await q.evaluate(() => [...document.querySelectorAll("[data-su-karte]")].map((k) => k.dataset.suKarte));
+    ok("LERNEN: „✕ passt nicht“ — das Produkt rückt bei derselben Frage nach hinten oder fällt weg", nachX.indexOf(weg) < 0 || nachX.indexOf(weg) > vorX.indexOf(weg), [vorX, nachX, weg]);
+    /* 🎤 Spracheingabe */
+    await q.fill("#suche-feld", ""); await q.dispatchEvent("#suche-feld", "input");
+    await tippe(q, "#suche-mic", "Mikrofon");
+    await q.evaluate(() => window.__sag("5 Schilder aus Alu", false));
+    ok("SPRACHE: der Text steht schon beim Sprechen im Feld, die Karten folgen", (await q.inputValue("#suche-feld")) === "5 Schilder aus Alu" && await q.locator('[data-su-karte="schild"]').count() === 1 && await q.locator(".su-form [data-wfs]").count() === 1);
+    await q.evaluate(() => window.__sag("5 Schilder aus Alu, 40 x 30 cm", true)); await tippe(q, ".wfs-fertig", "■ Stopp"); await q.waitForTimeout(120);
+    ok("SPRACHE: Laufbalken im Suchfeld, Stopp beendet", await q.evaluate(() => document.querySelector("[data-wfs]").hidden));
+    /* 🧠 Bedeutung — gestelltes Modell (Modul 03/04 haben dieselbe Oberfläche), echte Rangfolge aus bedeutung.js */
+    await q.evaluate(() => {
+      const D = ["tasse|henkel|kaffee|becher", "schild|alu|platte", "kugelschreiber|stift|kuli", "shirt|textil", "stick|polo|aufn"];
+      const vek = (t) => { t = String(t).toLowerCase(); const v = D.map((d) => (new RegExp(d).test(t) ? 1 : 0)); v.push(0.2); const n = Math.hypot(...v); return Float32Array.from(v.map((x) => x / n)); };
+      window.SbkimEmbedding = { init: () => { window.dispatchEvent(new CustomEvent("sbkim:embedding-progress", { detail: { status: "progress", file: "m.onnx", loaded: 5, total: 10 } })); return Promise.resolve(); },
+        embedPassageBatch: (l) => Promise.resolve(l.map(vek)), embedQuery: (t) => Promise.resolve(vek(t)) };
+      window.SbkimMatch = { match: (a, b) => a.reduce((s, x, i) => s + x * b[i], 0) };
+    });
+    let frage = "";
+    q.once("dialog", (d) => { frage = d.message(); d.accept(); });
+    await q.fill("#suche-feld", "Henkelgefäß fürs Büro"); await q.dispatchEvent("#suche-feld", "input");
+    await tippe(q, "#bed-an", "🧠 Bedeutung");
+    await q.waitForSelector('[data-bed-zustand="bereit"]', { timeout: 10000 }).catch(() => {});
+    ok("BEDEUTUNG: nur auf Knopfdruck, vorher steht da, was aus dem Netz kommt", /aus dem Netz/.test(frage) && /bleiben auf dem Gerät/.test(frage), frage);
+    await q.fill("#suche-feld", "Henkelgefäß für den Kaffee"); await q.dispatchEvent("#suche-feld", "input");
+    await q.waitForSelector('[data-su-bed-treffer="tasse"]', { timeout: 5000 }).catch(() => {});
+    ok("BEDEUTUNG: ohne Wort-Treffer findet die Bedeutung die Tasse („ähnlich“ unter den Karten)", await q.locator('[data-su-bed-treffer="tasse"]').count() === 1);
+    /* ?q= aus Tomys Hub / WorkFloh */
+    await q.goto(url + "?q=" + encodeURIComponent("Der Kunde möchte 20 Caps mit Logo bestickt")); await q.waitForSelector("body[data-bereit]");
+    ok("LINK: ?q= belegt die Frage vor und sucht sofort", (await q.inputValue("#suche-feld")) === "Der Kunde möchte 20 Caps mit Logo bestickt" && (await q.locator('[data-su-karte="cap_stick"] [data-su-menge]').inputValue().catch(() => "")) === "20");
+    /* Vollbild */
+    const vb = [];
+    for (const [b, hh] of [[360, 740], [1920, 1080]]) {
+      await q.setViewportSize({ width: b, height: hh });
+      vb.push(await q.evaluate(() => { const w = document.documentElement.clientWidth, s = document.querySelector("[data-suche-seite]").getBoundingClientRect(), f = document.querySelector(".su-form").getBoundingClientRect();
+        return { w, seite: Math.round(s.width), form: Math.round(f.width), rollt: document.documentElement.scrollWidth > w + 1 }; }));
+    }
+    ok("VOLLBILD: die Suche füllt Handy und großen Schirm, ohne waagerechtes Rollen", vb.every((x) => x.seite >= x.w - 40 && x.form >= x.w - 40 && !x.rollt), vb);
+    await ctx.close();
+  }
+
+  /* ── ⇅ DATEN: CSV hinaus, Tabelle herein ── */
+  {
+    const d = await seite(1200), q = d.p;
+    await q.goto(url); await q.waitForSelector("body[data-bereit]"); await zuAngeboten(q);
+    await tippe(q, "#beispiel-alle", "Beispiele: Alle laden");
+    await tippe(q, '[data-reiter="daten"]', "Reiter Daten");
+    ok("DATEN: Sicherung, CSV-Export und Tabellen-Import stehen im Reiter „⇅ Daten“", await q.locator("[data-daten-seite]").count() === 1 && await q.locator("#sicherung-machen").count() === 1 && await q.locator("#csv-ohne").count() === 1 && await q.locator("#import-datei").count() === 1);
+    await tippe(q, "#csv-ohne", "CSV ohne Kundendaten");
+    const ohne = await q.evaluate(() => window.__wcCsv || "");
+    await tippe(q, "#csv-intern", "CSV intern");
+    const mit = await q.evaluate(() => window.__wcCsv || "");
+    ok("CSV: ohne Kundendaten — kein Kundenname, aber alle Positionen mit Preis", ohne.split("\r\n").length > 15 && !/Beispiel e\. V\.|Bäckerei Beispiel|Musterstraße/.test(ohne) && /Tasse/.test(ohne), ohne.slice(0, 200));
+    ok("CSV: intern — mit Kunde", /Sportverein Beispiel e\. V\./.test(mit));
+    await q.setInputFiles("#import-datei", { name: "alte-angebote.csv", mimeType: "text/csv", buffer: readFileSync(join(WURZEL_T, "tests/daten/tabelle/alte-angebote.csv")) });
+    await q.waitForSelector("[data-import-vorschau]");
+    const pers = (await q.getAttribute("[data-import-person]", "data-import-person")) || "";
+    ok("IMPORT: Personenspalten werden angezeigt und nicht übernommen", ["Kunde", "Ansprechpartner", "Straße", "Telefon", "Info"].every((k) => pers.split("|").includes(k)), pers);
+    ok("IMPORT: Vorschau vor dem Übernehmen — 4 Zeilen, 3 zugeordnet", await q.locator("[data-import-zeile]").count() === 4 && await q.locator('[data-import-zeile][data-vorlage=""]').count() === 1);
+    /* KI-Zuordnung über den Verdecken-Weg, Gegenseite gestellt */
+    await q.evaluate(() => { WCApp.S.kiSchluessel = "sk-ant-test"; window.__wcKiFetch = (adr, opt) => { window.__kiGesendet = opt.body; const zeile = (JSON.parse(opt.body).messages[0].content.match(/Zeile 5:[^\n]*/) || [""])[0];
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ content: [{ type: "text", text: JSON.stringify({ positionen: [{ vorlage: "tasse", menge: 40, zitat: zeile }], unklar: [] }) }] }) }); }; });
+    await q.evaluate(() => { const d = document.querySelector("[data-import-ki]"); d.open = true; d.dispatchEvent(new Event("toggle")); });
+    await q.waitForSelector("[data-import-ki-text]");
+    ok("IMPORT → KI: was hinausgeht, steht da — ohne Personendaten", !/Prüfwort|Musterfrau|23125|@/.test(await q.locator("[data-import-ki-text]").textContent()));
+    await tippe(q, "#import-ki-los", "An die KI senden");
+    await q.waitForSelector("[data-import-ki-ergebnis]", { timeout: 5000 }).catch(() => {});
+    ok("IMPORT → KI: die KI-Zuordnung landet in der Vorschau (Zeile 5, markiert)", await q.locator('[data-import-zeile="5"][data-herkunft="ki"][data-vorlage="tasse"]').count() === 1 && !/Prüfwort|Musterfrau|23125|@/.test(await q.evaluate(() => window.__kiGesendet || "")));
+    const vor = await q.evaluate(() => WCApp.S.angebote.length);
+    await tippe(q, "#import-uebernehmen", "Übernehmen");
+    const imp = await q.evaluate(() => WCApp.S.angebote.filter((a) => a.import));
+    ok("IMPORT: übernommen — 3 Angebote (A-17 mit 2 Positionen), Entwurf, ohne Personendaten", imp.length === 3 && imp.some((a) => a.positionen.length === 2) && (await q.evaluate(() => WCApp.S.angebote.length)) === vor + 3 && !/Prüfwort|Musterfrau|Mustermann|23125|@|Erika/.test(JSON.stringify(imp)), imp.map((a) => a.titel));
+    await q.setInputFiles("#import-datei", { name: "angebote.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("PK") });
+    ok("IMPORT: Excel wird nicht still verworfen — „als CSV speichern“", /CSV/.test(await q.locator("[data-import-fehler]").textContent().catch(() => "")));
+    await d.ctx.close();
+  }
+
   /* ── Handy: keine waagerechte Rollbahn ── */
   const h = await seite(380);
-  await h.p.goto(url); await h.p.waitForSelector("body[data-bereit]");
+  await h.p.goto(url); await h.p.waitForSelector("body[data-bereit]"); await zuAngeboten(h.p);
   await h.p.click("#neues-angebot"); await h.p.selectOption("#vorlage-wahl", "kuli"); await h.p.click('[data-beispiel-nehmen="kuli:b1"]');
   ok("HANDY: 380 px ohne waagerechtes Rollen", await h.p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), await h.p.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]));
   await h.ctx.close();

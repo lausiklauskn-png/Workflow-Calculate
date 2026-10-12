@@ -17,7 +17,7 @@
 
   /* ── Zustand ── */
   var S = {
-    angebote: [], kunden: [], aktiv: lsGet(LS.aktiv), reiter: lsGet(LS.reiter) || "angebote",
+    angebote: [], kunden: [], aktiv: lsGet(LS.aktiv), reiter: lsGet(LS.reiter) || "suche",
     katalog: null, einst: Object.assign({ firma: { name: "", anschrift: "", kontakt: "", steuer: "", bank: "", logo: "" }, kleinunternehmer: false }, lsJson(LS.einst, {})),
     meldung: null, offen: {}, katReiter: "vorlagen", katOffen: null, neuPos: null,
   };
@@ -174,7 +174,7 @@
   }
 
   /* ── Rahmen ── */
-  var REITER = [["angebote", "Angebote"], ["angebot", "Angebot"], ["katalog", "Katalog"], ["kunden", "Kunden"], ["einstellungen", "Einstellungen"]];
+  var REITER = [["suche", "🔎 Suche"], ["angebote", "Angebote"], ["angebot", "Angebot"], ["katalog", "Katalog"], ["kunden", "Kunden"], ["einstellungen", "Einstellungen"], ["daten", "⇅ Daten"]];
   function zeichneKopf() {
     var a = aktivesAngebot(), sub = document.getElementById("app-unter");
     if (sub) {
@@ -244,10 +244,429 @@
     zeichneKopf();
     var main = document.getElementById("inhalt"); main.replaceChildren();
     if (S.meldung) main.append(h("div", { class: "hinweis " + (S.meldung.art || ""), role: "status", "data-meldung": "" }, S.meldung.text));
-    var fn = { angebote: zAngebote, angebot: zAngebot, katalog: zKatalog, kunden: zKunden, einstellungen: zEinstellungen, handel: zHandel }[S.reiter] || zAngebote;
+    var fn = { angebote: zAngebote, angebot: zAngebot, katalog: zKatalog, kunden: zKunden, einstellungen: zEinstellungen, handel: zHandel, suche: zSuche, daten: zDaten }[S.reiter] || zSuche;
     fn(main);
     fokusZurueck(fk);
     verlaufMerken();
+  }
+
+  /* ════ 🔎 Suche — die Startseite (Klaus 2026-10-12) ════
+     „Eine vereinfachte Suchmaschine … nur das Produkt als Ganzes mit dem Preis … ohne automatisch die Hintergrundseite
+     aufzurufen“ · „im Vollbild, übersichtlich, nicht zu viel Text … ein Mikrofon im Suchfeld … soll sich selbst verbessern“.
+     Gerechnet wird in WC.suche (assets/kern/suche.js) über WC.angebot.rechne — dieselbe Rechnung wie im Angebot.
+     Das Suchfeld ist EIN bleibendes Element (SU.kopf): die Spracheingabe (assets/wfpdf/sprechen.js, byte-1:1 aus Workflow PDF)
+     hängt ihren Laufbalken hinein; beim Tippen wird nur die Ergebnisliste neu gezeichnet, nicht die ganze Seite. */
+  var SU = { kopf: null, feld: null, gelerntJetzt: {} };
+  function suEinst() {
+    var s = S.einst.suche = S.einst.suche || {};
+    if (!Array.isArray(s.fuellwoerter)) s.fuellwoerter = WC.suche.FUELL_VORGABE.slice();
+    s.beispieleWeg = s.beispieleWeg || []; s.gelernt = s.gelernt || [];
+    return s;
+  }
+  function suKunde() { return S.suKunde ? S.kunden.filter(function (k) { return k.id === S.suKunde; })[0] || null : null; }
+  function suFrage() {
+    var es = suEinst();
+    var q = WC.suche.lesen(S.frage || "", S.katalog, es.fuellwoerter, S.kunden);
+    /* „Kunde Becker wünscht“: steht Becker im Kundenstamm, gilt er — versteckt, wie von Hand gewählt */
+    if (q.kunde && S.suKundeAus !== q.kunde.id) S.suKunde = q.kunde.id;
+    return q;
+  }
+  function suLernen(q, vid, gut) {
+    if (!q || !q.rest) return;
+    var schl = q.rest + "|" + vid + "|" + gut;
+    if (SU.gelerntJetzt[schl]) return;
+    SU.gelerntJetzt[schl] = 1;
+    var es = suEinst(); es.gelernt = WC.suche.lernen(es.gelernt, q.rest, vid, gut, A.heute()); einstSpeichern();
+  }
+  function suGebietHolen(gid) {
+    var pk = (WC.STARTKATALOGE || {})[gid]; if (!pk || KAT.gebietDa(S.katalog, gid)) return "";
+    KAT.gebietHinzufuegen(S.katalog, pk); katalogSpeichern(); return pk.name;
+  }
+  function suKopfBauen() {
+    if (SU.kopf) return SU.kopf;
+    var feld = h("input", { type: "search", id: "suche-feld", "data-key": "suche-feld", enterkeyhint: "search", autocomplete: "off",
+      placeholder: "z. B. 10 Tassen beidseitig bedruckt", "aria-label": "Suchen: Produkt, Menge, Frage",
+      oninput: function () { S.frage = this.value; S.suMengen = {}; suErgebnis(); } });
+    var mic = h("button", { type: "button", class: "su-mic", id: "suche-mic", "aria-label": "Spracheingabe", text: "🎤" });
+    var form = h("form", { class: "su-form", role: "search", onsubmit: function (e) { e.preventDefault(); feld.blur(); } }, h("span", { class: "su-lupe", "aria-hidden": "true", text: "🔎" }), feld, mic);
+    SU.kopf = form; SU.feld = feld;
+    if (window.WFSprechen) window.WFSprechen.anhaengen({ knopf: mic, nach: form, feld: feld, sprache: function () { return "de-DE"; },
+      text: function (t) { feld.value = t; S.frage = t; S.suMengen = {}; suErgebnis(); }, meldung: function (m) { melde(m, "warn"); } });
+    else { mic.disabled = true; mic.title = "Spracheingabe nicht geladen"; }
+    return form;
+  }
+  function zSuche(main) {
+    var kopf = suKopfBauen();
+    if (SU.feld.value !== (S.frage || "")) SU.feld.value = S.frage || "";
+    var ph = KAT.platzhalter(S.katalog);
+    main.append(h("div", { class: "su-seite", "data-suche-seite": "" },
+      h("div", { class: "su-oben" }, h("img", { src: "icons/icon-192.png", alt: "", width: "40", height: "40" }), h("h1", { class: "su-titel", text: "Was soll es kosten?" }),
+        ph.anzahl ? h("span", { class: "platzhalter-marke", "data-platzhalter-hinweis": "", title: "Der Katalog trägt noch " + ph.anzahl + " Platzhalter-Werte — Preise sind nicht aus deinen Zahlen", text: "Platzhalter-Preise" }) : null),
+      kopf, h("div", { id: "suche-ergebnis" })));
+    suErgebnis();
+  }
+  /* Nur die Liste unter dem Suchfeld */
+  function suErgebnis() {
+    var box = document.getElementById("suche-ergebnis"); if (!box) return;
+    box.replaceChildren();
+    var es = suEinst(), frage = String(S.frage || "").trim();
+    box.append(suKundeZeile());
+    if (S.uebung != null) box.append(suUebungLeiste());
+    if (!frage) { box.append(suBeispiele()); return; }
+    var q = suFrage(), kat = S.katalog;
+    if (q.ignoriert.length) box.append(h("p", { class: "su-ignoriert", "data-ignoriert": q.ignoriert.join("|") }, "ignoriert: " + q.ignoriert.map(function (x) { return "„" + x + "“"; }).join(" · ")));
+    var kand = WC.suche.kandidaten(q, kat, { gelernt: es.gelernt });
+    /* gezeigt: was im Katalog steht und mindestens halb so gut passt wie der beste Treffer, höchstens 4.
+       Produkte aus noch nicht geholten Arbeitsgebieten stehen klein darunter — ein Tipp holt das Gebiet. */
+    var bester = kand.filter(function (c) { return c.imKatalog; })[0];
+    var gezeigt = kand.filter(function (c) { return c.imKatalog && c.punkte >= (bester ? bester.punkte * 0.5 : 0); }).slice(0, 4);
+    var fremd = kand.filter(function (c) { return !c.imKatalog && c.punkte >= (bester ? bester.punkte * 0.5 : 0); }).slice(0, 3);
+    var liste = h("div", { class: "su-liste", "data-su-treffer": String(kand.length) });
+    if (!gezeigt.length) liste.append(h("p", { class: "gedaempft", "data-su-nichts": "" }, fremd.length ? "Nicht im eigenen Katalog — unten das Arbeitsgebiet holen." : "Kein Produkt gefunden. Anders fragen — oder 🧠 Bedeutung einschalten."));
+    gezeigt.forEach(function (c, i) { liste.append(suKarte(q, c, i === 0)); });
+    box.append(liste);
+    if (fremd.length) box.append(h("div", { class: "su-aehnlich", "data-su-fremd": String(fremd.length) }, h("span", { class: "klein gedaempft", text: "Auch möglich:" }),
+      fremd.map(function (c) {
+        var gid = WC.suche.gebietVon(c.vorlage), gb = (WC.STARTKATALOGE || {})[gid];
+        return knopf(c.name + " · ＋ " + (gb ? gb.name : gid), function () { var n = suGebietHolen(gid); suErgebnis(); if (n) melde("„" + n + "“ dazugeholt (Platzhalter-Preise, eigene Zahlen bleiben).", ""); }, "klein chip", { "data-su-gebiet-holen": gid, title: "Arbeitsgebiet holen" });
+      })));
+    var bed = suBedeutungTreffer(q, gezeigt);
+    if (bed) box.append(bed);
+    var alte = WC.suche.angebote(q, S.angebote, kat).slice(0, 3);
+    if (alte.length) box.append(h("div", { class: "su-alte", "data-su-angebote": String(alte.length) }, h("b", { class: "klein", text: "Frühere Angebote" }),
+      alte.map(function (x) {
+        var a = x.angebot, r = A.rechne(a, kat, kundeVon(a), S.einst.kleinunternehmer);
+        var prod = a.positionen.map(function (p) { return p.menge + " × " + (p.titel || p.vorlage); }).join(", ");
+        return h("button", { type: "button", class: "su-alt", "data-su-angebot": a.id, title: "Öffnen", onclick: function () { S.aktiv = a.id; lsSet(LS.aktiv, a.id); geheZu("angebot"); } },
+          h("span", { text: a.nummer }), h("span", { class: "gedaempft", text: prod }), h("b", { text: euro(r.summen.netto) }));
+      })));
+    box.append(suBedeutungLeiste());
+  }
+
+  /* ── Eine Karte: Produkt · Menge · Preis. Nichts aus der Kalkulation — die klappt nur auf Tipp auf. ── */
+  function suKarte(q, c, erstes) {
+    var kat = S.katalog, vid = c.vorlage, menge = (S.suMengen || {})[vid] || c.menge.menge;
+    var karte = h("div", { class: "su-karte" + (erstes ? " erstes" : ""), "data-su-karte": vid });
+    if (!c.imKatalog) {
+      var gid = WC.suche.gebietVon(vid), gb = (WC.STARTKATALOGE || {})[gid];
+      karte.append(h("div", { class: "su-produkt" }, h("b", { text: c.name })),
+        h("p", { class: "gedaempft klein", text: "Arbeitsgebiet „" + (gb ? gb.name : gid) + "“ ist noch nicht im Katalog." }),
+        knopf("＋ " + (gb ? gb.name : gid) + " holen", function () { var n = suGebietHolen(gid); suErgebnis(); if (n) melde("„" + n + "“ dazugeholt (Platzhalter-Preise, eigene Zahlen bleiben).", ""); }, "pri klein", { "data-su-gebiet-holen": gid }));
+      return karte;
+    }
+    var kunde = suKunde();
+    var pr = WC.suche.preis(kat, vid, menge, { kunde: kunde, klasse: kunde ? "" : S.suKlasse, masse: q.masse, farben: q.farben, kleinunternehmer: S.einst.kleinunternehmer });
+    function mengeSetzen(n) { n = Math.max(1, Math.round(n) || 1); S.suMengen = Object.assign({}, S.suMengen, {}); S.suMengen[vid] = n; suLernen(q, vid, true); suErgebnis(); }
+    var mf = h("input", { type: "number", inputmode: "numeric", min: "1", class: "su-menge-feld", value: String(menge), "data-su-menge": vid, "data-key": "su-menge-" + vid, "aria-label": "Menge",
+      onchange: function () { mengeSetzen(+this.value); } });
+    var mengeBox = h("div", { class: "su-menge" + (c.menge.angenommen && !(S.suMengen || {})[vid] ? " angenommen" : ""), title: c.menge.angenommen ? "Menge nicht in der Frage — angenommen" : "" },
+      h("button", { type: "button", class: "su-mm", "aria-label": "weniger", "data-su-minus": vid, onclick: function () { mengeSetzen(menge - 1); } }, "−"), mf,
+      h("button", { type: "button", class: "su-mm", "aria-label": "mehr", "data-su-plus": vid, onclick: function () { mengeSetzen(menge + 1); } }, "+"),
+      h("span", { class: "gedaempft klein", text: pr.einheit || "Stk." }));
+    var preisBox = pr.ok
+      ? h("div", { class: "su-preis", "data-su-netto": String(pr.netto), "data-su-brutto": String(pr.brutto), "data-su-stueck": String(pr.stueck) },
+          h("div", { class: "su-netto" }, euro(pr.netto), h("small", { text: " netto" })),
+          h("div", { class: "su-klein", text: euro(pr.brutto) + " brutto · " + euro(pr.stueck) + " je " + (pr.einheit || "Stk.") }))
+      : h("div", { class: "su-preis offen", "data-su-offen": "" }, h("div", { class: "su-offen-text", text: pr.offen[0] || "nicht kalkuliert" }));
+    karte.append(h("div", { class: "su-zeile" },
+      h("div", { class: "su-produkt" }, h("b", { text: c.name }), pr.platzhalter ? h("span", { class: "su-ph", title: "Platzhalter-Preise im Katalog", text: "Platzhalter" }) : null),
+      mengeBox, preisBox));
+    var auf = !!(S.suOffen || {})[vid];
+    karte.append(h("div", { class: "su-aktionen" },
+      knopf((auf ? "▾" : "▸") + " Zusammensetzung", function () { S.suOffen = Object.assign({}, S.suOffen); S.suOffen[vid] = !auf; if (!auf) suLernen(q, vid, true); suErgebnis(); }, "klein" + (auf ? " on" : ""), { "data-su-zusammensetzung": vid }),
+      knopf("＋ Angebot", function () { suLernen(q, vid, true); suInsAngebot(q, vid, menge); }, "klein", { "data-su-angebot-neu": vid, title: "Als neues Angebot übernehmen" }),
+      h("span", { class: "su-urteil" },
+        knopf("✓", function () { suLernen(q, vid, true); melde("Gemerkt: „" + q.rest + "“ → " + c.name + ".", ""); }, "klein", { "data-su-passt": vid, title: "Passt — merken", "aria-label": "Passt" }),
+        knopf("✕", function () { suLernen(q, vid, false); suErgebnis(); }, "klein", { "data-su-passt-nicht": vid, title: "Passt nicht — merken", "aria-label": "Passt nicht" }))));
+    if (auf) karte.append(suZusammensetzung(q, c, pr));
+    return karte;
+  }
+  function suZusammensetzung(q, c, pr) {
+    var box = h("div", { class: "erklaer-feld su-zus", "data-su-zus": c.vorlage });
+    if (pr.r) {
+      var x = pr.r.positionen[0], t = h("table", { class: "schema" }), tb = h("tbody");
+      ((x.erg.schema && x.erg.schema.zeilen) || []).forEach(function (z) { tb.append(h("tr", null, h("td", { text: z.text }), h("td", { class: "r", text: euro(z.cent) }))); });
+      if (x.erg.eigen != null) tb.append(h("tr", null, h("td", { text: "eigener Preis (Position)" }), h("td", { class: "r", text: euro(x.erg.eigen) })));
+      if (pr.r.versand.ok && pr.r.versand.cent) tb.append(h("tr", { "data-su-versand": "" }, h("td", { text: "+ Verpackung & Versand" }), h("td", { class: "r", text: euro(pr.r.versand.cent) })));
+      if (pr.r.kleinmenge.aktiv) tb.append(h("tr", { "data-su-kleinmenge": "" }, h("td", { text: "+ " + pr.r.kleinmenge.text }), h("td", { class: "r", text: euro(pr.r.kleinmenge.cent) })));
+      tb.append(h("tr", null, h("td", { text: "= netto" }), h("td", { class: "r" }, h("b", { text: euro(pr.netto) }))),
+        h("tr", null, h("td", { text: "+ USt" }), h("td", { class: "r", text: euro(pr.ust) })), h("tr", null, h("td", { text: "= brutto" }), h("td", { class: "r", text: euro(pr.brutto) })));
+      t.append(tb); box.append(h("div", { class: "tabelle-huelle" }, t));
+      if (x.erg.weg && x.erg.weg.length) box.append(h("details", null, h("summary", { class: "klein", text: "Rechenweg" }), h("ul", { class: "weg" }, x.erg.weg.map(function (w) { return h("li", { class: "klein", text: w }); }))));
+      if ((x.erg.offen || []).length) box.append(h("p", { class: "hinweis warn klein", text: "Offen: " + x.erg.offen.join(" · ") }));
+    }
+    box.append(h("p", { class: "gedaempft klein", "data-su-erkannt": "" }, "Erkannt an: " + (c.gruende.join(" · ") || "—") + " · intern: " + c.intern));
+    /* Rückrichtung (Klaus' „bidirektional“): vom Produkt zu den Fragen und Angeboten, die es schon gab */
+    var rr = WC.suche.rueckrichtung(c.vorlage, suEinst().gelernt, WC.BEISPIEL_FRAGEN, S.angebote);
+    if (rr.fragen.length) box.append(h("div", { class: "band", "data-su-rueck-fragen": String(rr.fragen.length) }, h("span", { class: "klein", text: "↔ Fragen dazu:" }),
+      rr.fragen.slice(0, 5).map(function (f) { return knopf(f.length > 48 ? f.slice(0, 47) + "…" : f, function () { suFrageSetzen(f); }, "klein chip", { title: f }); })));
+    box.append(h("div", { class: "band" },
+      rr.angebote.length ? h("span", { class: "klein", "data-su-rueck-angebote": String(rr.angebote.length) }, "↔ " + rr.angebote.length + " Angebot(e) mit diesem Produkt") : null,
+      knopf("Kalkulation öffnen", function () {
+        var v = K.finde(S.katalog.vorlagen, c.vorlage);
+        if (v && v.einkaufsprodukt) { S.offen["handel:" + v.id] = true; geheZu("handel"); }
+        else { S.katReiter = "vorlagen"; S.katOffen = c.vorlage; geheZu("katalog"); }
+      }, "klein", { "data-su-kalkulation": c.vorlage })));
+    return box;
+  }
+  function suInsAngebot(q, vid, menge) {
+    var a = A.neu(S.angebote), kunde = suKunde(), v = K.finde(S.katalog.vorlagen, vid);
+    if (kunde) { a.kundeId = kunde.id; a.kunde = { name: kunde.name, anschrift: kunde.anschrift || "", klasse: kunde.klasse || "B" }; }
+    else if (S.suKlasse) a.kunde.klasse = S.suKlasse;
+    var p = A.neuePosition(a, S.katalog, vid);
+    if (p.staffeln.indexOf(menge) < 0) p.staffeln = p.staffeln.concat([menge]).sort(function (x, y) { return x - y; });
+    p.menge = menge;
+    if (q.masse && v && (v.mengenregel !== "stueck" || v.breiteVorgabe)) { p.breiteMm = q.masse.breiteMm; p.hoeheMm = q.masse.hoeheMm; }
+    if (q.farben) p.farben = q.farben;
+    a.titel = (v && (v.titelVorgabe || v.name)) || "";
+    a.notiz = "Aus der Suche: „" + q.rest + "“";
+    S.angebote.unshift(a); S.aktiv = a.id; lsSet(LS.aktiv, a.id); merken(a);
+    S.reiter = "angebot"; lsSet(LS.reiter, "angebot");
+    melde("Angebot " + a.nummer + " angelegt: " + menge + " × " + a.titel + ". Entwurf — prüfen und stellen.", "");
+    window.scrollTo(0, 0);
+  }
+  function suFrageSetzen(f) { S.frage = f; S.suMengen = {}; S.suOffen = {}; if (SU.feld) SU.feld.value = f; zeichne(); window.scrollTo(0, 0); }
+
+  /* ── Kunde, versteckt (Klaus: „dass der Kunde es nicht auf Anhieb sieht, wenn er auf den Bildschirm schaut“):
+     zugeklappt nur ein graues Kürzel ◦<frühere Angebote>/<1|2|3>; erst ein Tipp zeigt Klartext. ── */
+  var KL_ZIFFER = { A: "1", B: "2", C: "3" };
+  function suKundeZeile() {
+    var k = suKunde(), auf = !!S.suKundeAuf;
+    var n = k ? S.angebote.filter(function (a) { return a.kundeId === k.id && !a.ersetztDurch; }).length : 0;
+    var kl = k ? (k.klasse || "B") : (S.suKlasse || "");
+    var kuerzel = k || kl ? "◦" + n + "/" + (KL_ZIFFER[kl] || "2") : "◦";
+    var zeile = h("div", { class: "su-kunde", "data-su-kunde": k ? k.id : "" },
+      h("button", { type: "button", class: "su-kuerzel", "data-su-kuerzel": kuerzel, "aria-expanded": auf ? "true" : "false", title: "Kunde (optional)", onclick: function () { S.suKundeAuf = !auf; suErgebnis(); } }, kuerzel));
+    if (!auf) return zeile;
+    var wahl = h("select", { "data-su-kunde-wahl": "", "aria-label": "Kunde", onchange: function () { S.suKunde = this.value; S.suKundeAus = this.value ? "" : (k ? k.id : ""); suErgebnis(); } },
+      h("option", { value: "", text: "— ohne Kunde —" }), S.kunden.map(function (x) { return h("option", { value: x.id, selected: k && x.id === k.id, text: x.name + (x.nr ? " · " + x.nr : "") }); }));
+    zeile.append(wahl);
+    if (k) zeile.append(h("span", { class: "klein", "data-su-kunde-info": "" }, n + " frühere Angebote · Klasse " + (k.klasse || "B")));
+    else zeile.append(h("select", { "data-su-klasse": "", "aria-label": "Klasse ohne Kunde", onchange: function () { S.suKlasse = this.value; suErgebnis(); } },
+      [["", "Klasse: Vorgabe"], ["A", "Klasse A"], ["B", "Klasse B"], ["C", "Klasse C"]].map(function (o) { return h("option", { value: o[0], selected: (S.suKlasse || "") === o[0], text: o[1] }); })));
+    zeile.append(knopf("zu", function () { S.suKundeAuf = false; suErgebnis(); }, "klein"));
+    return zeile;
+  }
+
+  /* ── 10 Beispiel-Fragen: Vorschläge, einzeln löschbar; „▶ Durchspielen“ zum Anlernen ── */
+  function suBeispiele() {
+    var weg = suEinst().beispieleWeg, l = (WC.BEISPIEL_FRAGEN || []).filter(function (b) { return weg.indexOf(b.id) < 0; });
+    var box = h("div", { class: "su-beispiele", "data-su-beispiele": String(l.length) });
+    if (!l.length) { box.append(h("p", { class: "gedaempft klein", text: "Beispiele ausgeblendet — Einstellungen → Suche → wiederherstellen." })); return box; }
+    box.append(h("div", { class: "band" }, h("span", { class: "gedaempft klein", text: "Beispiele" }),
+      knopf("▶ Durchspielen", function () { suUebung(0); }, "klein pri", { id: "su-durchspielen", title: "Alle Beispiele nacheinander — zum Ausprobieren und Anlernen" })));
+    l.forEach(function (b) {
+      box.append(h("div", { class: "su-vorschlag", "data-su-beispiel": b.id },
+        h("button", { type: "button", class: "su-vorschlag-text", onclick: function () { suBeispielNehmen(b); }, text: b.frage }),
+        h("button", { type: "button", class: "su-vorschlag-weg", "aria-label": "Beispiel ausblenden", title: "Ausblenden", "data-su-beispiel-weg": b.id,
+          onclick: function () { var es = suEinst(); if (es.beispieleWeg.indexOf(b.id) < 0) es.beispieleWeg.push(b.id); einstSpeichern(); suErgebnis(); } }, "✕")));
+    });
+    return box;
+  }
+  function suBeispielNehmen(b) {
+    var neu = b.gebiet && !KAT.gebietDa(S.katalog, b.gebiet) ? suGebietHolen(b.gebiet) : "";
+    suFrageSetzen(b.frage);
+    if (neu) melde("„" + neu + "“ dazugeholt, damit das Beispiel rechnet (Platzhalter-Preise).", "");
+  }
+  function suUebung(i) {
+    var l = (WC.BEISPIEL_FRAGEN || []).filter(function (b) { return suEinst().beispieleWeg.indexOf(b.id) < 0; });
+    if (!l.length) return;
+    S.uebung = Math.max(0, Math.min(l.length - 1, i));
+    suBeispielNehmen(l[S.uebung]);
+  }
+  function suUebungLeiste() {
+    var l = (WC.BEISPIEL_FRAGEN || []).filter(function (b) { return suEinst().beispieleWeg.indexOf(b.id) < 0; }), b = l[S.uebung];
+    if (!b) { S.uebung = null; return null; }
+    return h("div", { class: "su-uebung", "data-su-uebung": String(S.uebung + 1) },
+      knopf("‹", function () { suUebung(S.uebung - 1); }, "klein", { disabled: S.uebung === 0, "aria-label": "voriges Beispiel" }),
+      h("b", { text: (S.uebung + 1) + "/" + l.length }), h("span", { class: "klein", text: b.lehre }),
+      S.uebung < l.length - 1 ? knopf("Weiter ›", function () { suUebung(S.uebung + 1); }, "klein pri", { "data-su-weiter": "" })
+        : knopf("Fertig ✓", function () { S.uebung = null; suFrageSetzen(""); }, "klein pri", { "data-su-fertig": "" }),
+      knopf("✕", function () { S.uebung = null; suErgebnis(); }, "klein", { "aria-label": "Durchspielen beenden" }));
+  }
+
+  /* ── 🧠 Suche nach Bedeutung — wie Workflow PDF: Sage-Module 03/04 (vendor/sbkim, byte-1:1), Rangfolge aus
+     assets/wfpdf/bedeutung.js (byte-1:1). Nur auf Knopfdruck; vorher steht da, was aus dem Netz kommt.
+     Eingeordnet werden: jede Vorlage (Name, Text, Gebiet) mit ihren GELERNTEN Fragen und Beispiel-Fragen — so findet eine
+     neue Frage das Produkt auch über frühere Fragen. Die Vektoren liegen nur im Speicher (wenige Dutzend, Sekunden). ── */
+  var BED = { zustand: "aus", prozent: null, fehler: "", vek: new Map(), dateien: new Map(), sig: "", erg: null, frage: "" };
+  function skriptLaden(src) {
+    return new Promise(function (res, rej) { var el = document.createElement("script"); el.src = src; el.onload = function () { res(); }; el.onerror = function () { rej(new Error("Datei fehlt: " + src)); }; document.head.appendChild(el); });
+  }
+  function bedTexte() {
+    var es = suEinst(), m = new Map();
+    WC.suche.alleVorlagen(S.katalog).filter(function (x) { return x.imKatalog; }).forEach(function (x) {
+      var st = [WC.suche.vorlagenText(S.katalog, x.v)].concat(WC.suche.rueckrichtung(x.v.id, es.gelernt, WC.BEISPIEL_FRAGEN, []).fragen);
+      m.set(x.v.id, st);
+    });
+    return m;
+  }
+  function bedEinordnen() {
+    var t = bedTexte(), sig = JSON.stringify(Array.from(t.entries()));
+    if (sig === BED.sig) return Promise.resolve();
+    var ids = Array.from(t.keys()), vek = new Map();
+    return ids.reduce(function (p, id) {
+      return p.then(function () { return window.SbkimEmbedding.embedPassageBatch(t.get(id)); }).then(function (vs) { vek.set(id, { st: t.get(id).map(function (s, i) { return { text: s, v: vs[i] }; }) }); });
+    }, Promise.resolve()).then(function () { BED.vek = vek; BED.sig = sig; BED.erg = null; BED.frage = ""; });
+  }
+  function bedStarten() {
+    BED.zustand = "laedt"; BED.fehler = ""; BED.dateien = new Map(); suErgebnis();
+    if (!BED.lauscher) { BED.lauscher = function (ev) { if (BED.zustand !== "laedt") return; BED.prozent = WFP.Bedeutung.ladeStand(BED.dateien, (ev && ev.detail) || {}).prozent; var b = document.querySelector("[data-bed-prozent]"); if (b) b.textContent = BED.prozent == null ? "…" : Math.round(BED.prozent) + " %"; }; window.addEventListener("sbkim:embedding-progress", BED.lauscher); }
+    Promise.resolve().then(function () { return window.SbkimEmbedding ? null : skriptLaden("vendor/sbkim/03_embedding.js?v=1"); })
+      .then(function () { return window.SbkimMatch ? null : skriptLaden("vendor/sbkim/04_match.js?v=1"); })
+      .then(function () { return window.SbkimEmbedding.init(); })
+      .then(function () { BED.zustand = "ordnet"; suErgebnis(); return bedEinordnen(); })
+      .then(function () { BED.zustand = "bereit"; suErgebnis(); },
+        function (e) { BED.zustand = "fehler"; BED.fehler = String((e && e.message) || e).slice(0, 160); suErgebnis(); });
+  }
+  function suBedeutungLeiste() {
+    var z = BED.zustand, l = h("div", { class: "su-bed", "data-bed-zustand": z });
+    if (z === "aus") l.append(knopf("🧠 Auch nach Bedeutung suchen", function () {
+      if (!confirm("Suche nach Bedeutung: einmalig wird ein Sprachmodell (~30 MB) aus dem Netz geladen (jsDelivr, Hugging Face). Deine Angebote, Kunden und Fragen bleiben auf dem Gerät. Laden?")) return;
+      bedStarten(); }, "klein", { id: "bed-an" }));
+    else if (z === "laedt") l.append(h("span", { class: "klein" }, "🧠 Modell lädt … ", h("b", { "data-bed-prozent": "", text: BED.prozent == null ? "…" : Math.round(BED.prozent) + " %" })));
+    else if (z === "ordnet") l.append(h("span", { class: "klein", text: "🧠 ordnet die Produkte ein …" }));
+    else if (z === "bereit") l.append(h("span", { class: "klein gedaempft", text: "🧠 Bedeutung an · " + BED.vek.size + " Produkte" }));
+    else l.append(h("span", { class: "klein", text: "🧠 ging nicht: " + BED.fehler + " " }), knopf("↻ Nochmal", bedStarten, "klein"));
+    return l;
+  }
+  function suBedeutungTreffer(q, gezeigt) {
+    if (BED.zustand !== "bereit" || !q.rest) return null;
+    var schon = {}; gezeigt.forEach(function (c) { schon[c.vorlage] = 1; });
+    if (BED.frage !== q.rest) {
+      var frage = BED.frage = q.rest;
+      bedEinordnen().then(function () { return window.SbkimEmbedding.embedQuery(frage); }).then(function (qv) {
+        if (BED.frage !== frage) return;
+        BED.erg = WFP.Bedeutung.rangliste([qv], BED.vek, window.SbkimMatch.match, {}); suErgebnis();
+      }).catch(function (e) { BED.erg = { fehler: String(e && e.message || e) }; });
+      return null;
+    }
+    if (!BED.erg || BED.erg.fehler) return null;
+    var l = (BED.erg.gezeigt.length ? BED.erg.gezeigt : BED.erg.schwach).filter(function (r) { return !schon[r.id]; }).slice(0, 3);
+    if (!l.length) return null;
+    return h("div", { class: "su-aehnlich", "data-su-bedeutung": String(l.length) }, h("b", { class: "klein", text: "🧠 ähnlich" }),
+      l.map(function (r) {
+        var v = K.finde(S.katalog.vorlagen, r.id); if (!v) return null;
+        return h("button", { type: "button", class: "btn klein chip", "data-su-bed-treffer": r.id, title: "Nähe " + String(Math.round(r.w * 100) / 100).replace(".", ","),
+          onclick: function () { suLernen(q, r.id, true); suErgebnis(); } }, (v.titelVorgabe || v.name) + " · " + String(Math.round(r.w * 100) / 100).replace(".", ","));
+      }));
+  }
+
+  /* ════ ⇅ Daten: Sicherung, CSV hinaus, Tabelle herein ════ */
+  function zDaten(main) {
+    main.append(h("div", { class: "karte", "data-daten-seite": "" }, h("h2", { text: "⇅ Daten" }),
+      h("p", { class: "gedaempft klein", text: "Sichern, ausgeben, einlesen. Nichts geht ins Netz, außer du wählst unten „mit KI“." })));
+    main.append(sicherungKarte());
+    main.append(h("div", { class: "karte", "data-csv-export": "" }, h("h3", { text: "Angebote als Tabelle (CSV)" }),
+      h("div", { class: "band" },
+        knopf("⬇ intern, mit Kunde", function () { var t = WC.tabelle.csvAus(S.angebote, S.katalog, S.kunden, true, S.einst.kleinunternehmer); window.__wcCsv = t; herunterladen("Angebote-intern-" + A.heute() + ".csv", t, "text/csv"); }, "klein", { id: "csv-intern" }),
+        knopf("⬇ ohne Kundendaten", function () { var t = WC.tabelle.csvAus(S.angebote, S.katalog, S.kunden, false, S.einst.kleinunternehmer); window.__wcCsv = t; herunterladen("Angebote-ohne-Kundendaten-" + A.heute() + ".csv", t, "text/csv"); }, "klein pri", { id: "csv-ohne" })),
+      h("p", { class: "gedaempft klein", text: "„Ohne Kundendaten“: kein Name, keine Nummer, keine Anschrift, kein Titel, kein Positions-Text — nur Produkt, Menge, Maße, Preis. Als Vorlage für andere Betriebe." })));
+    main.append(importKarte());
+  }
+  function importKarte() {
+    var I = S.imp, box = h("div", { class: "karte", "data-import": "" }, h("h3", { text: "Tabelle mit alten Angeboten einlesen" }),
+      h("label", { class: "btn" }, "📂 CSV wählen …", h("input", { type: "file", accept: ".csv,text/csv,.txt,.xlsx,.xls", hidden: true, id: "import-datei", onchange: function () {
+        var f = this.files && this.files[0]; if (!f) return;
+        if (/\.xlsx?$/i.test(f.name)) { S.imp = { fehler: "Excel-Dateien liest die App nicht (keine Bibliothek, die offline und unverändert hierher passt). In Excel: Datei → Speichern unter → „CSV (Trennzeichen-getrennt)“, dann die CSV wählen." }; zeichne(); return; }
+        f.text().then(function (t) { importLesen(t, f.name); });
+      } })),
+      h("p", { class: "gedaempft klein", text: "Spalten mit Namen, Kundennummer, Anschrift, E-Mail, Telefon oder Bankdaten werden nicht übernommen. Vor dem Übernehmen siehst du alles." }));
+    if (!I) return box;
+    if (I.fehler) { box.append(h("p", { class: "hinweis warn", "data-import-fehler": "", text: I.fehler })); return box; }
+    var person = I.spalten.filter(function (s) { return s.art === "person"; }), genutzt = I.spalten.filter(function (s) { return s.art !== "person" && s.art !== "unbekannt"; });
+    var NAMEN = { produkt: "Produkt", menge: "Menge", einzel: "Einzelpreis", gesamt: "Preis", datum: "Datum", masse: "Maße", farben: "Farben", nummer: "Angebotsnummer" };
+    box.append(h("p", { class: "klein", "data-import-spalten": genutzt.map(function (s) { return s.art; }).join(",") }, h("b", { text: "Übernommen: " }), genutzt.map(function (s) { return NAMEN[s.art] + " ← „" + s.kopf + "“"; }).join(" · ") || "—"));
+    if (person.length) box.append(h("p", { class: "hinweis intern klein", "data-import-person": person.map(function (s) { return s.kopf; }).join("|") }, h("b", { text: "Nicht übernommen (Personendaten): " }), person.map(function (s) { return "„" + s.kopf + "“ — " + s.grund; }).join(" · ")));
+    var unb = I.spalten.filter(function (s) { return s.art === "unbekannt"; });
+    if (unb.length) box.append(h("p", { class: "gedaempft klein", "data-import-unbekannt": "" }, "Nicht gebraucht: " + unb.map(function (s) { return "„" + s.kopf + "“"; }).join(" · ")));
+    var opts = WC.suche.alleVorlagen(S.katalog);
+    var t = h("table", { "data-import-vorschau": String(I.zeilen.length) }, h("thead", null, h("tr", null, ["", "Zeile", "aus der Tabelle", "→ Vorlage", "Menge", "Preis", "Datum"].map(function (x) { return h("th", { text: x }); }))));
+    var tb = h("tbody");
+    I.zeilen.forEach(function (z) {
+      tb.append(h("tr", { "data-import-zeile": String(z.nr), "data-vorlage": z.vorlage, "data-herkunft": z.herkunft },
+        h("td", null, h("input", { type: "checkbox", checked: z.uebernehmen, "aria-label": "übernehmen", onchange: function () { z.uebernehmen = this.checked; } })),
+        h("td", { text: String(z.nr) }), h("td", { text: z.produkt || "—" }),
+        h("td", null, h("select", { "data-import-wahl": String(z.nr), onchange: function () { z.vorlage = this.value; z.herkunft = "hand"; } },
+          h("option", { value: "", text: "— keine —" }), opts.map(function (o) { return h("option", { value: o.v.id, selected: o.v.id === z.vorlage, text: (o.v.titelVorgabe || o.v.name) + (o.imKatalog ? "" : " (Gebiet wird geholt)") }); })),
+          z.herkunft === "ki" ? h("span", { class: "badge intern", text: "KI" }) : null),
+        h("td", { class: "r", text: z.menge != null ? String(z.menge) : "—" }), h("td", { class: "r", text: z.gesamtCent != null ? euro(z.gesamtCent) : "—" }), h("td", { text: z.datum ? datumDe(z.datum) : "" })));
+    });
+    t.append(tb); box.append(h("div", { class: "tabelle-huelle" }, t));
+    box.append(importKi());
+    box.append(h("div", { class: "band", style: "margin-top:8px" }, knopf("✓ Übernehmen", function () {
+      var geholt = [];
+      I.zeilen.forEach(function (z) { if (z.uebernehmen && z.vorlage && !K.finde(S.katalog.vorlagen, z.vorlage)) { var n = suGebietHolen(WC.suche.gebietVon(z.vorlage)); if (n) geholt.push(n); } });
+      var r = WC.tabelle.angeboteAus(I.zeilen, S.katalog, S.angebote, I.datei, A.heute());
+      r.angebote.forEach(function (a) { S.angebote.unshift(a); merken(a); });
+      S.angebote.sort(function (x, y) { return x.id < y.id ? 1 : -1; });
+      S.imp = null;
+      melde(r.angebote.length + " Angebot(e) eingelesen (Entwurf, ohne Kundendaten)" + (geholt.length ? " · dazugeholt: " + geholt.join(", ") : "") +
+        (r.uebersprungen.length ? " · übersprungen: " + r.uebersprungen.map(function (u) { return "Zeile " + u.nr + " (" + u.grund + ")"; }).join(", ") : "") + ".", r.uebersprungen.length ? "warn" : "");
+    }, "pri", { id: "import-uebernehmen" }), knopf("Verwerfen", function () { S.imp = null; zeichne(); }, "klein")));
+    return box;
+  }
+  function importLesen(text, name) {
+    var t = WC.tabelle.lesenCsv(text);
+    if (!t.kopf.length || !t.daten.length) { S.imp = { fehler: "In der Datei steht keine Tabelle (Kopfzeile und mindestens eine Zeile)." }; zeichne(); return; }
+    var sp = WC.tabelle.spalten(t);
+    if (!sp.some(function (s) { return s.art === "produkt"; })) { S.imp = { fehler: "Keine Spalte für das Produkt erkannt (Kopf z. B. „Produkt“, „Artikel“, „Bezeichnung“). Erkannt: " + sp.map(function (s) { return s.kopf; }).join(", ") }; zeichne(); return; }
+    var z = WC.tabelle.zeilen(t, sp, S.katalog, { gelernt: suEinst().gelernt });
+    z.forEach(function (x) { x.uebernehmen = !!x.vorlage && x.menge > 0; });
+    S.imp = { datei: name, spalten: sp, zeilen: z }; window.__wcImport = S.imp; zeichne();
+  }
+  /* Zuordnen mit KI: derselbe Weg wie „Anfrage mit KI lesen“ — prüfen, verdecken, findLeak, einmal anhalten, nur Belegtes */
+  function importKi() {
+    var I = S.imp, KI = WC.kiAnfrage, kat = S.katalog;
+    var box = h("details", { class: "erklaer-feld", "data-import-ki": "", open: !!S.impKiOffen, ontoggle: function () { if (S.impKiOffen !== this.open) { S.impKiOffen = this.open; zeichne(); } } },
+      h("summary", null, h("b", { text: "🤖 Zuordnung mit KI (freiwillig)" }), " ", h("span", { class: "badge intern", text: "eigener Schlüssel" })));
+    if (!S.impKiOffen) return box;
+    var roh = WC.tabelle.kiText(I.zeilen);
+    var v = KI.vorbereiten(roh, { betreff: "", text: roh, absender: { name: "" }, kunde: null }, S.kunden, {});
+    if (v.fehler) { box.append(h("p", { class: "hinweis bad", text: v.fehler })); return box; }
+    var meld = h("p", { class: "klein", hidden: true });
+    function sag(x, gut) { meld.hidden = false; meld.className = "hinweis " + (gut ? "" : "bad"); meld.textContent = x; }
+    box.append(h("p", { class: "klein" }, h("b", { text: "Geht hinaus (verdeckt):" })), h("pre", { "data-import-ki-text": "", style: "white-space:pre-wrap;max-height:200px;overflow:auto" }, v.text));
+    if (v.leck) { box.append(h("p", { class: "hinweis bad", "data-import-ki-leck": "" }, "Im verdeckten Text steht noch Klartext („" + v.leck + "“) — so geht nichts hinaus.")); return box; }
+    if (v.halt) box.append(h("div", { class: "hinweis " + (S.impKiHalt === v.text ? "warn" : "bad"), "data-import-ki-halt": "" },
+      h("b", { text: S.impKiHalt === v.text ? "Angehalten — noch einmal tippen sendet trotzdem." : "⚠ Auffällig — vor dem Senden ansehen:" }),
+      h("ul", { class: "weg" }, v.befunde.map(function (b) { return h("li", { text: "Zeile " + b.zeile + " · " + b.kennung + ": " + b.satz }); }))));
+    function los() {
+      if (v.halt && S.impKiHalt !== v.text) { S.impKiHalt = v.text; zeichne(); return; }
+      sag("Die KI ordnet zu …", true);
+      var senden = KI.anfrage(v.text, kat);
+      KI.rufen(S.kiSchluessel, senden, window.__wcKiFetch || null).then(function (antwort) {
+        var erg = KI.auswerten(antwort, v.text, kat);
+        if (!erg.ok) { sag(erg.grund + " Nichts geändert.", false); return; }
+        var n = WC.tabelle.kiZuordnen(I.zeilen, erg.positionen);
+        I.zeilen.forEach(function (z) { if (z.herkunft === "ki") z.uebernehmen = z.menge > 0; });
+        S.impKiHalt = null; S.impKiErgebnis = { n: n, verworfen: erg.verworfen.length }; zeichne();
+      }, function (err) { sag("Nicht gelungen: " + (err && err.message || err) + ". Nichts geändert.", false); });
+    }
+    if (S.kiSchluessel) box.append(knopf(v.halt && S.impKiHalt === v.text ? "🤖 Trotzdem senden" : "🤖 An die KI senden", los, "pri klein", { id: "import-ki-los" }));
+    else schluesselEingabe(box, sag);
+    box.append(meld);
+    if (S.impKiErgebnis) box.append(h("p", { class: "hinweis", "data-import-ki-ergebnis": String(S.impKiErgebnis.n) }, S.impKiErgebnis.n + " Zeile(n) von der KI zugeordnet (mit Zitat belegt) · " + S.impKiErgebnis.verworfen + " verworfen. Prüfen, dann übernehmen."));
+    return box;
+  }
+
+  /* Einstellungen → Suche: Füllwörter, Beispiele, Gelerntes */
+  function sucheEinstKarte() {
+    var es = suEinst();
+    var ta = h("textarea", { rows: "6", id: "fuellwoerter", "data-key": "fuellwoerter", style: "width:100%" });
+    ta.value = es.fuellwoerter.join("\n");
+    var gut = es.gelernt.filter(function (x) { return x.gut; }).length;
+    return h("div", { class: "karte", "data-suche-einst": "" }, h("h2", { text: "🔎 Suche" }),
+      h("p", { class: "gedaempft klein", text: "Füllwörter — eins je Zeile, „…“ steht für einen Namen. Sie werden vor der Suche weggenommen und angezeigt." }), ta,
+      h("div", { class: "band", style: "margin-top:6px" },
+        knopf("Speichern", function () { es.fuellwoerter = ta.value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean); einstSpeichern(); melde("Füllwörter gespeichert (" + es.fuellwoerter.length + ").", ""); }, "klein pri", { id: "fuellwoerter-speichern" }),
+        knopf("Vorgabe", function () { es.fuellwoerter = WC.suche.FUELL_VORGABE.slice(); einstSpeichern(); zeichne(); }, "klein")),
+      h("div", { class: "band", style: "margin-top:10px" },
+        h("span", { class: "klein", "data-beispiele-weg": String(es.beispieleWeg.length) }, (WC.BEISPIEL_FRAGEN || []).length - es.beispieleWeg.length + " von " + (WC.BEISPIEL_FRAGEN || []).length + " Beispielen sichtbar"),
+        knopf("Beispiele wiederherstellen", function () { es.beispieleWeg = []; einstSpeichern(); melde("Alle Beispiele stehen wieder auf der Startseite.", ""); }, "klein", { id: "beispiele-wiederherstellen" })),
+      h("div", { class: "band", style: "margin-top:10px" },
+        h("span", { class: "klein", "data-gelernt": String(es.gelernt.length) }, "Gelernt: " + gut + " Zuordnungen, " + (es.gelernt.length - gut) + " „passt nicht“"),
+        es.gelernt.length ? knopf("Gelerntes vergessen", function () { if (!confirm("Alles Gelernte der Suche vergessen?")) return; es.gelernt = []; einstSpeichern(); zeichne(); }, "klein gefahr", { id: "gelernt-vergessen" }) : null));
   }
 
   /* ════ Angebote (Liste) ════ */
@@ -280,7 +699,7 @@
     if (WC.sicherung.erinnernNoetig(S.angebote, lsGet(LS.sicherung)) && !ssGet("workflowcalculate_sicherung_spaeter")) main.append(h("div", { class: "hinweis warn", "data-sicherung-erinnerung": "" },
       lsGet(LS.sicherung) ? "Die letzte Sicherung ist " + Math.floor(WC.sicherung.tageSeit(lsGet(LS.sicherung))) + " Tage alt." : "Es gibt noch keine Sicherung deiner Angebote.",
       " Löschst du die Browserdaten oder wechselst das Gerät, sind sie sonst weg. ",
-      knopf("🔐 Jetzt sichern", function () { S.reiter = "einstellungen"; zeichne(); var k = document.getElementById("sicherung-kasten"); if (k) k.scrollIntoView(); }, "klein pri"), " ",
+      knopf("🔐 Jetzt sichern", function () { S.reiter = "daten"; zeichne(); var k = document.getElementById("sicherung-kasten"); if (k) k.scrollIntoView(); }, "klein pri"), " ",
       knopf("Später", function () { ssSet("workflowcalculate_sicherung_spaeter", "1"); zeichne(); }, "klein")));
     main.append(h("div", { class: "band", style: "margin-bottom:12px" }, knopf("＋ Neues Angebot", neuesAngebot, "pri", { id: "neues-angebot" }),
       knopf("📥 Anfrage einlesen (E-Mail)", function () { S.anfrageOffen = !S.anfrageOffen; zeichne(); }, S.anfrageOffen ? "on" : "", { id: "anfrage-knopf" }), beispielSteuerung()));
@@ -1665,6 +2084,7 @@
       })),
       h("label", { class: "schalter" }, h("input", { type: "checkbox", checked: !!S.einst.kleinunternehmer, id: "kleinunternehmer", onchange: function () { S.einst.kleinunternehmer = this.checked; einstSpeichern(); } }), "Kleinunternehmer (§ 19 UStG, keine USt)")));
     main.append(sicherungKarte());
+    main.append(sucheEinstKarte());
     var km = katalogErgaenzen(S.katalog).kleinmenge;
     main.append(h("div", { class: "karte", "data-kleinmenge-einst": "" }, h("h2", { text: "Kleinmengenzuschlag" }),
       km.platzhalter ? h("div", { class: "hinweis warn" }, "Platzhalter-Betrag — eigenen Betrag eintragen.") : null,
@@ -1799,6 +2219,7 @@
   }
 
   function start() {
+    var frisch = /[?&]frisch=/.test(location.search);
     try { if (/[?&]frisch=/.test(location.search) && history.replaceState) history.replaceState(history.state, "", location.pathname + location.hash); } catch (_e) {}
     if (lsGet(LS.thema) === "light") document.documentElement.dataset.theme = "light";
     document.getElementById("thema").addEventListener("click", function () {
@@ -1808,6 +2229,10 @@
     });
     document.getElementById("neuladen").addEventListener("click", neuLaden);
     var hkn = document.getElementById("handel-knopf"); if (hkn) hkn.addEventListener("click", function () { geheZu("handel"); });
+    /* Startseite ist die Suche (Klaus 2026-10-12) — nur ⟳ Neu laden (?frisch=) bleibt auf dem Reiter von vorher.
+       ?q=… belegt die Frage vor (Link aus Tomys Hub / WorkFloh). */
+    try { var qp = new URLSearchParams(location.search).get("q"); if (qp) S.frage = qp.slice(0, 500); } catch (_e) {}
+    if (!frisch || S.frage) S.reiter = "suche";
     if (location.hash === "#handel") S.reiter = "handel";
     window.addEventListener("popstate", function (e) { verlaufZurueck(e.state); });
     var zk = document.getElementById("seite-zurueck"); if (zk) zk.addEventListener("click", function () { if (verlaufTiefe() > 0) history.back(); });

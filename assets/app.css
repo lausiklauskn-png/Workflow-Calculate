@@ -285,3 +285,57 @@ details.weg-details summary{cursor:pointer;color:var(--intern)}
 .handel-tab td,.handel-tab th{padding:5px 6px;white-space:nowrap}
 .handel-tab tr.gedaempft td{opacity:.7}
 .handel-tab td.handel-menge{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+
+/* ── 🔎 Suche (Startseite, Klaus 2026-10-12: Vollbild, übersichtlich, wenig Text) ── */
+.su-seite{width:100%;margin:0 auto}
+.su-oben{display:flex;align-items:center;gap:10px;margin:6px 0 10px}
+.su-oben img{border-radius:10px}
+.su-titel{font-size:1.35rem;margin:0;flex:1 1 auto}
+.su-form{position:relative;display:flex;align-items:center;gap:6px;width:100%;background:var(--surface);border:1px solid var(--line-2);border-radius:28px;padding:4px 6px 4px 14px;box-shadow:0 2px 14px rgba(0,0,0,.18)}
+.su-form:focus-within{border-color:var(--accent);box-shadow:var(--glow)}
+.su-form input[type=search]{flex:1 1 auto;min-width:0;border:0;background:transparent;font-size:1.12rem;padding:10px 4px;box-shadow:none;outline:none}
+.su-lupe{opacity:.7}
+.su-mic{flex:none;width:44px;height:44px;border-radius:50%;border:1px solid var(--line-2);background:var(--surface-2);font-size:1.2rem;cursor:pointer;color:var(--ink)}
+.su-mic.hoert{background:var(--bad);color:#fff;border-color:var(--bad)}
+.su-mic:disabled{opacity:.4}
+.su-ignoriert{font-size:.82rem;color:var(--ink-3);margin:8px 4px 0}
+.su-kunde{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 2px 0;min-height:22px}
+.su-kuerzel{border:0;background:transparent;color:var(--ink-3);font-size:.78rem;padding:2px 6px;cursor:pointer;opacity:.55;letter-spacing:.04em}
+.su-kuerzel:hover,.su-kuerzel:focus-visible{opacity:1}
+.su-liste{display:grid;align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:10px;margin-top:10px}
+.su-karte{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px;display:flex;flex-direction:column;gap:8px}
+.su-karte.erstes{border-color:var(--accent)}
+.su-zeile{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.su-produkt{flex:1 1 180px;min-width:0;font-size:1.05rem}
+.su-ph{display:inline-block;margin-left:6px;font-size:.68rem;color:var(--warn);border:1px solid var(--warn);border-radius:8px;padding:0 5px;vertical-align:2px}
+.su-menge{display:flex;align-items:center;gap:4px}
+.su-menge.angenommen .su-menge-feld{border-style:dashed}
+.su-mm{width:34px;height:34px;border-radius:50%;border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink);font-size:1.1rem;cursor:pointer}
+.su-menge-feld{width:76px;text-align:center;font-size:1.05rem}
+.su-preis{text-align:right;margin-left:auto}
+.su-netto{font-size:1.5rem;font-weight:700;font-variant-numeric:tabular-nums}
+.su-netto small{font-size:.75rem;font-weight:400;color:var(--ink-3)}
+.su-klein{font-size:.82rem;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.su-preis.offen .su-offen-text{color:var(--warn);font-size:.85rem;max-width:280px}
+.su-aktionen{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.su-urteil{margin-left:auto;display:flex;gap:4px}
+.su-zus{margin-top:2px}
+.su-beispiele{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.su-vorschlag{display:flex;align-items:stretch;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
+.su-vorschlag-text{flex:1 1 auto;text-align:left;border:0;background:transparent;color:var(--ink);padding:9px 12px;cursor:pointer;font:inherit}
+.su-vorschlag-text::before{content:"🔎 ";opacity:.5}
+.su-vorschlag-text:hover{background:var(--surface-2)}
+.su-vorschlag-weg{border:0;border-left:1px solid var(--line);background:transparent;color:var(--ink-3);width:40px;cursor:pointer}
+.su-uebung{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding:8px 10px;border-radius:12px;background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent)}
+.su-uebung span{flex:1 1 200px}
+.su-alte{margin-top:12px;display:flex;flex-direction:column;gap:4px}
+.su-alt{display:flex;gap:10px;align-items:baseline;text-align:left;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:6px 10px;cursor:pointer;font:inherit;font-size:.88rem}
+.su-alt span.gedaempft{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.su-aehnlich{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.su-bed{margin-top:14px}
+@media (max-width:640px){
+  .su-titel{font-size:1.1rem}
+  .su-netto{font-size:1.3rem}
+  .su-preis{text-align:left;margin-left:0;flex:1 1 100%}
+}
+.su-zus .chip,.su-aehnlich .chip{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
