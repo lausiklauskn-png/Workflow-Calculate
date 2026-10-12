@@ -11,6 +11,22 @@
 > **Wiederverkäufer**, aber auch für **Privatkunden**, wo ich günstig einkaufen kann, um mit Aufschlag
 > weiterzuverkaufen. Die Kalkulation soll **automatisch** erfolgen.
 
+## Nachtrag Klaus (2026-10-12): eine eigene Seite
+
+> Der Übersicht halber soll das eine neue Seite werden — ein eigener Knopf, der zu einem neuen Fenster führt,
+> wo meine komplette Produktpalette steht. Ein Produkt, das ich als **Einkaufsprodukt** deklariere, wird
+> automatisch dorthin gelenkt. Auf dieser Seite stehen **nur** Produkte, die ich fertig einkaufe und wieder
+> verkaufe — mit gewinnbringendem Aufschlag.
+
+Also: eigener Knopf (z. B. „🛒 Handelsware“) in der Kopfleiste oder als eigener Reiter, der eine eigene Ansicht
+öffnet. An jeder Produktvorlage ein Schalter „Einkaufsprodukt (fertig zugekauft)“; gesetzt → die Vorlage
+erscheint nur noch dort (nicht mehr unter den selbst gefertigten). Die Seite zeigt je Produkt: Lieferant(en)
+mit Link, Einkauf komplett inkl. Versand je Menge, Aufschlag, Verkaufspreis komplett inkl. Versand, Spanne
+in € und % — und von dort „als Position ins Angebot“. Ob „neues Fenster“ ein eigener Browser-Tab
+(z. B. `handel.html`) oder eine Vollbild-Ansicht in der App sein soll: **Klaus fragen**; Vorschlag: eigene
+Ansicht in der App (gleicher Speicher, offline, kein zweiter Zustand), mit eigener Adresse `#handel`,
+damit sie sich als Lesezeichen oder in einem neuen Tab öffnen lässt.
+
 ## Was es schon gibt (nicht neu bauen)
 
 - `WC.kalk.handel(ekCent, s)` — Handelskalkulation: Bezugspreis × (1 + Handlungskosten %) × (1 + Gewinn %)
