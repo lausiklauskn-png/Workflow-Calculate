@@ -1,0 +1,7 @@
+{
+  "name": "workflow-calculate",
+  "private": true,
+  "description": "Workflow Calculate: Angebote kalkulieren mit versteckter Kalkulation (PWA)",
+  "scripts": { "test": "node tests/alle.mjs", "gegenprobe": "node tests/gegenprobe.mjs" },
+  "devDependencies": { "playwright-core": "1.56.1" }
+}
