@@ -239,7 +239,7 @@ const FAELLE = [
   { name: "KLEIN-SEITE: Blatt zeigt die Zeile nicht", probe: B, erwartet: "KLEIN-SEITE: Kundenblatt trägt die eigene Zeile",
     an: [["assets/app.js", "    if (d.kleinmenge) tb.append(", "    if (false) tb.append("]] },
   { name: "KLEIN-SEITE: Vorgabe kommt nicht in den Katalog", probe: B, erwartet: "KLEIN-SEITE: 2 Tassen",
-    an: [["assets/app.js", "function katalogErgaenzen(k) { if (k && !k.kleinmenge) k.kleinmenge = kopie(A.KLEINMENGE_VORGABE); return k; }", "function katalogErgaenzen(k) { return k; }"]] },
+    an: [["assets/app.js", "    katalogErgaenzen(S.katalog);\n", ""]] },
 ];
 
 function vorkommen(text, teil) { let n = 0, i = 0; while ((i = text.indexOf(teil, i)) >= 0) { n++; i += teil.length; } return n; }
