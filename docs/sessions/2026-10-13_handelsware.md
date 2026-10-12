@@ -22,6 +22,10 @@ Brief: `BRIEF_2026-10-13_handelsware.md`.
 - **Beispiele** (Arbeitsgebiet „Handelsware“, Knopf auf der Seite): 500 Kulis fertig bedruckt (120,00 €),
   Visitenkarten 250 / 500 / 1000 (24,90 / 29,90 / 39,90 €) — **alles Platzhalter-Preise**.
 
+- **Vollbild auf jedem Gerät** (Klaus' Nachtrag): gemessen bei 360×740, 740×360, 1024×768, 1920×1080 — Seite so breit
+  wie das Fenster, Karten füllen sie, kein waagerechtes Rollen; Verkauf und „ins Angebot“ stehen am Handy ohne Wischen
+  da (die Spalten sind dafür umgestellt), ab Tablet passt die ganze Tabelle.
+
 ## Lieferanten — ehrlich
 
 Der Brief verlangt: jede Adresse vorher abrufen, nichts Ungeprüftes eintragen. **Abrufen ging nicht**: der

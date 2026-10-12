@@ -430,6 +430,26 @@ try {
     await tippe(q, "#vorschau-angebot", "Vorschau");
     const dlg = await q.evaluate(() => { const r = document.getElementById("vorschau").getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), window.innerWidth, window.innerHeight]; });
     ok("VOLLBILD: die Vorschau füllt den ganzen Schirm", Math.abs(dlg[0] - dlg[2]) <= 1 && Math.abs(dlg[1] - dlg[3]) <= 1, dlg);
+    /* Die Seite Handelsware: Vollbild auf jedem Gerät (Klaus 2026-10-13) — Verkauf und „ins Angebot“ ohne Wischen */
+    await q.keyboard.press("Escape").catch(() => {});
+    await q.goto(url + "#handel"); await q.waitForSelector("[data-handel-seite]");
+    await tippe(q, "[data-handel-start]", "Beispiele Handelsware holen (Vollbild)");
+    const hm = [];
+    for (const [b, hh, name] of [[360, 740, "Handy hoch"], [740, 360, "Handy quer"], [1024, 768, "Tablet"], [1920, 1080, "großer Schirm"]]) {
+      await q.setViewportSize({ width: b, height: hh });
+      hm.push(await q.evaluate((name) => {
+        const w = document.documentElement.clientWidth, m = document.querySelector("main").getBoundingClientRect();
+        const karten = [...document.querySelectorAll("[data-handel-produkt]")].map((k) => k.getBoundingClientRect().width);
+        const knopf = document.querySelector('[data-ins-angebot="visitenkarten_zukauf:1000"]').getBoundingClientRect();
+        const verkauf = document.querySelector('[data-handel-produkt="visitenkarten_zukauf"] [data-handel-zeile="1000"] td:nth-child(2)').getBoundingClientRect();
+        const huelle = document.querySelector('[data-handel-produkt="visitenkarten_zukauf"] .tabelle-huelle');
+        return { name, w, main: Math.round(m.width), karteVoll: karten.every((x) => x >= m.width - 40), seiteRollt: document.documentElement.scrollWidth > w + 1,
+          sichtbar: knopf.right <= w && verkauf.right <= w, tabellePasst: huelle.scrollWidth <= huelle.clientWidth + 1 };
+      }, name));
+    }
+    ok("VOLLBILD: die Seite Handelsware ist auf Handy hoch/quer, Tablet und großem Schirm so breit wie das Fenster, die Karten füllen sie", hm.every((x) => Math.abs(x.main - x.w) <= 1 && x.karteVoll && !x.seiteRollt), hm);
+    ok("VOLLBILD: Handelsware — Verkauf und „ins Angebot“ stehen auf jedem Gerät ohne Wischen da", hm.every((x) => x.sichtbar), hm);
+    ok("VOLLBILD: Handelsware — ab Tablet passt die ganze Tabelle, ohne Rollen", hm.filter((x) => x.w >= 1024).every((x) => x.tabellePasst), hm);
     await v.ctx.close();
   }
 

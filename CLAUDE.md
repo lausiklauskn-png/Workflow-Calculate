@@ -69,6 +69,8 @@ im Ist `pos["P-n"].einkaufCent`. Die Seite hat die Adresse `#handel` (kein eigen
   der günstigste zählt. Lieferant, Link, Einkaufspreis gehen nie hinaus (Prüfwert `LIEFERANT-PRUEFWORT`, 123,45 €).
   ⚠ **Halbe Einkaufszeilen gehören in `katalog.hinweise`, nie in `pruefe`**: ein Katalog, der `pruefe` nicht besteht, wird beim Laden
   still durch den Startkatalog ersetzt. Links nur über `katalog.sichereAdresse` (nur https).
+  **Vollbild auch hier** (Klaus 2026-10-13): Seite so breit wie das Fenster auf Handy hoch/quer, Tablet, großem Schirm; die Spalten
+  „Menge + ins Angebot“ und „Verkauf“ stehen vorn, damit sie am Handy ohne Wischen da sind; ab 1024 px passt die ganze Tabelle.
 - **Vollbild** (Klaus 2026-10-12): `main` hat keine Höchstbreite, die Vorschau füllt den Schirm; nur das Papier-Blatt bleibt A4-breit.
 - **Mengen-Einheit** (`einheitText`: Stk., Std., km) geht über die Whitelist (`einheit`) aufs Blatt, in WorkFloh und BLP-Texte.
 - **Die Gegenprobe gibt Klon-Pfade weiter** (`BLP_KLON`, `WORKFLOH_KLON`, `TOMYS_KLON`) — ohne sie wären Parser- und

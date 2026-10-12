@@ -282,3 +282,4 @@ details.weg-details summary{cursor:pointer;color:var(--intern)}
 @media (max-width:520px){.handel-knopf .lang{display:none}}
 .handel-tab td,.handel-tab th{padding:5px 6px;white-space:nowrap}
 .handel-tab tr.gedaempft td{opacity:.7}
+.handel-tab td.handel-menge{display:flex;flex-direction:column;align-items:flex-start;gap:4px}

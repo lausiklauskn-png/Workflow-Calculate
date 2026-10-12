@@ -155,7 +155,7 @@ const FAELLE = [
   /* ── Handelsware (Klaus 2026-10-13) ── */
   { name: "HANDEL: Handlungskosten fallen weg", probe: K, erwartet: "HANDEL: Handrechnung",
     an: [["assets/kern/kalkulation.js", "hk = rund(bez * (+s.handlungskostenPct || 0) / 100)", "hk = 0"]] },
-  { name: "HANDEL: Versand zählt doppelt", probe: K, erwartet: "HANDEL: kein eigener Versandposten",
+  { name: "HANDEL: Versand zählt doppelt", probe: K, erwartet: "HANDEL: per Haken umgestellte Vorlage — kein eigener Versandposten",
     an: [["assets/kern/angebot.js", 'if (v.versandArt === "keiner" || v.einkaufsprodukt) return;', 'if (v.versandArt === "keiner") return;']] },
   { name: "HANDEL: Zwischenmenge wird geschätzt", probe: K, erwartet: "HANDEL: Zwischenmenge (300) wird NICHT geschätzt",
     an: [["assets/kern/kalkulation.js", "return x && Math.round(+x.menge) === menge && zahl(x.gesamtCent) != null;", "return x && zahl(x.gesamtCent) != null;"]] },
@@ -166,7 +166,7 @@ const FAELLE = [
     an: [["assets/kern/kalkulation.js", "l.sort(function (a, b) { return a.gesamtCent - b.gesamtCent; });", "l.sort(function (a, b) { return b.gesamtCent - a.gesamtCent; });"]] },
   { name: "HANDEL: fehlender Einkaufspreis zählt als 0", probe: K, erwartet: "HANDEL: fehlender Einkaufspreis",
     an: [["assets/kern/kalkulation.js", "return x && Math.round(+x.menge) === menge && zahl(x.gesamtCent) != null;", "return x && Math.round(+x.menge) === menge;"]] },
-  { name: "HANDEL: Staffel nicht aus den Einkaufsmengen", probe: K, erwartet: "HANDEL: Staffel aus den eingetragenen",
+  { name: "HANDEL: Staffel nicht aus den Einkaufsmengen", probe: K, erwartet: "HANDEL: per Haken umgestellte Vorlage — Staffel",
     an: [["assets/kern/angebot.js", "if (v && v.einkaufsprodukt) { var em = K().einkaufsMengen(v); if (em.length) { p.staffeln = em; p.menge = em[0]; } }", ""]] },
   { name: "KATALOG: halbe Einkaufszeile wirft den Katalog weg", probe: K, erwartet: "KATALOG: halb ausgefüllte Einkaufszeile",
     an: [["assets/kern/katalog.js", "    if (f.length) return f;\n    var mat = ids(kat.materialien)", "    f = f.concat(hinweise(kat)); if (f.length) return f;\n    var mat = ids(kat.materialien)"]] },
@@ -196,6 +196,10 @@ const FAELLE = [
     an: [["assets/app.js", 'if (v && !KAT.sichereAdresse(v)) { melde("Die Adresse muss mit https:// beginnen — nicht übernommen.", "bad"); return; }', ""]] },
   { name: "HANDEL-SEITE: Haken lenkt die Vorlage nicht um", probe: B, erwartet: "HANDEL-SEITE: Haken „Einkaufsprodukt“ nimmt",
     an: [["assets/app.js", "var alle = kat[S.katReiter] || [], liste = S.katReiter === \"vorlagen\" ? KAT.eigenfertigung(kat) : alle;", "var alle = kat[S.katReiter] || [], liste = alle;"]] },
+  { name: "VOLLBILD: Handelsware — Spalten so breit, dass der Verkauf aus dem Bild fällt", probe: B, erwartet: "VOLLBILD: Handelsware — Verkauf",
+    an: [["assets/app.css", ".handel-tab td,.handel-tab th{padding:5px 6px;white-space:nowrap}", ".handel-tab td,.handel-tab th{padding:5px 90px;white-space:nowrap}"]] },
+  { name: "VOLLBILD: Handelsware — Seite wieder begrenzt", probe: B, erwartet: "VOLLBILD: die Seite Handelsware",
+    an: [["assets/app.css", ".handel-knopf{padding:6px 10px;font-weight:600;font-size:.85rem}", ".handel-knopf{padding:6px 10px;font-weight:600;font-size:.85rem}[data-handel-produkt]{max-width:600px}"]] },
   { name: "HANDEL-SEITE: Tabelle sprengt das Handy", probe: B, erwartet: "HANDY: die Seite Handelsware passt",
     an: [["assets/app.js", 'karte.append(h("div", { class: "tabelle-huelle" }, t));', "karte.append(t);"]] },
 ];

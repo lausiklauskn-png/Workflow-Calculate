@@ -465,6 +465,13 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   const halb = kopie(kat); K.finde(halb.vorlagen, "kuli_zukauf").einkauf.push({ menge: null, gesamtCent: null, lieferant: "gibt_es_nicht", url: "" });
   ok("KATALOG: halb ausgefüllte Einkaufszeile hält den Katalog nicht auf (nur ein Hinweis)", KA.pruefe(halb).length === 0 && KA.hinweise(halb).length === 2, [KA.pruefe(halb), KA.hinweise(halb)]);
 
+  /* Eine eigene Vorlage (Tasse: Versand „stueck“, eigene Staffel) wird per Haken zum Einkaufsprodukt —
+     die Beispiele oben tragen schon versandArt „keiner“ und passende Staffeln und könnten das nicht zeigen */
+  const tv = K.finde(kat.vorlagen, "tasse"); tv.einkaufsprodukt = true; tv.einkauf = [{ menge: 50, gesamtCent: 20000 }, { menge: 100, gesamtCent: 36000 }];
+  const ta = A.neu([], "2026-10-13"), tp = A.neuePosition(ta, kat, "tasse"), tr = A.rechne(ta, kat, null, false);
+  ok("HANDEL: per Haken umgestellte Vorlage — kein eigener Versandposten (Tasse, sonst Versand „stueck“)", tv.versandArt !== "keiner" && tr.versand.leer === true && tr.summen.netto === 30000, tr.versand);
+  ok("HANDEL: per Haken umgestellte Vorlage — Staffel aus den Einkaufsmengen statt der alten Staffel", tp.staffeln.join() === "50,100" && tp.menge === 50 && tv.staffelVorgabe.join() !== "50,100", [tp.staffeln, tv.staffelVorgabe]);
+
   /* Einfrieren: der Einkauf gehört zum Stand */
   const b = A.neu([], "2026-10-13"); A.neuePosition(b, kat, "kuli_zukauf"); A.stellen(b, kat);
   K.finde(kat.vorlagen, "kuli_zukauf").einkauf[0].gesamtCent = 50000;

@@ -1102,7 +1102,7 @@
     var karte = h("div", { class: "karte", "data-handel-produkt": v.id });
     var ph = (v.einkauf || []).some(function (x) { return x.platzhalter; }), phGb = !!(K.finde(kat.gebiete, v.gebiet) || {}).platzhalter;
     karte.append(h("div", { class: "position-kopf" },
-      h("div", null, h("b", { text: v.name }), " ", ph ? h("span", { class: "platzhalter-marke", "data-einkauf-platzhalter": "", text: "Einkauf: Platzhalter" }) : null,
+      h("div", null, h("b", { text: v.name }), " ", ph ? h("span", { class: "platzhalter-marke", "data-einkauf-platzhalter": "", text: "Einkauf: Platzhalter" }) : null, " ",
         phGb ? h("span", { class: "badge gelb", "data-saetze-platzhalter": "", text: "Sätze: Platzhalter" }) : null),
       knopf(auf ? "▾ Einkauf bearbeiten" : "✎ Einkauf bearbeiten", function () { S.offen["handel:" + v.id] = !auf; zeichne(); }, "klein" + (auf ? " on" : ""), { "data-handel-bearbeiten": v.id })));
     karte.append(h("p", { class: "gedaempft klein", text: "Handlungskosten " + fmtPct(+sf.s.handlungskostenPct || 0) + " % · Gewinn " + fmtPct(+sf.s.gewinnPct || 0) + " %" + (sf.klasse ? " (mit " + sf.klasse + "-Kunde)" : "") }));
@@ -1110,26 +1110,27 @@
     if (!zeilen.length) karte.append(h("p", { class: "hinweis warn", text: "Noch kein Einkauf eingetragen — „✎ Einkauf bearbeiten“." }));
     else {
       var t = h("table", { class: "handel-tab", "data-handel-tabelle": v.id }, h("thead", null, h("tr", null,
-        ["Menge", "Lieferant", "Einkauf inkl. Versand", "+ Handlungsk.", "+ Gewinn", "Verkauf inkl. Versand netto", "je " + einh, "Aufschlag", "Spanne", ""].map(function (x, i) { return h("th", { class: i >= 2 && i <= 8 ? "r" : "", text: x }); }))));
+        /* Verkauf und „ins Angebot“ vorn — am Handy steht das ohne Wischen da, der Rest rollt in der Tabelle */
+        ["Menge", "Verkauf inkl. Versand netto", "Einkauf inkl. Versand", "Spanne", "Aufschlag", "je " + einh, "+ Handlungsk.", "+ Gewinn", "Lieferant"].map(function (x, i) { return h("th", { class: i >= 1 && i <= 7 ? "r" : "", text: x }); }))));
       var tb = h("tbody");
       zeilen.forEach(function (z) {
         var x = z.x, m = Math.round(+x.menge) || 0, lf = K.finde(kat.lieferanten, x.lieferant);
         var lfZelle = h("td", null, lf ? lf.name : x.lieferant ? "„" + x.lieferant + "“ fehlt" : h("span", { class: "gedaempft", text: "—" }), " ", handelLink(x.url || (lf && lf.url), lf ? "" : "Link"));
         if (x.gesamtCent == null || x.gesamtCent === "" || !(m > 0)) {
-          tb.append(h("tr", { "data-handel-zeile": String(m), "data-offen": "" }, h("td", { text: m ? m + " " + einh : "—" }), lfZelle,
-            h("td", { colspan: "8", class: "gedaempft", text: !(m > 0) ? "Menge fehlt" : "Einkaufspreis fehlt — nicht kalkuliert" })));
+          tb.append(h("tr", { "data-handel-zeile": String(m), "data-offen": "" }, h("td", { text: m ? m + " " + einh : "—" }),
+            h("td", { colspan: "7", class: "gedaempft", text: !(m > 0) ? "Menge fehlt" : "Einkaufspreis fehlt — nicht kalkuliert" }), lfZelle));
           return;
         }
         var hd = K.handel(+x.gesamtCent, sf.s), zaehlt = K.einkaufFuer(v, m).treffer === x;
         var spanne = hd.netto - hd.bezugspreis;
         tb.append(h("tr", { "data-handel-zeile": String(m), "data-einkauf": String(hd.bezugspreis), "data-verkauf": String(hd.netto), class: zaehlt ? "" : "gedaempft" },
-          h("td", { text: m + " " + einh }), lfZelle,
-          h("td", { class: "r", text: euro(hd.bezugspreis) }), h("td", { class: "r", text: euro(hd.handlungskosten) }), h("td", { class: "r", text: euro(hd.gewinn) }),
-          h("td", { class: "r" }, h("b", { text: euro(hd.netto) })), h("td", { class: "r", text: euro(Math.round(hd.netto / m)) }),
-          h("td", { class: "r", "data-aufschlag": "", text: hd.bezugspreis ? fmtPct(Math.round(spanne / hd.bezugspreis * 10000) / 100) + " %" : "—" }),
+          h("td", { class: "handel-menge" }, h("div", { text: m + " " + einh }), zaehlt ? knopf("ins Angebot", function () { insAngebot(v, m); }, "klein pri", { "data-ins-angebot": v.id + ":" + m })
+            : h("div", { class: "klein", text: "teurer als ein anderer Einkauf" })),
+          h("td", { class: "r" }, h("b", { text: euro(hd.netto) })), h("td", { class: "r", text: euro(hd.bezugspreis) }),
           h("td", { class: "r", "data-spanne": String(spanne), text: euro(spanne) + (hd.netto ? " · " + fmtPct(Math.round(spanne / hd.netto * 10000) / 100) + " %" : "") }),
-          h("td", null, zaehlt ? knopf("ins Angebot", function () { insAngebot(v, m); }, "klein pri", { "data-ins-angebot": v.id + ":" + m })
-            : h("span", { class: "klein", text: "teurer als ein anderer Einkauf für " + m }))));
+          h("td", { class: "r", "data-aufschlag": "", text: hd.bezugspreis ? fmtPct(Math.round(spanne / hd.bezugspreis * 10000) / 100) + " %" : "—" }),
+          h("td", { class: "r", text: euro(Math.round(hd.netto / m)) }),
+          h("td", { class: "r", text: euro(hd.handlungskosten) }), h("td", { class: "r", text: euro(hd.gewinn) }), lfZelle));
       });
       t.append(tb);
       karte.append(h("div", { class: "tabelle-huelle" }, t));
