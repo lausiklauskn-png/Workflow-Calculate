@@ -20,17 +20,18 @@ unterscheiden), Violett = intern wie dort.
 | `assets/kern/sicherung.js` | verschlüsselte Sicherung (Angebote, Kunden, Bilder, Katalog, Einstellungen), Zurückholen fügt hinzu |
 | `assets/schluesseltresor.js` | **byte-1:1 aus Workflow-Needs** (dort aus kim-hub-company), SHA in `tests/kern.mjs` — nie hier abwandeln |
 | `assets/kern/katalog.js` | Katalog prüfen, ex-/importieren, Platzhalter zählen, **Arbeitsgebiet hinzufügen** (`gebietHinzufuegen`: nur Fehlendes, eigene Zahlen bleiben) |
+| `assets/kern/recherche.js` | **KI-Recherche** der Marktpreise: Claude-API (`claude-opus-5-5`) mit eigenem Schlüssel und Websuche (`web_search_20260209`, direkt, ≤ 5 Suchen); übernimmt nur Preise, deren Quelle die Suche lieferte UND deren Zahl wörtlich im Zitat (`cited_text`) steht; Funde `ungeprueft: true` |
 | `assets/kern/nachkalk.js` | **Nachkalkulation** (Stufe 3): Plan gegen Ist am gestellten Angebot, Faktor je Vorlage, Übernahme ins Zeit-Muster (einmal je Befund) |
 | `assets/daten/werbetechnik.js` | Startkatalog — **alle Zahlen Platzhalter** (`platzhalter: true`); registriert `WC.STARTKATALOGE` |
 | `assets/daten/stickerei.js` · `dienstleistung.js` | weitere Arbeitsgebiete (Stufe 3), Platzhalter; Stickerei rechnet nach **Stichzahl** (`stiche`, Einheit `tsd_stiche`) |
-| `assets/daten/beispiel-angebote.js` | 4 Beispiel-Angebote, 15 Positionen, alle drei Gebiete — Kunden erfunden; holt fehlende Gebiete mit |
+| `assets/daten/beispiel-angebote.js` | 5 Beispiel-Angebote (Verein, Firmenstart, Fahrzeug, Firmenjubiläum, Hochzeit), 15 Positionen, alle drei Gebiete — Kunden erfunden; holt fehlende Gebiete mit |
 | `assets/daten/bilder.js` | Beispielbilder als **Zeichnungen** (SVG), mehrere Ansichten je Beispiel |
 | `assets/app.js` · `app.css` | Oberfläche (Schrittleiste, Preis nachbessern, Lernen, Markt, Katalog-Editor, Rechner) |
 | `assets/installieren.js` | byte-1:1 aus Sage (über Workflow-Needs), SHA in `tests/kern.mjs` |
 | `icons/quelle/icon-klaus.png` | Klaus' App-Symbol (2026-10-12, rot: Zahnrad, Rechenzeichen, Pfeil) → `python3 tools/icons-bauen.py`, danach Cache erhöhen |
 
 **Speicher (nie ändern):** IndexedDB `WorkflowCalculate1` mit `angebote`, `kunden`, `bilder` (Blobs) ·
-localStorage `workflowcalculate_katalog`, `_einstellungen`, `_thema`, `_aktiv`, `_reiter`, `_sicherung_zuletzt` ·
+localStorage `workflowcalculate_katalog`, `_einstellungen`, `_thema`, `_aktiv`, `_reiter`, `_sicherung_zuletzt`, `_ki_<FACH>` (KI-Schlüssel, nur verschlüsselt über `WERKSTATT_SCHLUESSEL.einlegen`) ·
 sessionStorage `workflowcalculate_sicherung_spaeter`. Am Angebot: `fassung`, `vorgaenger`, `ersetztDurch`, `anlass` (Stufe 2) · `ist = {pos:{"P-n":{minuten, materialCent, maschinenH}}, versandCent, datum}`,
 `beispiel` (Stufe 3). An der Position: `stiche`. An der Vorlage: `einheitText`, `stiche`, `sticheVorgabe`; im Verlauf `nk` (Schlüssel der Nachkalkulation).
 
@@ -52,6 +53,11 @@ sessionStorage `workflowcalculate_sicherung_spaeter`. Am Angebot: `fassung`, `vo
 - **Nachkalkulation: leer ist nicht 0.** Ein leeres Ist-Feld zählt mit dem Plan, und die Seite sagt, wie viele.
   Ist-Minuten sind Lohnminuten, Maschinenlaufzeit steht getrennt. Verglichen wird mit dem eingefrorenen Stand.
   Ein Faktor je Vorlage wird nur einmal übernommen (Schlüssel `nk` im Verlauf); unter 2 % gilt „passt“.
+- **KI-Recherche rät nicht.** Ein Fund braucht Quelle aus der Websuche UND die Zahl im Zitat — sonst verworfen, mit Grund.
+  Funde stehen `ungeprueft` in `vorlage.markt` (mit `quelle`, `zitat`, `notiz`) und zählen im Vergleich erst nach ✓.
+  Hinaus geht nur `auftragsInfo` (Produkt, Menge, Maße, Farben, Stiche, Verfahren, Material) — nie Kunde/Titel/Beschreibung/Preise.
+  Der Schlüssel liegt nur im Speicher der Sitzung, gemerkt nur verschlüsselt. Die Proben stellen die Gegenseite (`tests/daten/ki-antwort.mjs`).
+- **Vollbild** (Klaus 2026-10-12): `main` hat keine Höchstbreite, die Vorschau füllt den Schirm; nur das Papier-Blatt bleibt A4-breit.
 - **Mengen-Einheit** (`einheitText`: Stk., Std., km) geht über die Whitelist (`einheit`) aufs Blatt, in WorkFloh und BLP-Texte.
 - **Die Gegenprobe gibt Klon-Pfade weiter** (`BLP_KLON`, `WORKFLOH_KLON`, `TOMYS_KLON`) — ohne sie wären Parser- und
   Import-Proben in der Kopie unter /tmp übersprungen und ihre Fälle blind (so gemessen).
@@ -68,9 +74,11 @@ sessionStorage `workflowcalculate_sicherung_spaeter`. Am Angebot: `fassung`, `vo
 
 - Alle Startwerte (Sätze, EK, Tarife, Zeiten) sind **Platzhalter**; die App sagt das, bis eigene da sind.
 - Versandtarife aus einer eigenen Tabelle, keine Live-Abfrage (Klaus' Wahl).
-- Marktpreise trägt man ein; die App liest keine fremden Seiten. „🔎 Bei Mitbewerbern nachsehen“ ist ein Link.
-- Nicht gebaut: **KI-Recherche der Marktpreise** — ein Sprachmodell ohne belegte Websuche erfindet Preise, und das bricht
-  „nur eingetragene Preise“; Frage an Klaus. **Live-Versandtarife** — Klaus' Wahl: eigene Tabelle.
+- Marktpreise trägt man ein oder holt sie mit der KI-Recherche (die Suche läuft bei Anthropic, über den eigenen Schlüssel);
+  die App selbst liest keine fremden Seiten. „🔎 Bei Mitbewerbern nachsehen“ ist ein Link.
+- Nicht gebaut: **Live-Versandtarife** — Klaus' Wahl: eigene Tabelle.
+- ⚠ KI-Recherche **nie gegen die echte API gemessen** (kein Schlüssel im Behälter): Form der Antwort nach der Doku gestellt.
+  Ob echte Seiten Preise so zitieren, dass die Zahl im `cited_text` (≤ 150 Zeichen) steht, zeigt erst der erste echte Lauf.
 - Nachkalkulation nur für Arbeitszeit ins Muster übernehmbar; Material- und Maschinen-Ist werden gezeigt, nicht gelernt.
 - Die Import-Probe gegen Mein WorkFloh / Tomys WorkFloh läuft nur, wenn die Klone daneben liegen (sonst Hinweis, übersprungen).
 - ⚠ Nicht gemessen: Tablet, echtes Drucken/„Als PDF speichern“, Import der Auftragsdatei in WorkFloh am Gerät,
