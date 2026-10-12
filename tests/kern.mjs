@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const WURZEL = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const KERN = ["assets/kern/geld.js", "assets/kern/mengen.js", "assets/kern/kalkulation.js", "assets/kern/versand.js", "assets/kern/markt.js",
-  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/kern/nachkalk.js", "assets/kern/recherche.js", "assets/kern/mail.js", "assets/kern/anfrage.js", "modules/25_pseudonym.js", "assets/kern/pruefer-mail.js", "assets/kern/ki-anfrage.js", "assets/daten/werbetechnik.js", "assets/daten/stickerei.js", "assets/daten/dienstleistung.js", "assets/daten/handelsware.js", "assets/daten/laser.js", "assets/daten/beispiel-angebote.js", "assets/daten/bilder.js"];
+  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/kern/nachkalk.js", "assets/kern/recherche.js", "assets/kern/mail.js", "assets/kern/unterlagen.js", "assets/kern/anfrage.js", "modules/25_pseudonym.js", "assets/kern/pruefer-mail.js", "assets/kern/ki-anfrage.js", "assets/daten/werbetechnik.js", "assets/daten/stickerei.js", "assets/daten/dienstleistung.js", "assets/daten/handelsware.js", "assets/daten/laser.js", "assets/daten/beispiel-angebote.js", "assets/daten/bilder.js"];
 for (const f of KERN) require(join(WURZEL, f));
 const WC = globalThis.WC, K = WC.kalk, M = WC.mengen, A = WC.angebot, V = WC.versand, MK = WC.markt;
 
@@ -661,6 +661,41 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
     anfragen[0].o.headers["anthropic-dangerous-direct-browser-access"] === "true" && !PII.test(anfragen[0].o.body) && t === antwort);
   const fehl = await KI.rufen("sk-ant-x", body, async () => ({ ok: false, status: 401, json: async () => ({ error: { message: "invalid x-api-key" } }) })).then(() => "", (x) => x.message);
   ok("KI: abgewiesener Schlüssel → Fehler mit Grund", /invalid x-api-key/.test(fehl));
+}
+
+/* ── UNTERLAGEN am Angebot: Entwurf, fertiges Produkt, Dateien, Links (Klaus 2026-10-13) ── */
+{
+  const U = WC.unterlagen, kat = kopie(WC.START);
+  const a = A.neu([], "2026-10-13"); a.kunde = { name: "Sportverein Beispiel e.V.", anschrift: "", klasse: "B" }; a.titel = "Vereinstassen";
+  const p = A.neuePosition(a, kat, "tasse"); p.menge = 50;
+  ok("UNTERLAGEN: höchstens 50 MB je Datei, leere Datei nicht", !U.pruefeDatei("gross.cdr", 50 * 1048576 + 1).ok && U.pruefeDatei("ok.cdr", 50 * 1048576).ok && !U.pruefeDatei("leer.pdf", 0).ok);
+  ok("UNTERLAGEN: Dateityp aus der Endung, wenn der Browser keinen nennt (Corel, Photoshop)", U.typVon("logo.cdr", "") === "application/vnd.corel-draw" && U.typVon("motiv.PSD", "") === "image/vnd.adobe.photoshop" && U.typVon("x.unbekannt", "") === "application/octet-stream" && U.typVon("logo.cdr", "application/octet-stream") === "application/vnd.corel-draw");
+  ok("UNTERLAGEN: Angebot erst gestellt, dann angenommen", !U.annehmen(a, "2026-10-13").ok);
+  A.stellen(a, kat);
+  const netto = A.rechne(a, kat, null, false).summen.netto;
+  ok("UNTERLAGEN: gestellt → angenommen mit Datum", U.annehmen(a, "2026-10-14").ok && a.angenommen.datum === "2026-10-14");
+  const r1 = U.dazu(p, { art: "entwurf", name: "entwurf-vorne.png", typ: "image/png", groesse: 2048, datei: "D-1", notiz: "Ansicht vorne" }, "2026-10-14");
+  const r2 = U.dazu(p, { art: "fertig", name: "foto-fertig.jpg", typ: "image/jpeg", groesse: 4096, datei: "D-2" }, "2026-10-20");
+  const r3 = U.dazu(p, { art: "datei", name: "VEREINSLOGO-PRUEFWORT.cdr", typ: "", groesse: 3 * 1048576, datei: "D-3" }, "2026-10-14");
+  const r4 = U.dazu(p, { art: "link", url: "https://cloud.example/LINK-PRUEFWORT/motiv", notiz: "Bildgenerierung" }, "2026-10-14");
+  ok("UNTERLAGEN: Entwurf, fertiges Produkt, Corel-Datei und Link hängen an der Position", r1.ok && r2.ok && r3.ok && r4.ok && p.unterlagen.length === 4 &&
+    p.unterlagen.map((u) => u.id + ":" + u.art).join() === "U-1:entwurf,U-2:fertig,U-3:datei,U-4:link" && p.unterlagen[2].typ === "application/vnd.corel-draw");
+  ok("UNTERLAGEN: ein Nicht-Bild als „Entwurf“ wird Datei; javascript:-Link wird abgewiesen",
+    U.dazu(p, { art: "entwurf", name: "entwurf.pdf", typ: "application/pdf", groesse: 10, datei: "D-4" }).unterlage.art === "datei" && !U.dazu(p, { art: "link", url: "javascript:alert(1)" }).ok);
+  U.weg(p, "U-5");
+  ok("UNTERLAGEN: ändern am gestellten Angebot nichts am Preis", A.rechne(a, kat, null, false).summen.netto === netto && a.status === "gestellt");
+  const d = WC.aussen.angebotExtern(a, A.rechne(a, kat, a.kunde, false), {}, false), j = JSON.stringify(d);
+  ok("WHITELIST: Unterlagen (Dateiname, Link, Notiz) gehen nicht aufs Kundenblatt", !/PRUEFWORT|Bildgenerierung|Ansicht vorne|unterlage|\.cdr/i.test(j), j.match(/PRUEFWORT|unterlage/i));
+  const w = U.fuerWorkFloh(a);
+  ok("UNTERLAGEN → WorkFloh: drei Dateien mit sprechendem Namen, der Link als Text", w.dateien.length === 3 && w.dateien.some((x) => x.name === a.nummer + "_P-1_Datei_VEREINSLOGO-PRUEFWORT.cdr" && x.datei === "D-3") &&
+    /https:\/\/cloud\.example\/LINK-PRUEFWORT\/motiv \(Bildgenerierung\)/.test(w.text) && /als Datei angehängt/.test(w.text), w);
+  const v = K.finde(kat.vorlagen, "tasse"), vorher = v.beispiele.length, b = U.beispielAus(a, p, v);
+  ok("UNTERLAGEN → Beispiel in der Vorlage: Ansichten fertig zuerst, Menge der Position, Quelle vermerkt", b.ok && v.beispiele.length === vorher + 1 && b.beispiel.ansichten[0][1] === "img:D-2" &&
+    b.beispiel.ansichten.length === 2 && b.beispiel.menge === 50 && b.beispiel.quelle === a.nummer + ":P-1");
+  ok("UNTERLAGEN → Beispiel: dieselbe Position nicht zweimal", !U.beispielAus(a, p, v).ok);
+  ok("UNTERLAGEN → Beispiel: der Preis wird in der Galerie frisch gerechnet (kein Preis gespeichert)", !("netto" in b.beispiel) && K.position(kat, Object.assign(pos(kat, "tasse"), { menge: b.beispiel.menge }), {}).ok);
+  ok("UNTERLAGEN: alle Datei-Kennungen für Vorladen und Sicherung", U.dateiIds([a]).join() === "D-1,D-2,D-3", U.dateiIds([a]));
+  ok("SUCHE: findet das Angebot über den Dateinamen der Unterlage (auch ein Teil des Namens)", (WC.anfrage.suche("vereinslogo", [a], [], kat)[0] || {}).angebot === a);
 }
 
 /* ── STUFE 2: Klaus' Symbol ── */

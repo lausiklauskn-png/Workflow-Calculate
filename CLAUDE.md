@@ -26,6 +26,7 @@ unterscheiden), Violett = intern wie dort.
 | `assets/kern/ki-anfrage.js` | **Anfrage mit KI lesen** (freiwillig, eigener Schlüssel): prüfen (`PrueferMail`) → einmal anhalten bei Anweisung an eine KI / verstecktem Text → verdecken (Modul 25 + eigene Muster: Kundennummer, Telefon, Straße, PLZ+Ort, „600 €“) → `findLeak` → senden (nur verdeckter Text + Vorlagen ohne Preise) → nur übernehmen, was als Zitat wörtlich im Text steht und die Menge trägt. Der Kunde kommt nie von der KI |
 | `modules/25_pseudonym.js` | **Sage-Modul 25 byte-1:1** (über Workflow-Needs, Sage `df54f0c`), SHA in `tests/kern.mjs`. Nie hier abwandeln |
 | `assets/kern/pruefer-mail.js` | **byte-1:1 aus Workflow-PDF** (dort aus dem Auslieferungsprüfer, gleich in Mein-WorkFloh), SHA in `tests/kern.mjs`. Nie hier abwandeln |
+| `assets/kern/unterlagen.js` | **Unterlagen am Angebot** (2026-10-13): je Position Entwurf / fertiges Produkt (Bilder, Ansichten), Dateien (Corel, PSD, AI, PDF …, ≤ 50 MB, Byte für Byte) und Links; „angenommen“ am gestellten Angebot; an WorkFloh mit (Klaus' Ja), nie aufs Kundenblatt; „★ als Beispiel in die Vorlage“ |
 | `assets/kern/nachkalk.js` | **Nachkalkulation** (Stufe 3): Plan gegen Ist am gestellten Angebot, Faktor je Vorlage, Übernahme ins Zeit-Muster (einmal je Befund) |
 | `assets/daten/werbetechnik.js` | Startkatalog — **alle Zahlen Platzhalter** (`platzhalter: true`); registriert `WC.STARTKATALOGE` |
 | `assets/daten/stickerei.js` · `dienstleistung.js` | weitere Arbeitsgebiete (Stufe 3), Platzhalter; Stickerei rechnet nach **Stichzahl** (`stiche`, Einheit `tsd_stiche`) |
@@ -44,6 +45,8 @@ sessionStorage `workflowcalculate_sicherung_spaeter`. Am Angebot: `fassung`, `vo
 Handelsware (2026-10-13): im Katalog `lieferanten = [{id, name, url, fuer: wiederverkaeufer|privat|beides, anmeldung, notiz, geprueftAm}]` (darf fehlen),
 an der Vorlage `einkaufsprodukt: true` und `einkauf = [{menge, gesamtCent, lieferant, url, datum}]` (Komplettpreis je Menge **inkl. Versand**),
 im Ist `pos["P-n"].einkaufCent`. Die Seite hat die Adresse `#handel` (kein eigener Speicher).
+Unterlagen (2026-10-13): an der Position `unterlagen = [{id "U-n", art entwurf|fertig|datei|link, name, typ, groesse, datei "D-…", url, datum, notiz}]`
+(Blob unverändert im Store `bilder`, also in der Sicherung), am Angebot `angenommen = {datum}`, am Vorlagen-Beispiel `quelle = "AN-…:P-n"`.
 Anfrage (2026-10-13): am Kunden `nr` (Kundennummer), `email`; am Angebot `anfrage = {von, betreff, datum, kundennr}` (nur intern, nie hinaus).
 Kleinmengenzuschlag (2026-10-13): im Katalog `kleinmenge = {grenze, cent, text}` (fehlt er, ergänzt die App die Vorgabe 10 Stk. / 12,00 € —
 Klaus' Wert, bestätigt 2026-10-13 — nur im LIVE-Katalog), am Angebot `kleinmengeAus` (für dieses Angebot weggelassen).
@@ -83,6 +86,10 @@ Fremdfertigung (2026-10-13): am Verfahren `vorhanden` (fehlt = da), an der Vorla
   mit `vorhanden: false`, rechnet die Eigenfertigung nicht (offen, nie geschätzt) und nennt den Zwilling; „→ Fremdfertigung nehmen“
   tauscht die Vorlage, **die Menge bleibt** (fehlt dafür ein Einkauf, sagt die Position das). **Kunden-Titel** kommt aus `titelVorgabe` —
   der interne Name („… (Zukauf)“, „Lohngravur“) geht nie aufs Blatt (Probe sucht Zukauf/Lohngravur/Laser/Hersteller).
+  **📎 Unterlagen** (Klaus 2026-10-13): ändern keinen Preis, darum auch am GESTELLTEN Angebot erlaubt. Dateien werden nie verkleinert
+  (anders als „📷 Bild dazu“); Dateityp aus der Endung, wenn der Browser `application/octet-stream` meldet (Corel!). Gehen nicht über
+  die Whitelist, also nie aufs Blatt; an WorkFloh hängt `uebergeben` sie an (Links als Text). „⧉ für anderen Kunden“ nimmt sie mit.
+  Ein Beispiel aus Unterlagen trägt keinen Preis — die Galerie rechnet ihn frisch.
   **📥 Anfrage → Entwurf** (Klaus 2026-10-13): offline, nichts geraten — was nicht erkannt ist, steht als „Nicht erkannt“ da; ein Mengenwort
   ohne passende Vorlage wird benannt. Eine Zahl ist nur eine **Menge**, wenn ein Stück-Wort oder ein Warenwort (Katalog + `WARENWORT`)
   dahinter steht — „in 2 Wochen“ nicht; Datum, PLZ, Telefon, Preis, Jahr werden vorher entfernt. Der Entwurf ist IMMER ein Entwurf
