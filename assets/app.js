@@ -25,7 +25,11 @@
     var k = lsJson(LS.katalog, null);
     S.katalog = k && !KAT.pruefe(k).length ? k : kopie(WC.START);
     S.katalog.lieferanten = S.katalog.lieferanten || [];
+    katalogErgaenzen(S.katalog);
   }
+  /* Kleinmengenzuschlag (Klaus 2026-10-13): fehlt er im eigenen Katalog, kommt die Vorgabe dazu (Platzhalter-Betrag).
+     Nur der LIVE-Katalog — ein eingefrorener Stand bleibt, wie er war. */
+  function katalogErgaenzen(k) { if (k && !k.kleinmenge) k.kleinmenge = kopie(A.KLEINMENGE_VORGABE); return k; }
   katalogLaden();
   function katalogSpeichern() { lsSet(LS.katalog, JSON.stringify(S.katalog)); }
   function einstSpeichern() { lsSet(LS.einst, JSON.stringify(S.einst)); }
@@ -351,6 +355,7 @@
 
     /* Versand */
     main.append(versandKarte(a, r, kat, ro));
+    var kmk = kleinmengeKarte(a, r, ro); if (kmk) main.append(kmk);
 
     /* Summen */
     var t = h("table", { class: "summen-tab", "data-summen": "" });
@@ -965,6 +970,18 @@
     return karte;
   }
 
+  /* ── Kleinmengenzuschlag: eigene Zeile auf dem Angebot, einmal je Angebot ── */
+  function kleinmengeKarte(a, r, ro) {
+    var km = r.kleinmenge;
+    if (!km || !km.positionen.length) return null;
+    var wo = km.positionen.map(function (id) { var x = r.positionen.filter(function (q) { return q.pos.id === id; })[0]; return id + " (" + x.erg.menge + " Stk.)"; }).join(", ");
+    return h("div", { class: "karte", "data-kleinmenge": km.aktiv ? String(km.cent) : "weg" }, h("h3", { text: km.text }),
+      h("p", { class: "klein", text: km.aktiv ? wo + " unter " + km.grenze + " Stück → eigene Zeile auf dem Angebot: " + euro(km.cent) + " netto (einmal je Angebot)."
+        : "Für dieses Angebot weggelassen (" + wo + " unter " + km.grenze + " Stück)." }),
+      ro ? null : knopf(km.aktiv ? "Für dieses Angebot weglassen" : "Wieder aufnehmen", function () { vorher(a); a.kleinmengeAus = km.aktiv; merken(a); zeichne(); }, "klein", { "data-kleinmenge-schalter": "" }),
+      h("span", { class: "gedaempft klein", text: " Betrag und Grenze: Einstellungen." }));
+  }
+
   /* ── Verpackung & Versand ── */
   function versandKarte(a, r, kat, ro) {
     var vs = r.versand, karte = h("div", { class: "karte", "data-versand": "", "data-schritt-ziel": "versand" }, h("h3", { text: "Verpackung & Versand" }));
@@ -1003,6 +1020,7 @@
         h("td", { class: "r", "data-blatt-menge": "", text: p.menge + " " + (p.einheit || "Stk.") }), h("td", { class: "r", text: euro(p.stueckCent) }), h("td", { class: "r", text: euro(p.gesamtCent) })));
     });
     if (d.versand) tb.append(h("tr", null, h("td"), h("td", { text: d.versand.text }), h("td"), h("td"), h("td", { class: "r", text: euro(d.versand.nettoCent) })));
+    if (d.kleinmenge) tb.append(h("tr", { "data-blatt-kleinmenge": "" }, h("td"), h("td", { text: d.kleinmenge.text }), h("td"), h("td"), h("td", { class: "r", text: euro(d.kleinmenge.nettoCent) })));
     t.append(tb); b.append(t);
     var su = h("table", { class: "summen", style: "width:auto;margin-left:auto;margin-top:10px" });
     su.append(h("tr", null, h("td", { text: "Summe netto" }), h("td", { class: "r", text: euro(d.summen.netto) })));
@@ -1281,9 +1299,9 @@
         knopf("⬇ Katalog als Datei", function () { herunterladen("workflow-calculate-katalog.json", KAT.exportieren(kat), "application/json"); }, "klein", { id: "katalog-export" }),
         h("label", { class: "btn klein" }, "⬆ Katalog einlesen", h("input", { type: "file", accept: ".json,application/json", hidden: true, id: "katalog-import", onchange: function () {
           var file = this.files && this.files[0]; if (!file) return;
-          file.text().then(function (t) { var r = KAT.importieren(t); if (!r.ok) { melde("Nicht eingelesen: " + r.fehler.join(" · "), "bad"); return; } S.katalog = r.katalog; katalogSpeichern(); melde("Katalog eingelesen.", ""); });
+          file.text().then(function (t) { var r = KAT.importieren(t); if (!r.ok) { melde("Nicht eingelesen: " + r.fehler.join(" · "), "bad"); return; } S.katalog = katalogErgaenzen(r.katalog); katalogSpeichern(); melde("Katalog eingelesen.", ""); });
         } })),
-        knopf("Startkatalog wiederherstellen", function () { if (confirm("Den ganzen Katalog durch den Startkatalog ersetzen? Eigene Einträge gehen verloren (vorher als Datei sichern).")) { S.katalog = kopie(WC.START); katalogSpeichern(); zeichne(); } }, "klein gefahr"))));
+        knopf("Startkatalog wiederherstellen", function () { if (confirm("Den ganzen Katalog durch den Startkatalog ersetzen? Eigene Einträge gehen verloren (vorher als Datei sichern).")) { S.katalog = katalogErgaenzen(kopie(WC.START)); katalogSpeichern(); zeichne(); } }, "klein gefahr"))));
     main.append(gebieteKarte(kat));
     var nav = h("div", { class: "band", style: "margin-bottom:10px" });
     kat.lieferanten = kat.lieferanten || [];
@@ -1417,6 +1435,11 @@
       })),
       h("label", { class: "schalter" }, h("input", { type: "checkbox", checked: !!S.einst.kleinunternehmer, id: "kleinunternehmer", onchange: function () { S.einst.kleinunternehmer = this.checked; einstSpeichern(); } }), "Kleinunternehmer (§ 19 UStG, keine USt)")));
     main.append(sicherungKarte());
+    var km = katalogErgaenzen(S.katalog).kleinmenge;
+    main.append(h("div", { class: "karte", "data-kleinmenge-einst": "" }, h("h2", { text: "Kleinmengenzuschlag" }),
+      km.platzhalter ? h("div", { class: "hinweis warn" }, "Platzhalter-Betrag — eigenen Betrag eintragen.") : null,
+      h("p", { class: "gedaempft klein", text: "Eigene Zeile auf dem Angebot, einmal je Angebot, sobald eine Stück-Position unter der Grenze liegt. Stunden, km und Montage zählen nicht. Betrag leer = aus. Gestellte Angebote bleiben, wie sie sind." }),
+      felderFuer(km, [["text", "Text auf dem Angebot", "text"], ["grenze", "unter … Stück", "zahl"], ["cent", "Betrag netto €", "cent"]], function () { delete km.platzhalter; katalogSpeichern(); zeichne(); })));
     S.katalog.gebiete.forEach(function (gb) {
       var s = gb.saetze = gb.saetze || {};
       function sp() { delete gb.platzhalter; katalogSpeichern(); }

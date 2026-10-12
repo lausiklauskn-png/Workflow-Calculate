@@ -37,6 +37,7 @@
       firma: firmaExtern(firma), kunde: kundeExtern(a.kunde),
       positionen: positionen,
       versand: v && v.ok && !v.leer ? { text: "Verpackung & Versand", nettoCent: c(v.cent) } : null,
+      kleinmenge: r.kleinmenge && r.kleinmenge.aktiv ? { text: s(r.kleinmenge.text) || "Kleinmengenzuschlag", nettoCent: c(r.kleinmenge.cent) } : null,
       summen: { netto: c(r.summen.netto), ust: c(r.summen.ust), brutto: c(r.summen.brutto),
         perSatz: r.summen.perSatz.map(function (p) { return { satz: c(p.satz), netto: c(p.netto), ust: c(p.ust) }; }) },
       kleinunternehmer: !!kleinunternehmer,

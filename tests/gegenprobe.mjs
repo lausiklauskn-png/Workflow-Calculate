@@ -221,6 +221,25 @@ const FAELLE = [
     an: [["assets/app.js", "p.staffeln = em.concat([p.menge]).filter(", "p.menge = em[0] || p.menge; p.staffeln = em.concat([p.menge]).filter("]] },
   { name: "LASER-SEITE: kein Knopf zur Fremdfertigung", probe: B, erwartet: "LASER-SEITE: Flaschenöffner (Faserlaser fehlt)",
     an: [["assets/app.js", "if (fv && !ro) karte.append(", "if (false) karte.append("]] },
+  /* ── Kleinmengenzuschlag (Klaus 2026-10-13) ── */
+  { name: "KLEIN: Zuschlag fehlt in der Summe", probe: K, erwartet: "KLEIN: 2 Tassen (unter 10)",
+    an: [["assets/kern/angebot.js", "perSatz[ks] = (perSatz[ks] || 0) + kleinmenge.cent; netto += kleinmenge.cent;", "perSatz[ks] = (perSatz[ks] || 0) + kleinmenge.cent;"]] },
+  { name: "KLEIN: je Position statt je Angebot", probe: K, erwartet: "KLEIN: zwei Positionen unter 10",
+    an: [["assets/kern/angebot.js", "return Object.assign(leer, { aktiv: true, cent: cent });", "return Object.assign(leer, { aktiv: true, cent: cent * leer.positionen.length });"]] },
+  { name: "KLEIN: Stunden und km zählen mit", probe: K, erwartet: "KLEIN: 4 Std. Arbeit",
+    an: [["assets/kern/angebot.js", 'return !!v && v.kleinmenge !== false && (v.einheitText || "Stk.") === "Stk." && !(v.versandArt === "keiner" && !v.einkaufsprodukt); }', "return !!v; }"]] },
+  { name: "KLEIN: weglassen wirkt nicht", probe: K, erwartet: "KLEIN: für ein Angebot weggelassen",
+    an: [["assets/kern/angebot.js", "if (a.kleinmengeAus) return Object.assign(leer, { weggelassen: true });", ""]] },
+  { name: "KLEIN: gestellte Angebote bekommen den Zuschlag nachträglich", probe: K, erwartet: "KLEIN: ein gestelltes Angebot von vorher",
+    an: [["assets/kern/angebot.js", "var km = kat.kleinmenge, grenze =", "var km = kat.kleinmenge || { grenze: 10, cent: 1200 }, grenze ="]] },
+  { name: "KLEIN: Zeile fehlt auf dem Kundenblatt", probe: K, erwartet: "KLEIN: Kundenblatt trägt die Zeile",
+    an: [["assets/kern/aussen.js", "kleinmenge: r.kleinmenge && r.kleinmenge.aktiv ?", "kleinmenge: false ?"]] },
+  { name: "KLEIN: BookLedgerPro bekommt die Zeile nicht", probe: K, erwartet: "KLEIN: BookLedgerPro bekommt die Zeile",
+    an: [["assets/kern/uebergabe.js", "    if (d.kleinmenge) pos.push(", "    if (false) pos.push("]] },
+  { name: "KLEIN-SEITE: Blatt zeigt die Zeile nicht", probe: B, erwartet: "KLEIN-SEITE: Kundenblatt trägt die eigene Zeile",
+    an: [["assets/app.js", "    if (d.kleinmenge) tb.append(", "    if (false) tb.append("]] },
+  { name: "KLEIN-SEITE: Vorgabe kommt nicht in den Katalog", probe: B, erwartet: "KLEIN-SEITE: 2 Tassen",
+    an: [["assets/app.js", "function katalogErgaenzen(k) { if (k && !k.kleinmenge) k.kleinmenge = kopie(A.KLEINMENGE_VORGABE); return k; }", "function katalogErgaenzen(k) { return k; }"]] },
 ];
 
 function vorkommen(text, teil) { let n = 0, i = 0; while ((i = text.indexOf(teil, i)) >= 0) { n++; i += teil.length; } return n; }

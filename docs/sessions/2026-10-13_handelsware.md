@@ -58,7 +58,11 @@ Herstellungsverfahren … Wir machen den Einkauf, müssen natürlich gut handeln
 - **Kunden-Titel getrennt vom internen Namen** (`titelVorgabe`): Lücke aus dem ersten Bau — „Kugelschreiber fertig bedruckt (Zukauf)“
   wäre als Titel aufs Kundenblatt gekommen. Jetzt „Kugelschreiber mit Logo“; die Probe sucht Zukauf/Lohngravur/Laser/Hersteller.
 - ⚠ **Hochzeit mit 60 Gästen über Fremdfertigung:** eingetragen sind 1/10/25/50 — für 60 rechnet die Position nicht (Frage 2 unten).
-- Mindermengen-/Kleinauftragszuschlag: **nicht gebaut**, offen bei Klaus (sichtbar oder im Preis, ab welcher Menge, welcher Betrag).
+- **Kleinmengenzuschlag** (Klaus: *„als eigene Zeile, unter 10 Stück“*): eigene Zeile „Kleinmengenzuschlag“ auf dem Angebot,
+  **einmal je Angebot**, sobald eine Stück-Position unter 10 liegt; Stunden, km und Montage zählen nicht. Betrag **12,00 € netto
+  als Platzhalter** (Einstellungen → Kleinmengenzuschlag: Text, Grenze, Betrag; leer = aus). Je Angebot „weglassen“.
+  Geht auf das Kundenblatt, in die WorkFloh-Datei und als Position an BookLedgerPro. Gestellte Angebote bleiben unverändert.
+  ⚠ Selbst entschieden, von Klaus zu bestätigen: Betrag, „einmal je Angebot“ statt je Position.
 - Am Laser offen bei Klaus: Lasertyp und Stärke, Einrichtzeit, Minuten je Name, Maschinenstundensatz, welche Rohlinge.
 
 ## Lieferanten — ehrlich

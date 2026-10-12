@@ -443,6 +443,29 @@ try {
     await s9.ctx.close();
   }
 
+  /* ── Kleinmengenzuschlag: eigene Zeile unter 10 Stück ── */
+  {
+    const s10 = await seite(1200), q = s10.p;
+    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await tippe(q, "#neues-angebot", "Neues Angebot");
+    await q.selectOption("#vorlage-wahl", "tasse"); await tippe(q, "#position-leer", "Leere Position");
+    await q.locator('[data-position="P-1"] [data-feld="menge"]').fill("2"); await q.locator('[data-position="P-1"] [data-feld="menge"]').press("Tab");
+    ok("KLEIN-SEITE: 2 Tassen → Karte „Kleinmengenzuschlag“ mit 12,00 €", await q.getAttribute("[data-kleinmenge]", "data-kleinmenge").catch(() => "") === "1200");
+    let bl = await druck(q, "#druck-angebot");
+    ok("KLEIN-SEITE: Kundenblatt trägt die eigene Zeile", await q.locator("#druck [data-blatt-kleinmenge]").count() === 1 && /Kleinmengenzuschlag/.test(bl.text) && /12,00/.test(bl.text));
+    await tippe(q, "[data-kleinmenge-schalter]", "Kleinmengenzuschlag weglassen");
+    bl = await druck(q, "#druck-angebot");
+    ok("KLEIN-SEITE: „weglassen“ nimmt die Zeile vom Blatt", await q.getAttribute("[data-kleinmenge]", "data-kleinmenge").catch(() => "") === "weg" && !/Kleinmengenzuschlag/.test(bl.text));
+    await tippe(q, "[data-kleinmenge-schalter]", "Kleinmengenzuschlag wieder aufnehmen");
+    await tippe(q, '[data-reiter="einstellungen"]', "Reiter Einstellungen");
+    await q.locator('[data-kleinmenge-einst] [data-kat-feld="cent"]').fill("15,00"); await q.locator('[data-kleinmenge-einst] [data-kat-feld="cent"]').press("Tab");
+    await tippe(q, '[data-reiter="angebot"]', "Reiter Angebot");
+    ok("KLEIN-SEITE: eigener Betrag aus den Einstellungen (15,00 €) gilt sofort", await q.getAttribute("[data-kleinmenge]", "data-kleinmenge").catch(() => "") === "1500");
+    await q.locator('[data-position="P-1"] [data-feld="menge"]').fill("10"); await q.locator('[data-position="P-1"] [data-feld="menge"]').press("Tab");
+    ok("KLEIN-SEITE: ab 10 Stück keine Karte, keine Zeile", await q.locator("[data-kleinmenge]").count() === 0);
+    await s10.ctx.close();
+  }
+
   /* ── Vollbild: die Arbeitsfläche nutzt jede Breite (Klaus 2026-10-12) ── */
   {
     const v = await seite(1920), q = v.p;

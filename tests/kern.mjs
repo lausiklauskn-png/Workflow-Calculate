@@ -45,6 +45,12 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   ok("KATALOG: jede Vorlage hat mindestens ein Beispiel mit Bild", kat.vorlagen.every((v) => v.beispiele.length && v.beispiele.every((b) => b.ansichten.length >= 2 && b.ansichten.every((a) => WC.bildUrl(a[1]).startsWith("data:image/svg+xml")))));
 }
 
+/* Ganz vorn, weil eine Sabotage daran jede spätere Probe mitreißt (Gegenprobe 2026-10-13: die Probe stolperte, bevor sie hierher kam) */
+{
+  const kat = kopie(WC.START);
+  ok("FREMD: ohne Feld „vorhanden“ (ältere Kataloge) gilt das Gerät als da", kat.verfahren.every((v) => v.vorhanden === undefined) && K.position(kat, pos(kat, "tasse", { menge: 10 }), {}).ok);
+}
+
 /* ── MENGEN ── */
 {
   const r = M.rechne("rolle", { breiteMm: 500, hoeheMm: 300, menge: 5, abstandMm: 5 }, { rollenbreiteMm: 1370 });
@@ -521,7 +527,6 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   const k2 = kopie(kat); K.finde(k2.verfahren, "laser_faser").vorhanden = true;
   const o2 = K.position(k2, pos1("name_oeffner", 1).p, {});
   ok("FREMD: Haken „Gerät in der Werkstatt“ gesetzt — dann rechnet die Eigenfertigung", o2.ok && !o2.fremd, o2.offen);
-  ok("FREMD: ohne Feld „vorhanden“ (ältere Kataloge) gilt das Gerät als da", K.position(kat, pos(kat, "tasse", { menge: 10 }), {}).ok);
   ok("FREMD: jede Laser-Vorlage hat ihre Fremdfertigung als Einkaufsprodukt mit Einkauf ab 1 Stück",
     eigen.length === 8 && eigen.every((v) => { const z = K.finde(kat.vorlagen, v.fremdVorlage); return z && z.einkaufsprodukt && K.einkaufsMengen(z)[0] === 1 && z.titelVorgabe === v.titelVorgabe; }));
   ok("BILDER: jede Laser-Vorlage hat Beispiele mit zwei Zeichnungen", eigen.every((v) => v.beispiele.length && v.beispiele.every((b) => b.ansichten.length >= 2 && b.ansichten.every((x) => WC.bildUrl(x[1]).startsWith("data:image/svg+xml")))));
@@ -535,6 +540,37 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   ok("WHITELIST: Kunden-Titel ohne Zukauf, Lohngravur, Laser oder Herstellungsweg", d.positionen.length === 4 && !intern.test(j) && d.positionen.some((x) => x.titel === "Flaschenöffner mit Namensgravur"), j.match(intern));
   const jb = JSON.stringify(WC.uebergabe.auftrag(d, "2026-10-13T10:00:00Z")) + JSON.stringify(WC.uebergabe.blpNutzlast(d));
   ok("UEBERGABE: auch WorkFloh und BookLedgerPro sehen keinen Herstellungsweg", !intern.test(jb), jb.match(intern));
+}
+
+/* ── KLEINMENGENZUSCHLAG (Klaus 2026-10-13: „als eigene Zeile, unter 10 Stück“) ── */
+{
+  const kat = kopie(WC.START); kat.kleinmenge = kopie(A.KLEINMENGE_VORGABE);
+  WC.katalog.gebietHinzufuegen(kat, WC.STARTKATALOGE.dienstleistung); WC.katalog.gebietHinzufuegen(kat, WC.STARTKATALOGE.laser);
+  const ang = (...pp) => { const a = A.neu([], "2026-10-13"); a.kunde = { name: "Brautpaar Beispiel", anschrift: "", klasse: "C" }; pp.forEach(([v, m]) => { A.neuePosition(a, kat, v).menge = m; }); return a; };
+  const a2 = ang(["tasse", 2]), r2 = A.rechne(a2, kat, a2.kunde, false);
+  const posSumme = r2.positionen.reduce((s, x) => s + x.erg.netto, 0) + (r2.versand.cent || 0);
+  ok("KLEIN: 2 Tassen (unter 10) → eine Zeile 12,00 €, in Summe und USt", r2.kleinmenge.aktiv && r2.kleinmenge.cent === 1200 && r2.summen.netto === posSumme + 1200 && r2.kleinmenge.positionen.join() === "P-1", r2.kleinmenge);
+  ok("KLEIN: 10 Tassen → kein Zuschlag", !A.rechne(ang(["tasse", 10]), kat, null, false).kleinmenge.aktiv);
+  const zwei = A.rechne(ang(["tasse", 2], ["name_karte_holz", 1]), kat, null, false);
+  ok("KLEIN: zwei Positionen unter 10 → trotzdem EINMAL je Angebot", zwei.kleinmenge.aktiv && zwei.kleinmenge.positionen.length === 2 &&
+    zwei.summen.netto === zwei.positionen.reduce((s, x) => s + x.erg.netto, 0) + (zwei.versand.cent || 0) + 1200);
+  ok("KLEIN: 4 Std. Arbeit, 20 km Anfahrt, 2 Schilder montieren → kein Zuschlag (Dienstleistung zählt nicht)",
+    !A.rechne(ang(["arbeit_std", 4], ["anfahrt", 20], ["montage_schild", 2]), kat, null, false).kleinmenge.aktiv);
+  ok("KLEIN: Lohngravur-Zukauf, 1 Stück → Zuschlag (Einkaufsprodukt zählt)", A.rechne(ang(["name_oeffner_zukauf", 1]), kat, null, false).kleinmenge.aktiv);
+  ok("KLEIN: eine nicht kalkulierte Position löst nichts aus", !A.rechne(ang(["name_oeffner", 1]), kat, null, false).kleinmenge.aktiv);
+  const aw = ang(["tasse", 2]); aw.kleinmengeAus = true; const rw = A.rechne(aw, kat, null, false);
+  ok("KLEIN: für ein Angebot weggelassen → keine Zeile, und es steht als „weggelassen“ da", !rw.kleinmenge.aktiv && rw.kleinmenge.weggelassen && rw.summen.netto === r2.summen.netto - 1200);
+  const kAlt = kopie(kat); delete kAlt.kleinmenge; const ag = ang(["tasse", 2]); A.stellen(ag, kAlt); const vorher = A.rechne(ag, kat, null, false).summen.netto;
+  ok("KLEIN: ein gestelltes Angebot von vorher (Stand ohne Zuschlag) ändert sich nicht", !A.rechne(ag, kat, null, false).kleinmenge.aktiv && vorher === A.rechne(ag, kAlt, null, false).summen.netto);
+  const k0 = kopie(kat); k0.kleinmenge.cent = null;
+  ok("KLEIN: Betrag leer = aus", !A.rechne(ang(["tasse", 2]), k0, null, false).kleinmenge.aktiv);
+  const d = WC.aussen.angebotExtern(a2, r2, {}, false), n = WC.uebergabe.blpNutzlast(d), auf = WC.uebergabe.auftrag(d, "2026-10-13T10:00:00Z");
+  ok("KLEIN: Kundenblatt trägt die Zeile „Kleinmengenzuschlag 12,00 €“", d.kleinmenge && d.kleinmenge.text === "Kleinmengenzuschlag" && d.kleinmenge.nettoCent === 1200);
+  ok("KLEIN: BookLedgerPro bekommt die Zeile, Summe auf den Cent", n.positionen.some((x) => x.beschreibung === "Kleinmengenzuschlag" && x.einzelpreisCent === 1200) &&
+    n.positionen.reduce((s, x) => s + x.menge * x.einzelpreisCent, 0) === d.summen.netto);
+  ok("KLEIN: WorkFloh-Auftrag nennt den Zuschlag", /Kleinmengenzuschlag: 12,00/.test(auf.data.beschreibung));
+  A.stellen(a2, kat);
+  ok("KLEIN: die Nachkalkulation rechnet den Zuschlag ins Angebot netto", WC.nachkalk.angebot(a2, A.rechne(a2, kat, a2.kunde, false)).summe.netto === r2.summen.netto);
 }
 
 /* ── STUFE 2: Klaus' Symbol ── */

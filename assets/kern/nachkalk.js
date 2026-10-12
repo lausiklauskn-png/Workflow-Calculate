@@ -61,6 +61,7 @@
     });
     var vPlan = r.versand.ok ? r.versand.cent || 0 : 0, vIstRoh = zahl(a.ist && a.ist.versandCent), vIst = vIstRoh != null ? rund(vIstRoh) : vPlan;
     var skPlan = vPlan, skIst = vIst, netto = vPlan;
+    if (r.kleinmenge && r.kleinmenge.aktiv) netto += r.kleinmenge.cent;
     pos.forEach(function (p) { skPlan += p.plan.selbstkosten; skIst += p.ist.selbstkosten; netto += p.netto; });
     var erfasst = pos.filter(function (p) { return p.erfasst; }).length;
     return { positionen: pos, versand: { plan: vPlan, ist: vIstRoh != null ? vIst : null },

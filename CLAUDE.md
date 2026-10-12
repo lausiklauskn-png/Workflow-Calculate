@@ -39,6 +39,8 @@ sessionStorage `workflowcalculate_sicherung_spaeter`. Am Angebot: `fassung`, `vo
 Handelsware (2026-10-13): im Katalog `lieferanten = [{id, name, url, fuer: wiederverkaeufer|privat|beides, anmeldung, notiz, geprueftAm}]` (darf fehlen),
 an der Vorlage `einkaufsprodukt: true` und `einkauf = [{menge, gesamtCent, lieferant, url, datum}]` (Komplettpreis je Menge **inkl. Versand**),
 im Ist `pos["P-n"].einkaufCent`. Die Seite hat die Adresse `#handel` (kein eigener Speicher).
+Kleinmengenzuschlag (2026-10-13): im Katalog `kleinmenge = {grenze, cent, text}` (fehlt er, ergänzt die App die Vorgabe 10 Stk. / 12,00 € als
+Platzhalter — nur im LIVE-Katalog), am Angebot `kleinmengeAus` (für dieses Angebot weggelassen).
 Fremdfertigung (2026-10-13): am Verfahren `vorhanden` (fehlt = da), an der Vorlage `fremdVorlage`, `titelVorgabe` (was der Kunde liest), `herstellung` (intern).
 
 ## Was hier leicht kaputtgeht
@@ -75,6 +77,10 @@ Fremdfertigung (2026-10-13): am Verfahren `vorhanden` (fehlt = da), an der Vorla
   mit `vorhanden: false`, rechnet die Eigenfertigung nicht (offen, nie geschätzt) und nennt den Zwilling; „→ Fremdfertigung nehmen“
   tauscht die Vorlage, **die Menge bleibt** (fehlt dafür ein Einkauf, sagt die Position das). **Kunden-Titel** kommt aus `titelVorgabe` —
   der interne Name („… (Zukauf)“, „Lohngravur“) geht nie aufs Blatt (Probe sucht Zukauf/Lohngravur/Laser/Hersteller).
+  **Kleinmengenzuschlag** (Klaus 2026-10-13: „als eigene Zeile, unter 10 Stück“): `angebot.rechne` → `r.kleinmenge`; EINE Zeile je
+  Angebot, sobald eine kalkulierte Stück-Position unter der Grenze liegt; Std./km/Montage (Dienstleistung ohne Versand) zählen nicht.
+  Er geht über die Whitelist (`kleinmenge`) aufs Blatt, in WorkFloh und als Position an BookLedgerPro. Ein eingefrorener Stand ohne
+  `kleinmenge` bleibt ohne Zuschlag — gestellte Angebote ändern sich nicht.
   **Vollbild auch hier** (Klaus 2026-10-13): Seite so breit wie das Fenster auf Handy hoch/quer, Tablet, großem Schirm; die Spalten
   „Menge + ins Angebot“ und „Verkauf“ stehen vorn, damit sie am Handy ohne Wischen da sind; ab 1024 px passt die ganze Tabelle.
 - **Vollbild** (Klaus 2026-10-12): `main` hat keine Höchstbreite, die Vorschau füllt den Schirm; nur das Papier-Blatt bleibt A4-breit.
