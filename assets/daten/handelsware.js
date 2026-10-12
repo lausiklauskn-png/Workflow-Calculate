@@ -8,8 +8,9 @@
   var WC = g.WC = g.WC || {};
   var P = true, GB = "handelsware";
   function ek(menge, cent) { return { menge: menge, gesamtCent: cent, lieferant: "", url: "", datum: "", platzhalter: P }; }
-  function vorlage(id, name, beschr, einkauf) {
-    return { id: id, gebiet: GB, name: name, einkaufsprodukt: true, einkauf: einkauf, mengenregel: "stueck", einheitText: "Stk.", beschreibungVorgabe: beschr,
+  /* name = intern (Katalog, Seite) · titel = was der Kunde liest — nie „Zukauf“, „Lohn…“ oder der Hersteller */
+  function vorlage(id, name, beschr, einkauf, titel, herstellung) {
+    return { id: id, gebiet: GB, name: name, titelVorgabe: titel, herstellung: herstellung || "", einkaufsprodukt: true, einkauf: einkauf, mengenregel: "stueck", einheitText: "Stk.", beschreibungVorgabe: beschr,
       staffelVorgabe: einkauf.map(function (e) { return e.menge; }), verfahrenWahl: [], verfahrenVorgabe: "", farbenMax: 1, slots: [], schritte: [],
       versandArt: "keiner", markt: [], marktGrenzen: { online: 1, import: 500 }, verlauf: [], beispiele: [], platzhalter: P };
   }
@@ -24,8 +25,23 @@
         C: { name: "C-Kunde — einmalig", stundenPct: 0, gewinnPct: 10 } } }],
     materialien: [], verfahren: [],
     vorlagen: [
-      vorlage("kuli_zukauf", "Kugelschreiber fertig bedruckt (Zukauf)", "Kugelschreiber, einfarbig mit Ihrem Logo bedruckt", [ek(500, 12000)]),
-      vorlage("visitenkarten_zukauf", "Visitenkarten 85 × 55 mm, beidseitig (Zukauf)", "Visitenkarten 85 × 55 mm, beidseitig farbig", [ek(250, 2490), ek(500, 2990), ek(1000, 3990)]),
+      vorlage("kuli_zukauf", "Kugelschreiber fertig bedruckt (Zukauf)", "Kugelschreiber, einfarbig mit Ihrem Logo bedruckt", [ek(500, 12000)],
+        "Kugelschreiber mit Logo", "Tampondruck beim Hersteller"),
+      vorlage("visitenkarten_zukauf", "Visitenkarten 85 × 55 mm, beidseitig (Zukauf)", "Visitenkarten 85 × 55 mm, beidseitig farbig", [ek(250, 2490), ek(500, 2990), ek(1000, 3990)],
+        "Visitenkarten", "Digital- oder Offsetdruck, Online-Druckerei"),
+      /* Weitere Verfahren, die fremd gefertigt werden (Klaus 2026-10-13: „fast alles möglich … Wir machen den Einkauf … dann den Aufschlag“).
+         Technisch: Sublimation braucht polymerbeschichtete Ware; Prägung und Emaille brauchen ein Werkzeug (Klischee, Form) —
+         darum dort keine Einzelstücke. Mengen und Preise: Platzhalter. */
+      vorlage("tasse_sublimation_zukauf", "Tasse mit Namen, Sublimation (Zukauf)", "Keramiktasse, Name und Motiv vollfarbig, spülmaschinenfest", [ek(1, 1490), ek(10, 8990), ek(25, 18990)],
+        "Tasse mit Namen", "Sublimationsdruck beim Hersteller (beschichtete Tasse)"),
+      vorlage("kuli_uv_zukauf", "Kugelschreiber vollfarbig mit Namen, UV-Druck (Zukauf)", "Kugelschreiber, Name und Motiv vollfarbig bedruckt", [ek(1, 690), ek(25, 3490), ek(100, 9990)],
+        "Kugelschreiber mit Namen, farbig", "UV-Digitaldruck beim Hersteller"),
+      vorlage("anhaenger_acryl_uv_zukauf", "Acryl-Schlüsselanhänger mit Foto, UV-Druck (Zukauf)", "Acryl-Anhänger, Foto und Name vollfarbig, Kontur geschnitten", [ek(1, 890), ek(10, 4490), ek(50, 15990)],
+        "Schlüsselanhänger mit Foto und Namen", "UV-Druck auf Acryl, Kontur gelasert, beim Hersteller"),
+      vorlage("notizbuch_praegung_zukauf", "Notizbuch A5 mit Blindprägung (Zukauf)", "Notizbuch A5, Hardcover, Logo blindgeprägt", [ek(25, 22490), ek(50, 37990), ek(100, 64990)],
+        "Notizbuch A5 mit Prägung", "Blindprägung beim Hersteller (Klischee je Motiv — keine Einzelstücke)"),
+      vorlage("pin_emaille_zukauf", "Anstecker Emaille, Hartemaille (Zukauf)", "Anstecknadel Hartemaille, 25 mm, Motiv nach Vorlage", [ek(100, 24990), ek(250, 42990), ek(500, 69990)],
+        "Anstecknadel Emaille", "Hartemaille beim Hersteller (Form je Motiv — keine Einzelstücke)"),
     ],
     verpackungen: [], versand: [],
     lieferanten: [],

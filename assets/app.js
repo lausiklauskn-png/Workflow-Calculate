@@ -25,7 +25,11 @@
     var k = lsJson(LS.katalog, null);
     S.katalog = k && !KAT.pruefe(k).length ? k : kopie(WC.START);
     S.katalog.lieferanten = S.katalog.lieferanten || [];
+    katalogErgaenzen(S.katalog);
   }
+  /* Kleinmengenzuschlag (Klaus 2026-10-13): fehlt er im eigenen Katalog, kommt die Vorgabe dazu (Platzhalter-Betrag).
+     Nur der LIVE-Katalog — ein eingefrorener Stand bleibt, wie er war. */
+  function katalogErgaenzen(k) { if (k && !k.kleinmenge) k.kleinmenge = kopie(A.KLEINMENGE_VORGABE); return k; }
   katalogLaden();
   function katalogSpeichern() { lsSet(LS.katalog, JSON.stringify(S.katalog)); }
   function einstSpeichern() { lsSet(LS.einst, JSON.stringify(S.einst)); }
@@ -351,6 +355,7 @@
 
     /* Versand */
     main.append(versandKarte(a, r, kat, ro));
+    var kmk = kleinmengeKarte(a, r, ro); if (kmk) main.append(kmk);
 
     /* Summen */
     var t = h("table", { class: "summen-tab", "data-summen": "" });
@@ -575,6 +580,13 @@
     /* Ergebnis */
     if (!e.ok) {
       karte.append(h("div", { class: "hinweis warn", "data-nicht-kalkuliert": "" }, "Nicht kalkuliert — zählt nicht mit: " + e.offen.join(" · ")));
+      /* Kein eigenes Gerät: dieselbe Position als Fremdfertigung (Einkauf + Aufschlag). Titel und Beschreibung bleiben, wie sie sind. */
+      var fv = e.fremd ? finde(kat.vorlagen, e.fremd) : null;
+      if (fv && !ro) karte.append(h("div", { class: "band", "data-fremd": fv.id }, knopf("→ Fremdfertigung nehmen (Einkauf + Aufschlag)", setze(function () {
+        var em = K.einkaufsMengen(fv); p.vorlage = fv.id; p.verfahren = ""; p.wahl = {};
+        /* die Menge bleibt — fehlt dafür ein Einkauf, sagt die Position das (nie still eine andere Menge) */
+        p.staffeln = em.concat([p.menge]).filter(function (m, i, l) { return l.indexOf(m) === i; }).sort(function (x, y) { return x - y; });
+      }), "klein pri", { "data-fremd-nehmen": fv.id }), h("span", { class: "gedaempft klein", text: "„" + fv.name + "“ — Einkauf je Menge auf der Seite 🛒 Handelsware" })));
       return karte;
     }
     var lageText = e.lage === "unter_hk" ? "unter den Herstellkosten — Verlust je Stück " + euro(Math.round((e.herstellkosten - e.netto) / e.menge)) + " schon ohne Gemeinkosten"
@@ -958,6 +970,18 @@
     return karte;
   }
 
+  /* ── Kleinmengenzuschlag: eigene Zeile auf dem Angebot, einmal je Angebot ── */
+  function kleinmengeKarte(a, r, ro) {
+    var km = r.kleinmenge;
+    if (!km || !km.positionen.length) return null;
+    var wo = km.positionen.map(function (id) { var x = r.positionen.filter(function (q) { return q.pos.id === id; })[0]; return id + " (" + x.erg.menge + " Stk.)"; }).join(", ");
+    return h("div", { class: "karte", "data-kleinmenge": km.aktiv ? String(km.cent) : "weg" }, h("h3", { text: km.text }),
+      h("p", { class: "klein", text: km.aktiv ? wo + " unter " + km.grenze + " Stück → eigene Zeile auf dem Angebot: " + euro(km.cent) + " netto (einmal je Angebot)."
+        : "Für dieses Angebot weggelassen (" + wo + " unter " + km.grenze + " Stück)." }),
+      ro ? null : knopf(km.aktiv ? "Für dieses Angebot weglassen" : "Wieder aufnehmen", function () { vorher(a); a.kleinmengeAus = km.aktiv; merken(a); zeichne(); }, "klein", { "data-kleinmenge-schalter": "" }),
+      h("span", { class: "gedaempft klein", text: " Betrag und Grenze: Einstellungen." }));
+  }
+
   /* ── Verpackung & Versand ── */
   function versandKarte(a, r, kat, ro) {
     var vs = r.versand, karte = h("div", { class: "karte", "data-versand": "", "data-schritt-ziel": "versand" }, h("h3", { text: "Verpackung & Versand" }));
@@ -996,6 +1020,7 @@
         h("td", { class: "r", "data-blatt-menge": "", text: p.menge + " " + (p.einheit || "Stk.") }), h("td", { class: "r", text: euro(p.stueckCent) }), h("td", { class: "r", text: euro(p.gesamtCent) })));
     });
     if (d.versand) tb.append(h("tr", null, h("td"), h("td", { text: d.versand.text }), h("td"), h("td"), h("td", { class: "r", text: euro(d.versand.nettoCent) })));
+    if (d.kleinmenge) tb.append(h("tr", { "data-blatt-kleinmenge": "" }, h("td"), h("td", { text: d.kleinmenge.text }), h("td"), h("td"), h("td", { class: "r", text: euro(d.kleinmenge.nettoCent) })));
     t.append(tb); b.append(t);
     var su = h("table", { class: "summen", style: "width:auto;margin-left:auto;margin-top:10px" });
     su.append(h("tr", null, h("td", { text: "Summe netto" }), h("td", { class: "r", text: euro(d.summen.netto) })));
@@ -1072,17 +1097,27 @@
         h("select", { "data-handel-klasse": "", onchange: function () { S.handelKlasse = this.value; zeichne(); } },
           ["A", "B", "C"].map(function (k) { return h("option", { value: k, text: k + "-Kunde", selected: k === klasse }); }))));
     main.append(kopfK);
-    if (!KAT.gebietDa(kat, "handelsware") && WC.STARTKATALOGE && WC.STARTKATALOGE.handelsware) {
-      main.append(h("div", { class: "karte" }, h("p", { text: "Beispiele mit Platzhalter-Preisen: 500 Kugelschreiber fertig bedruckt · Visitenkarten 250 / 500 / 1000." }),
-        knopf("＋ Beispiele holen (Arbeitsgebiet Handelsware)", function () {
-          var r = KAT.gebietHinzufuegen(S.katalog, WC.STARTKATALOGE.handelsware); katalogSpeichern();
-          melde(r.neu.vorlagen + " Einkaufsprodukte geholt. Die Preise sind Platzhalter — eigene Einkaufspreise eintragen („✎ Einkauf bearbeiten“).", "");
-        }, "pri", { "data-handel-start": "" })));
-    }
+    /* Mitgelieferte Gebiete, die Einkaufsprodukte bringen (Handelsware, Lasergravur mit Lohngravur) — eigene Zahlen bleiben */
+    Object.keys(WC.STARTKATALOGE || {}).forEach(function (gid) {
+      var pk = WC.STARTKATALOGE[gid], n = (pk.vorlagen || []).filter(function (x) { return x.einkaufsprodukt; }).length;
+      if (!n || KAT.gebietDa(kat, gid)) return;
+      main.append(h("div", { class: "karte", "data-handel-paket": gid }, h("p", null, h("b", { text: pk.name }), h("span", { class: "gedaempft klein", text: " — " + pk.beschreibung + " (" + n + " Einkaufsprodukte, Platzhalter-Preise)" })),
+        knopf("＋ Beispiele holen: " + pk.name, function () {
+          var rh = KAT.gebietHinzufuegen(S.katalog, pk); katalogSpeichern();
+          melde("„" + pk.name + "“ geholt: " + rh.neu.vorlagen + " Vorlagen. Die Preise sind Platzhalter — eigene Einkaufspreise eintragen („✎ Einkauf bearbeiten“).", "");
+        }, "pri", gid === "handelsware" ? { "data-handel-start": "" } : { "data-handel-start-paket": gid })));
+    });
     var hin = KAT.hinweise(kat);
     if (hin.length) main.append(h("div", { class: "hinweis warn", "data-handel-hinweise": "" }, hin.join(" · ")));
     if (!hw.length) main.append(h("div", { class: "karte" }, h("p", { class: "gedaempft", "data-handel-leer": "" }, "Noch keine Einkaufsprodukte. Eine Produktvorlage wird eins mit dem Haken „🛒 Einkaufsprodukt“ (Katalog → Produktvorlagen) — oder hier neu anlegen.")));
-    hw.forEach(function (v) { main.append(handelProdukt(v, kat, klasse)); });
+    /* nach Arbeitsgebiet gruppiert — Lasergravur-Zukauf steht dann beisammen */
+    (kat.gebiete || []).forEach(function (gb) {
+      var l = hw.filter(function (v) { return v.gebiet === gb.id; });
+      if (!l.length) return;
+      main.append(h("h3", { class: "handel-gruppe", "data-handel-gruppe": gb.id, text: gb.name + " (" + l.length + ")" }));
+      l.forEach(function (v) { main.append(handelProdukt(v, kat, klasse)); });
+    });
+    hw.filter(function (v) { return !K.finde(kat.gebiete, v.gebiet); }).forEach(function (v) { main.append(handelProdukt(v, kat, klasse)); });
     main.append(h("div", { class: "band", style: "margin:10px 0" }, knopf("＋ Neues Einkaufsprodukt", function () {
       var gb = KAT.gebietDa(kat, "handelsware") ? "handelsware" : (kat.gebiete[0] || {}).id || "";
       var id = KAT.neueKennung(kat.vorlagen, "zukauf");
@@ -1105,6 +1140,7 @@
       h("div", null, h("b", { text: v.name }), " ", ph ? h("span", { class: "platzhalter-marke", "data-einkauf-platzhalter": "", text: "Einkauf: Platzhalter" }) : null, " ",
         phGb ? h("span", { class: "badge gelb", "data-saetze-platzhalter": "", text: "Sätze: Platzhalter" }) : null),
       knopf(auf ? "▾ Einkauf bearbeiten" : "✎ Einkauf bearbeiten", function () { S.offen["handel:" + v.id] = !auf; zeichne(); }, "klein" + (auf ? " on" : ""), { "data-handel-bearbeiten": v.id })));
+    if (v.herstellung) karte.append(h("p", { class: "klein", "data-herstellung": "" }, "Herstellung: " + v.herstellung));
     karte.append(h("p", { class: "gedaempft klein", text: "Handlungskosten " + fmtPct(+sf.s.handlungskostenPct || 0) + " % · Gewinn " + fmtPct(+sf.s.gewinnPct || 0) + " %" + (sf.klasse ? " (mit " + sf.klasse + "-Kunde)" : "") }));
     var zeilen = (v.einkauf || []).map(function (x, i) { return { x: x, i: i }; }).sort(function (a, b) { return (+a.x.menge || 0) - (+b.x.menge || 0) || a.i - b.i; });
     if (!zeilen.length) karte.append(h("p", { class: "hinweis warn", text: "Noch kein Einkauf eingetragen — „✎ Einkauf bearbeiten“." }));
@@ -1144,7 +1180,9 @@
     v.saetze = v.saetze || {}; v.einkauf = v.einkauf || [];
     var gb = K.finde(kat.gebiete, v.gebiet) || { saetze: {} };
     box.append(h("div", { class: "feldgitter" },
-      feld("Name", eingabe(v, "name", "text", null, zeichne)),
+      feld("Name (intern)", eingabe(v, "name", "text", null, zeichne)),
+      feld("Titel für den Kunden (leer = Name)", eingabe(v, "titelVorgabe", "text", null, zeichne)),
+      feld("Herstellung (intern: Verfahren, Hersteller)", eingabe(v, "herstellung", "text", null, zeichne)),
       feld("Beschreibung (Kundenblatt)", eingabe(v, "beschreibungVorgabe", "text", null, zeichne)),
       feld("Mengen-Einheit (Stk., Pack)", eingabe(v, "einheitText", "text", null, zeichne)),
       feld("Handlungskosten % (leer = Gebiet: " + fmtPct(+gb.saetze.handlungskostenPct || 0) + ")", eingabe(v.saetze, "handlungskostenPct", "zahl", null, zeichne)),
@@ -1198,15 +1236,16 @@
     gebiete: [["name", "Name", "text"]],
     materialien: [["name", "Name", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["einheit", "Einheit", "wahl", ["m2", "lfm", "stueck", "platte", "tsd_stiche"]], ["ekCent", "Einkaufspreis je Einheit €", "cent"],
       ["verschnittPct", "Verschnitt %", "zahl"], ["rollenbreiteMm", "Rollenbreite mm", "zahl"], ["platteBMm", "Platte Breite mm", "zahl"], ["platteHMm", "Platte Höhe mm", "zahl"], ["gewichtG", "Gewicht g je Einheit", "zahl"]],
-    verfahren: [["name", "Name", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["maschinensatzCent", "Maschinenstundensatz €/h", "cent"], ["leistung", "Leistung je Stunde", "zahl"],
+    verfahren: [["name", "Name", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["vorhanden", "Gerät in der eigenen Werkstatt (sonst: Fremdfertigung)", "bool"], ["notiz", "Notiz (was es kann)", "text"], ["maschinensatzCent", "Maschinenstundensatz €/h", "cent"], ["leistung", "Leistung je Stunde", "zahl"],
       ["leistungEinheit", "Leistung in", "wahl", ["m2", "stueck", "tsd_stiche"]], ["ruestMin", "Rüstzeit min", "zahl"], ["farbregel", "Farbregel", "wahl", ["ein", "je_farbe", "digital"]], ["jeFarbe", "Maschine läuft je Farbe", "bool"]],
-    vorlagen: [["name", "Name", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["mengenregel", "Mengenregel", "wahl", ["stueck", "flaeche", "rolle", "platte", "laenge"]], ["beschreibungVorgabe", "Beschreibung (Vorgabe)", "text"], ["einheitText", "Mengen-Einheit auf dem Angebot (Stk., Std., km)", "text"],
+    vorlagen: [["name", "Name (intern)", "text"], ["titelVorgabe", "Titel für den Kunden (leer = Name)", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["mengenregel", "Mengenregel", "wahl", ["stueck", "flaeche", "rolle", "platte", "laenge"]], ["beschreibungVorgabe", "Beschreibung (Vorgabe)", "text"], ["einheitText", "Mengen-Einheit auf dem Angebot (Stk., Std., km)", "text"],
       ["stiche", "Stickerei: Stichzahl abfragen", "bool"], ["sticheVorgabe", "Stichzahl je Stück (Vorgabe)", "zahl"],
       ["breiteVorgabe", "Breite mm (Vorgabe)", "zahl"], ["hoeheVorgabe", "Höhe mm (Vorgabe)", "zahl"], ["abstandMm", "Abstand mm (Nesting)", "zahl"], ["farbenMax", "Farben höchstens", "zahl"],
       ["verfahrenWahl", "Verfahren (Auswahl)", "multi:verfahren"], ["verfahrenVorgabe", "Verfahren (Vorgabe)", "ref:verfahren"],
       ["versandArt", "Versand als", "wahl", ["stueck", "flach", "rolle", "keiner"]], ["volumenJeStueckL", "Volumen je Stück l", "zahl"], ["laengeMm", "Längstes Maß je Stück mm", "zahl"], ["dickeMm", "Dicke mm (flach/rolle)", "zahl"],
       ["gewichtJeStueckG", "Zusatzgewicht je Stück g", "zahl"], ["zukaufEkCent", "Zukauf-EK je Stück € (Vergleich)", "cent"],
-      ["einkaufsprodukt", "🛒 Einkaufsprodukt (fertig zugekauft) — steht dann nur noch auf der Seite Handelsware", "bool"]],
+      ["einkaufsprodukt", "🛒 Einkaufsprodukt (fertig zugekauft) — steht dann nur noch auf der Seite Handelsware", "bool"],
+      ["fremdVorlage", "Fremdfertigung, wenn das Gerät fehlt (Einkaufsprodukt)", "ref:vorlagen"]],
     lieferanten: [["name", "Name", "text"], ["url", "Adresse (https://…)", "link"], ["fuer", "für", "wahl", ["wiederverkaeufer", "privat", "beides"]],
       ["anmeldung", "Wiederverkäufer-Konto nötig", "bool"], ["notiz", "Notiz", "text"], ["geprueftAm", "geprüft am", "datum"]],
     verpackungen: [["name", "Name", "text"], ["innenL", "Innen L mm", "zahl"], ["innenB", "Innen B mm", "zahl"], ["innenH", "Innen H mm", "zahl"], ["eigengewichtG", "Eigengewicht g", "zahl"],
@@ -1260,9 +1299,9 @@
         knopf("⬇ Katalog als Datei", function () { herunterladen("workflow-calculate-katalog.json", KAT.exportieren(kat), "application/json"); }, "klein", { id: "katalog-export" }),
         h("label", { class: "btn klein" }, "⬆ Katalog einlesen", h("input", { type: "file", accept: ".json,application/json", hidden: true, id: "katalog-import", onchange: function () {
           var file = this.files && this.files[0]; if (!file) return;
-          file.text().then(function (t) { var r = KAT.importieren(t); if (!r.ok) { melde("Nicht eingelesen: " + r.fehler.join(" · "), "bad"); return; } S.katalog = r.katalog; katalogSpeichern(); melde("Katalog eingelesen.", ""); });
+          file.text().then(function (t) { var r = KAT.importieren(t); if (!r.ok) { melde("Nicht eingelesen: " + r.fehler.join(" · "), "bad"); return; } S.katalog = katalogErgaenzen(r.katalog); katalogSpeichern(); melde("Katalog eingelesen.", ""); });
         } })),
-        knopf("Startkatalog wiederherstellen", function () { if (confirm("Den ganzen Katalog durch den Startkatalog ersetzen? Eigene Einträge gehen verloren (vorher als Datei sichern).")) { S.katalog = kopie(WC.START); katalogSpeichern(); zeichne(); } }, "klein gefahr"))));
+        knopf("Startkatalog wiederherstellen", function () { if (confirm("Den ganzen Katalog durch den Startkatalog ersetzen? Eigene Einträge gehen verloren (vorher als Datei sichern).")) { S.katalog = katalogErgaenzen(kopie(WC.START)); katalogSpeichern(); zeichne(); } }, "klein gefahr"))));
     main.append(gebieteKarte(kat));
     var nav = h("div", { class: "band", style: "margin-bottom:10px" });
     kat.lieferanten = kat.lieferanten || [];
@@ -1316,7 +1355,7 @@
     var gb = S.katalog.gebiete[0] ? S.katalog.gebiete[0].id : "";
     var l = S.katalog[art], id = KAT.neueKennung(l, "neu");
     if (art === "materialien") return { id: id, gebiet: gb, name: "Neues Material", einheit: "m2", ekCent: null, verschnittPct: 0, gewichtG: 0 };
-    if (art === "verfahren") return { id: id, gebiet: gb, name: "Neues Verfahren", maschinensatzCent: null, leistung: 0, leistungEinheit: "stueck", ruestMin: 0, farbregel: "ein", jeFarbe: false };
+    if (art === "verfahren") return { id: id, gebiet: gb, name: "Neues Verfahren", vorhanden: true, maschinensatzCent: null, leistung: 0, leistungEinheit: "stueck", ruestMin: 0, farbregel: "ein", jeFarbe: false };
     if (art === "vorlagen") return { id: id, gebiet: gb, name: "Neues Produkt", mengenregel: "stueck", verfahrenWahl: [], verfahrenVorgabe: "", farbenMax: 1, slots: [], schritte: [], staffelVorgabe: [1],
       versandArt: "stueck", volumenJeStueckL: 0, laengeMm: 0, markt: [], marktGrenzen: { online: 50, import: 500 }, verlauf: [], beispiele: [] };
     if (art === "lieferanten") return { id: id, name: "Neuer Lieferant", url: "", fuer: "wiederverkaeufer", anmeldung: false, notiz: "", geprueftAm: "" };
@@ -1396,6 +1435,11 @@
       })),
       h("label", { class: "schalter" }, h("input", { type: "checkbox", checked: !!S.einst.kleinunternehmer, id: "kleinunternehmer", onchange: function () { S.einst.kleinunternehmer = this.checked; einstSpeichern(); } }), "Kleinunternehmer (§ 19 UStG, keine USt)")));
     main.append(sicherungKarte());
+    var km = katalogErgaenzen(S.katalog).kleinmenge;
+    main.append(h("div", { class: "karte", "data-kleinmenge-einst": "" }, h("h2", { text: "Kleinmengenzuschlag" }),
+      km.platzhalter ? h("div", { class: "hinweis warn" }, "Platzhalter-Betrag — eigenen Betrag eintragen.") : null,
+      h("p", { class: "gedaempft klein", text: "Eigene Zeile auf dem Angebot, einmal je Angebot, sobald eine Stück-Position unter der Grenze liegt. Stunden, km und Montage zählen nicht. Betrag leer = aus. Gestellte Angebote bleiben, wie sie sind." }),
+      felderFuer(km, [["text", "Text auf dem Angebot", "text"], ["grenze", "unter … Stück", "zahl"], ["cent", "Betrag netto €", "cent"]], function () { delete km.platzhalter; katalogSpeichern(); zeichne(); })));
     S.katalog.gebiete.forEach(function (gb) {
       var s = gb.saetze = gb.saetze || {};
       function sp() { delete gb.platzhalter; katalogSpeichern(); }

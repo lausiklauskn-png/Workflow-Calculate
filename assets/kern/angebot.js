@@ -23,7 +23,7 @@
   function neuePosition(a, kat, vorlageId) {
     var v = K().finde(kat.vorlagen, vorlageId);
     a.zaehler = (a.zaehler || 0) + 1;
-    var p = { id: "P-" + a.zaehler, vorlage: vorlageId, titel: v ? v.name : "", beschreibung: v ? v.beschreibungVorgabe || "" : "",
+    var p = { id: "P-" + a.zaehler, vorlage: vorlageId, titel: v ? v.titelVorgabe || v.name : "", beschreibung: v ? v.beschreibungVorgabe || "" : "",
       menge: v && v.staffelVorgabe ? v.staffelVorgabe[0] : 1, staffeln: v && v.staffelVorgabe ? v.staffelVorgabe.slice() : [1],
       breiteMm: v ? v.breiteVorgabe || "" : "", hoeheMm: v ? v.hoeheVorgabe || "" : "", farben: 1, verfahren: v ? v.verfahrenVorgabe || "" : "",
       wahl: {}, zeiten: {}, saetze: {}, eigen: {}, bilder: [] };
@@ -77,6 +77,21 @@
     return { gewichtG: erg.gewichtG, volumenL: (Number(vorlage.volumenJeStueckL) || 0) * m, laengsteMm: Number(vorlage.laengeMm) || 0 };
   }
 
+  /* Kleinmengenzuschlag (Klaus 2026-10-13: „als eigene Zeile, unter 10 Stück“): EINE Zeile je Angebot, sobald eine kalkulierte
+     Stück-Position unter der Grenze liegt. Stunden, km und Montage (Dienstleistung ohne Versand) zählen nicht.
+     Er gilt nur, wenn der Katalog ihn trägt (kat.kleinmenge = { grenze, cent, text }) — ein eingefrorener Stand von früher hat ihn
+     nicht, ein gestelltes Angebot ändert sich also nicht. a.kleinmengeAus = für dieses Angebot weggelassen. */
+  function zaehltKlein(v) { return !!v && v.kleinmenge !== false && (v.einheitText || "Stk.") === "Stk." && !(v.versandArt === "keiner" && !v.einkaufsprodukt); }
+  function kleinmengeFuer(a, kat, pos) {
+    var km = kat.kleinmenge, grenze = km ? Math.round(+km.grenze) || 0 : 0, cent = km ? Math.round(+km.cent) || 0 : 0;
+    var leer = { aktiv: false, cent: 0, positionen: [], grenze: grenze, text: km && km.text ? String(km.text) : "Kleinmengenzuschlag" };
+    if (!(grenze > 0) || !(cent > 0)) return leer;
+    leer.positionen = pos.filter(function (x) { return x.erg.ok && x.erg.menge < grenze && zaehltKlein(K().finde(kat.vorlagen, x.pos.vorlage)); }).map(function (x) { return x.pos.id; });
+    if (!leer.positionen.length) return leer;
+    if (a.kleinmengeAus) return Object.assign(leer, { weggelassen: true });
+    return Object.assign(leer, { aktiv: true, cent: cent });
+  }
+
   /* rechne(a, kat, kunde) → Positionen, Versand, Summen (für die Summe gilt pos.menge) */
   function rechne(a, kat0, kunde, kleinunternehmer) {
     var kat = katalogFuer(a, kat0);
@@ -112,11 +127,14 @@
       perSatz[s] = (perSatz[s] || 0) + x.erg.netto; netto += x.erg.netto; sk += x.erg.selbstkosten;
     });
     if (versand.ok && versand.cent) { var vs = kleinunternehmer ? 0 : ustVorgabe; perSatz[vs] = (perSatz[vs] || 0) + versand.cent; netto += versand.cent; sk += versand.cent; }
+    var kleinmenge = kleinmengeFuer(a, kat, pos);
+    if (kleinmenge.aktiv) { var ks = kleinunternehmer ? 0 : ustVorgabe; perSatz[ks] = (perSatz[ks] || 0) + kleinmenge.cent; netto += kleinmenge.cent; }
     var ust = 0, saetze = Object.keys(perSatz).map(function (s) { var u = Math.round(perSatz[s] * Number(s) / 100); ust += u; return { satz: Number(s), netto: perSatz[s], ust: u }; });
-    return { positionen: pos, versand: versand, summen: { netto: netto, ust: ust, brutto: netto + ust, perSatz: saetze, offen: offen,
+    return { positionen: pos, versand: versand, kleinmenge: kleinmenge, summen: { netto: netto, ust: ust, brutto: netto + ust, perSatz: saetze, offen: offen,
       selbstkosten: sk, deckungsbeitrag: netto - sk }, kat: kat };
   }
 
   WC.angebot = { heute: heute, plusTage: plusTage, naechsteNummer: naechsteNummer, neu: neu, neuePosition: neuePosition,
-    katalogFuer: katalogFuer, stellen: stellen, zurueckZumEntwurf: zurueckZumEntwurf, fassungVon: fassungVon, neueFassung: neueFassung, vergleich: vergleich, versandTeil: versandTeil, rechne: rechne };
+    katalogFuer: katalogFuer, stellen: stellen, zurueckZumEntwurf: zurueckZumEntwurf, fassungVon: fassungVon, neueFassung: neueFassung, vergleich: vergleich, versandTeil: versandTeil, rechne: rechne, kleinmengeFuer: kleinmengeFuer, zaehltKlein: zaehltKlein,
+    KLEINMENGE_VORGABE: { grenze: 10, cent: 1200, text: "Kleinmengenzuschlag", platzhalter: true } };
 })(typeof window !== "undefined" ? window : globalThis);

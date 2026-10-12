@@ -26,6 +26,45 @@ Brief: `BRIEF_2026-10-13_handelsware.md`.
   wie das Fenster, Karten füllen sie, kein waagerechtes Rollen; Verkauf und „ins Angebot“ stehen am Handy ohne Wischen
   da (die Spalten sind dafür umgestellt), ab Tablet passt die ganze Tabelle.
 
+## Nachtrag: Einzelstücke, Lasergravur, Fremdfertigung
+
+Klaus: *„Einzelstückanfertigung … wo nur ein Name draufsteht“* · *„Laser in verschiedenen Stufen … wenn wir den Laser selber
+nicht haben, lassen wir die herstellen und verkaufen sie dann … mit den entsprechenden Aufschlägen“* · *„denke auch an andere
+Herstellungsverfahren … Wir machen den Einkauf, müssen natürlich gut handeln und dann machen wir den Aufschlag.“*
+
+- **Befund vorher:** die vorhandenen Vorlagen sind auf Serien gebaut — 1 Kuli im Tampondruck kam auf 84,77 € (Platzhalter),
+  weil das Einrichten bei 1 Stück genauso anfällt wie bei 250. Ein Mindermengenzuschlag hätte das Falsche gelöst.
+- **Arbeitsgebiet „Lasergravur“** (Katalog → Arbeitsgebiete, oder auf der Seite 🛒): Diodenlaser 10 W · CO2-Laser 60 W ·
+  Faserlaser 30 W. Acht Produkte mit Namen, je nur mit den Lasern, die das Material technisch können:
+  | Produkt | Diode | CO2 | Faser |
+  |---|---|---|---|
+  | Kuli Alu eloxiert | ✓ | ✓ | ✓ |
+  | Kuli Edelstahl blank | – | – (nur mit Markierspray) | ✓ |
+  | Geschenkkarte Holz | ✓ | ✓ | – |
+  | Schiefer-Untersetzer | ✓ | ✓ | ✓ |
+  | Sektglas | – | ✓ | – |
+  | Schlüsselanhänger Leder | ✓ | ✓ | – |
+  | Flaschenöffner Edelstahl | – | – | ✓ |
+  | Tischkarte Acryl klar | – | ✓ | – |
+  Gerechnet: Einrichten einmal (Datei, Fokus, Probestück, 10 min) + **je Name** 1,5–3 min + Laserzeit + Rohling.
+  Holzkarte (Platzhalter, C-Kunde): 1 Stück 24,10 € · 60 Namen 5,35 € je Stück.
+- **Annahme bis Klaus' Wort:** in der Werkstatt steht nur der **CO2-Laser**. Haken je Verfahren im Katalog („Gerät in der eigenen Werkstatt“).
+- **Fremdfertigung für jedes Verfahren:** fehlt das Gerät, rechnet die Eigenfertigung nicht, sondern nennt ihren Zwilling
+  „… — Lohngravur (Zukauf)“ (Einkauf 1 / 10 / 25 / 50 Stk., Platzhalter). „→ Fremdfertigung nehmen“ im Angebot tauscht die Position.
+- **Weitere Verfahren als Fremdfertigung** (Handelsware): Tasse mit Namen (Sublimation) · Kuli vollfarbig mit Namen (UV-Druck) ·
+  Acryl-Anhänger mit Foto (UV-Druck) · Notizbuch mit Blindprägung (Klischee, ab 25) · Emaille-Anstecker (Form, ab 100).
+  Prägung und Emaille brauchen ein Werkzeug je Motiv — darum dort keine Einzelstücke.
+- **Gut handeln:** je Menge lassen sich mehrere Herstellerangebote eintragen, der günstigste zählt.
+- **Kunden-Titel getrennt vom internen Namen** (`titelVorgabe`): Lücke aus dem ersten Bau — „Kugelschreiber fertig bedruckt (Zukauf)“
+  wäre als Titel aufs Kundenblatt gekommen. Jetzt „Kugelschreiber mit Logo“; die Probe sucht Zukauf/Lohngravur/Laser/Hersteller.
+- ⚠ **Hochzeit mit 60 Gästen über Fremdfertigung:** eingetragen sind 1/10/25/50 — für 60 rechnet die Position nicht (Frage 2 unten).
+- **Kleinmengenzuschlag** (Klaus: *„als eigene Zeile, unter 10 Stück“*): eigene Zeile „Kleinmengenzuschlag“ auf dem Angebot,
+  **einmal je Angebot**, sobald eine Stück-Position unter 10 liegt; Stunden, km und Montage zählen nicht. Betrag **12,00 € netto
+  als Platzhalter** (Einstellungen → Kleinmengenzuschlag: Text, Grenze, Betrag; leer = aus). Je Angebot „weglassen“.
+  Geht auf das Kundenblatt, in die WorkFloh-Datei und als Position an BookLedgerPro. Gestellte Angebote bleiben unverändert.
+  ⚠ Selbst entschieden, von Klaus zu bestätigen: Betrag, „einmal je Angebot“ statt je Position.
+- Am Laser offen bei Klaus: Lasertyp und Stärke, Einrichtzeit, Minuten je Name, Maschinenstundensatz, welche Rohlinge.
+
 ## Lieferanten — ehrlich
 
 Der Brief verlangt: jede Adresse vorher abrufen, nichts Ungeprüftes eintragen. **Abrufen ging nicht**: der

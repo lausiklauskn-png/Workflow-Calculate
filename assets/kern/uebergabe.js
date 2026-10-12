@@ -27,6 +27,7 @@
       if (p.staffel.length) z.push("  Staffel: " + p.staffel.map(function (s) { return s.menge + " " + (p.einheit || "Stk.") + " à " + eur(s.stueckCent); }).join(" · "));
     });
     if (d.versand) z.push("• " + d.versand.text + ": " + eur(d.versand.nettoCent) + " netto");
+    if (d.kleinmenge) z.push("• " + d.kleinmenge.text + ": " + eur(d.kleinmenge.nettoCent) + " netto");
     z.push("", "Summe netto " + eur(d.summen.netto) + (d.kleinunternehmer ? " · § 19 UStG, keine Umsatzsteuer" : " · USt " + eur(d.summen.ust)) + " · brutto " + eur(d.summen.brutto));
     z.push("", "Aus Workflow Calculate übernommen.");
     var ts = jetzt || new Date().toISOString();
@@ -72,6 +73,7 @@
         : { beschreibung: kappe(p.menge + " " + (p.einheit || "Stk.") + " " + text, 140), menge: 1, einzelpreisCent: p.gesamtCent, ustSatz: p.ustSatz };
     });
     if (d.versand) pos.push({ beschreibung: d.versand.text, menge: 1, einzelpreisCent: d.versand.nettoCent, ustSatz: d.kleinunternehmer ? 0 : 19 });
+    if (d.kleinmenge) pos.push({ beschreibung: kappe(d.kleinmenge.text, 140), menge: 1, einzelpreisCent: d.kleinmenge.nettoCent, ustSatz: d.kleinunternehmer ? 0 : 19 });
     return { v: 1, quelle: "workflow-calculate", modus: "angebot", titel: kappe(d.titel || (d.positionen[0] ? d.positionen[0].titel : d.nummer), 140),
       kundeName: kappe(d.kunde.name, 80), auftragNr: "", angebotsNr: kappe(d.nummer + (d.fassung > 1 ? "-F" + d.fassung : ""), 32), positionen: pos };
   }
