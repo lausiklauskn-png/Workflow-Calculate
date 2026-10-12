@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const WURZEL = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const KERN = ["assets/kern/geld.js", "assets/kern/mengen.js", "assets/kern/kalkulation.js", "assets/kern/versand.js", "assets/kern/markt.js",
-  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/daten/werbetechnik.js", "assets/daten/bilder.js"];
+  "assets/kern/katalog.js", "assets/kern/angebot.js", "assets/kern/aussen.js", "assets/kern/uebergabe.js", "assets/schluesseltresor.js", "assets/kern/sicherung.js", "assets/kern/nachkalk.js", "assets/daten/werbetechnik.js", "assets/daten/stickerei.js", "assets/daten/dienstleistung.js", "assets/daten/beispiel-angebote.js", "assets/daten/bilder.js"];
 for (const f of KERN) require(join(WURZEL, f));
 const WC = globalThis.WC, K = WC.kalk, M = WC.mengen, A = WC.angebot, V = WC.versand, MK = WC.markt;
 
@@ -276,6 +276,121 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   const z = SI.zusammenfuehren({ angebote: [{ id: "AN-2026-0001" }], kunden: [], bilder: [] }, o);
   ok("SICHERUNG: Zurückholen fügt hinzu, überschreibt nie", z.angebote.length === 0 && z.schonDa === 1 && z.kunden.length === 1 && z.bilder.length === 1);
   ok("SICHERUNG: Erinnerung ab 14 Tagen, nur mit Angeboten", SI.erinnernNoetig([{}], "2026-09-01T00:00:00Z", Date.parse("2026-10-12")) && !SI.erinnernNoetig([{}], "2026-10-10T00:00:00Z", Date.parse("2026-10-12")) && !SI.erinnernNoetig([], null));
+}
+
+/* ── STUFE 3: Arbeitsgebiete aus dem Startkatalog ── */
+{
+  const kat = kopie(WC.START), KA = WC.katalog;
+  const r1 = KA.gebietHinzufuegen(kat, WC.STARTKATALOGE.stickerei);
+  ok("GEBIET: Stickerei bringt Gebiet, Materialien, Verfahren und 4 Vorlagen", r1.neu.gebiete === 1 && r1.neu.vorlagen === 4 && r1.neu.verfahren === 1 && KA.gebietDa(kat, "stickerei"), r1);
+  KA.gebietHinzufuegen(kat, WC.STARTKATALOGE.dienstleistung);
+  ok("GEBIET: der Katalog mit allen drei Gebieten ist fehlerfrei", KA.pruefe(kat).length === 0, KA.pruefe(kat));
+  K.finde(kat.materialien, "garn_vlies").ekCent = 11;
+  const r2 = KA.gebietHinzufuegen(kat, WC.STARTKATALOGE.stickerei);
+  ok("GEBIET: eigene Zahlen bleiben beim zweiten Hinzufügen (nichts doppelt, nichts überschrieben)", r2.summe === 0 && r2.schonDa > 0 && K.finde(kat.materialien, "garn_vlies").ekCent === 11 &&
+    kat.vorlagen.filter((v) => v.id === "polo_stick").length === 1, r2);
+  const neu = ["stickerei", "dienstleistung"].flatMap((g) => WC.STARTKATALOGE[g].vorlagen);
+  ok("GEBIET: jede neue Vorlage hat Beispiele mit mindestens zwei Ansichten (Zeichnungen)", neu.every((v) => v.beispiele.length && v.beispiele.every((b) => b.ansichten.length >= 2 && b.ansichten.every((a) => WC.bildUrl(a[1]).startsWith("data:image/svg+xml")))));
+  ok("GEBIET: alle neuen Zahlen tragen die Platzhalter-Marke", ["stickerei", "dienstleistung"].every((g) => WC.STARTKATALOGE[g].materialien.concat(WC.STARTKATALOGE[g].verfahren, WC.STARTKATALOGE[g].gebiete).every((x) => x.platzhalter)));
+}
+
+/* ── STUFE 3: Stickerei nach Stichzahl — von Hand gerechnet ── */
+{
+  const kat = kopie(WC.START); WC.katalog.gebietHinzufuegen(kat, WC.STARTKATALOGE.stickerei);
+  const e = K.position(kat, pos(kat, "polo_stick", { menge: 20, stiche: 6000, farben: 2 }), {});
+  /* 20 × 6000 = 120 Tsd. Stiche · Maschine 120 / 40 + 10/60 = 3,167 h · Arbeit 45 + 2×3 + 20×1,5 + 20×1 = 101 min · Material 20 × 9,00 + 120 × 0,08 = 189,60 € */
+  ok("STICK: Maschinenzeit aus der Stichzahl (3,167 h)", e.ok && e.maschinenH === 3.167, e.maschinenH);
+  ok("STICK: Arbeitszeit 101 min (Punchen + je Farbe einrichten + je Stück)", e.minuten === 101, e.minuten);
+  ok("STICK: Material 189,60 € (Polos + Garn je Tausend Stiche)", e.mek === 18960, e.mek);
+  const e2 = K.position(kat, pos(kat, "polo_stick", { menge: 20, stiche: 12000, farben: 2 }), {});
+  ok("STICK: doppelte Stichzahl verlängert die Maschinenzeit, nicht die Arbeitszeit", e2.maschinenH === 6.167 && e2.minuten === 101, [e2.maschinenH, e2.minuten]);
+  const e3 = K.position(kat, pos(kat, "polo_stick", { menge: 20, stiche: 6000, farben: 4 }), {});
+  ok("STICK: mehr Garnfarben = je Farbe Einrichten, die Maschine läuft gleich lang", e3.minuten === 107 && e3.maschinenH === 3.167, [e3.minuten, e3.maschinenH]);
+  const v = K.finde(kat.vorlagen, "polo_stick"); v.sticheVorgabe = 0;
+  const e4 = K.position(kat, pos(kat, "polo_stick", { menge: 20, stiche: "" }), {});
+  ok("STICK: fehlende Stichzahl → nicht kalkuliert, nicht 0", !e4.ok && e4.offen.indexOf("Stichzahl fehlt") >= 0, e4.offen);
+}
+
+/* ── STUFE 3: Mengen-Einheit (Std., km) bis aufs Blatt und in die Übergaben ── */
+{
+  const kat = kopie(WC.START); WC.katalog.gebietHinzufuegen(kat, WC.STARTKATALOGE.dienstleistung);
+  const a = A.neu([], "2026-10-12"); a.kunde = { name: "Kunde Beispiel", anschrift: "", klasse: "B" };
+  const p1 = A.neuePosition(a, kat, "arbeit_std"); p1.menge = 4; p1.staffeln = [4];
+  const p2 = A.neuePosition(a, kat, "tasse"); p2.menge = 10; p2.staffeln = [10];
+  const r = A.rechne(a, kat, a.kunde, false), d = WC.aussen.angebotExtern(a, r, {}, false);
+  /* 4 Std. × 65 € = 260 € · + 10 % Gemeinkosten = 286 € · + 15 % Gewinn = 328,90 € */
+  ok("EINHEIT: 4 Std. Arbeit = 328,90 € netto (Satz, Gemeinkosten, Gewinn)", r.positionen[0].erg.netto === 32890, r.positionen[0].erg.netto);
+  ok("EINHEIT: Std. und Stk. stehen am Kundenblatt", d.positionen[0].einheit === "Std." && d.positionen[1].einheit === "Stk.", d.positionen.map((x) => x.einheit));
+  ok("EINHEIT: die WorkFloh-Übergabe sagt „4 Std.“", /4 Std\. à/.test(JSON.stringify(WC.uebergabe.auftrag(d))));
+  ok("EINHEIT: Dienstleistung ohne Ware braucht keinen Versand", r.versand.ok && r.positionen[0].erg.gewichtG === 0);
+}
+
+/* ── STUFE 3: Nachkalkulation — Plan gegen Ist ── */
+{
+  const NK = WC.nachkalk, kat = kopie(WC.START);
+  const a = A.neu([], "2026-10-12"); a.kunde = { name: "Kunde Beispiel", anschrift: "", klasse: "B" };
+  const p1 = A.neuePosition(a, kat, "tasse"); p1.menge = 50; p1.staffeln = [50];
+  const p2 = A.neuePosition(a, kat, "kuli"); p2.menge = 250; p2.staffeln = [250];
+  A.stellen(a, kat);
+  const r = A.rechne(a, kat, a.kunde, false), plan = r.positionen[0].erg;
+  ok("NACHKALK: Ausgangslage — Tasse 50 Stück plant 125 min", plan.minuten === 125, plan.minuten);
+  let n = NK.angebot(a, r);
+  ok("NACHKALK: ohne Ist-Werte ist Ist = Plan, und es wird gesagt", n.summe.erfasst === 0 && n.summe.ausPlan === 2 && n.summe.skIst === n.summe.skPlan && n.summe.dbIst === n.summe.dbPlan);
+  a.ist = { pos: { "P-1": { minuten: 187.5 } } };
+  n = NK.angebot(a, r);
+  const q = n.positionen[0];
+  /* 125 → 187,5 min = +62,5 min × 65 €/h = +67,71 € Lohn · × 1,15 Gemeinkosten ≈ +77,86 € Selbstkosten */
+  ok("NACHKALK: 50 % mehr Arbeitszeit → Selbstkosten +77,86 € (±1 Cent), Deckungsbeitrag sinkt genauso", Math.abs(q.skDiff - 7786) <= 1 && q.dbPlan - q.dbIst === q.skDiff && q.minutenPct === 50, q);
+  ok("NACHKALK: die andere Position zählt mit dem Plan", n.summe.erfasst === 1 && n.summe.ausPlan === 1 && n.summe.skIst - n.summe.skPlan === q.skDiff);
+  a.ist.pos["P-1"].materialCent = 0;
+  ok("NACHKALK: 0 € Material ist ein erfasster Wert", NK.angebot(a, r).positionen[0].ist.mek === 0);
+  a.ist.pos["P-1"] = { minuten: "" };
+  ok("NACHKALK: leeres Feld heißt nicht erfasst, nicht 0", !NK.angebot(a, r).positionen[0].erfasst && NK.angebot(a, r).positionen[0].ist.fek === plan.fek);
+  a.ist = { pos: { "P-1": { minuten: 187.5 } }, versandCent: (r.versand.cent || 0) + 500 };
+  ok("NACHKALK: Versand Ist geht in die Selbstkosten", NK.angebot(a, r).summe.skIst - NK.angebot(a, r).summe.skPlan === NK.angebot(a, r).positionen[0].skDiff + 500);
+  ok("WHITELIST: Nachkalkulation und Stichzahl bleiben intern", !/"ist"|187\.5|"stiche"|minuten/.test(JSON.stringify(WC.aussen.angebotExtern(a, r, {}, false))));
+
+  /* Über mehrere Angebote: Faktor je Vorlage, nur gestellte */
+  const b = A.neu([a], "2026-10-12"); const pb = A.neuePosition(b, kat, "tasse"); pb.menge = 10; pb.staffeln = [10]; A.stellen(b, kat);
+  const planB = A.rechne(b, kat, null, false).positionen[0].erg.minuten;
+  b.ist = { pos: { "P-1": { minuten: planB * 1.5 } } };
+  const c = A.neu([a, b], "2026-10-12"); const pc = A.neuePosition(c, kat, "tasse"); pc.menge = 10; c.ist = { pos: { "P-1": { minuten: 9999 } } };
+  const rf = (x) => A.rechne(x, kat, null, false);
+  const zl = NK.jeVorlage([a, b, c], rf), z = zl.filter((x) => x.vorlage === "tasse")[0];
+  ok("NACHKALK: nur gestellte Angebote zählen (Entwürfe nicht)", z && z.n === 2 && z.istMin === 187.5 + planB * 1.5, z);
+  ok("NACHKALK: Faktor je Vorlage = Ist ÷ Plan (× 1,5)", z && z.faktor === 1.5 && !z.passt, z);
+  const minVorher = K.position(kat, pos(kat, "tasse", { menge: 50 }), {}).minuten;
+  const e = NK.kalibrieren(kat, z, "2026-10-12");
+  const minNachher = K.position(kat, pos(kat, "tasse", { menge: 50 }), {}).minuten;
+  ok("NACHKALK: übernommen — neue Positionen rechnen mit dem 1,5-fachen Zeit-Muster", e.ok && Math.abs(minNachher - minVorher * 1.5) < 0.01, [minVorher, minNachher]);
+  ok("NACHKALK: gestellte Angebote bleiben, wie sie sind", A.rechne(a, kat, null, false).positionen[0].erg.minuten === 125);
+  ok("NACHKALK: derselbe Befund wird nur einmal übernommen", !NK.kalibrieren(kat, z, "2026-10-12").ok && NK.schonUebernommen(kat, z));
+  K.ruecknehmen(kat, "tasse", e.eintrag.nr);
+  ok("NACHKALK: zurückgenommen → wieder wie vorher, und wieder übernehmbar", K.position(kat, pos(kat, "tasse", { menge: 50 }), {}).minuten === minVorher && !NK.schonUebernommen(kat, z));
+  const fast = Object.assign({}, z, { faktor: 1.01, passt: true });
+  ok("NACHKALK: unter 2 % Abweichung wird nichts übernommen", !NK.kalibrieren(kat, fast, "2026-10-12").ok);
+}
+
+/* ── Beispiel-Angebote: 15 Positionen in drei Arbeitsgebieten, Übergaben testbar ── */
+{
+  const kat = kopie(WC.START), L = [];
+  WC.BEISPIEL_ANGEBOTE.forEach((b) => { const r = WC.beispielAngebot(L, kat, b.bid, "2026-10-12"); if (r.ok) L.push(r.angebot); });
+  const posN = L.reduce((s, a) => s + a.positionen.length, 0);
+  ok("BEISPIEL: vier Angebote mit zusammen 10–15 Positionen", L.length === 4 && posN >= 10 && posN <= 15, posN);
+  ok("BEISPIEL: fehlende Arbeitsgebiete werden mitgeholt", WC.katalog.gebietDa(kat, "stickerei") && WC.katalog.gebietDa(kat, "dienstleistung") && WC.katalog.pruefe(kat).length === 0);
+  const gebiete = new Set(L.flatMap((a) => a.positionen.map((p) => K.finde(kat.vorlagen, p.vorlage).gebiet)));
+  ok("BEISPIEL: alle drei Arbeitsgebiete kommen vor", gebiete.size === 3, [...gebiete]);
+  const rs = L.map((a) => A.rechne(a, kat, a.kunde, false));
+  ok("BEISPIEL: jede Position ist kalkuliert und hat einen Preis", rs.every((r) => r.positionen.every((x) => x.erg.ok && x.erg.netto > 0)), rs.flatMap((r) => r.positionen.filter((x) => !x.erg.ok).map((x) => x.pos.titel + ": " + x.erg.offen)));
+  ok("BEISPIEL: Kunden sind erkennbar erfunden", L.every((a) => /Beispiel/.test(a.kunde.name) && /Musterstadt/.test(a.kunde.anschrift)));
+  ok("BEISPIEL: ein Beispiel wird nicht doppelt geladen", !WC.beispielAngebot(L, kat, "verein").ok && L.length === 4);
+  ok("BEISPIEL: fortlaufende Nummern AN-2026-0001 … 0004", L.map((a) => a.nummer).join() === "AN-2026-0001,AN-2026-0002,AN-2026-0003,AN-2026-0004");
+  const ds = L.map((a, i) => WC.aussen.angebotExtern(a, rs[i], { name: "Werkstatt Beispiel" }, false));
+  ok("BEISPIEL: jedes geht als WorkFloh-Auftrag hinaus (Kunde, alle Positionen)", ds.every((d) => { const au = WC.uebergabe.auftrag(d); const t = JSON.stringify(au); return au.status === "angebot" && t.includes(d.kunde.name) && d.positionen.every((p) => t.includes(p.titel)); }));
+  ok("BEISPIEL: jedes geht an BookLedgerPro, und die Summe stimmt auf den Cent", ds.every((d) => { const n = WC.uebergabe.blpNutzlast(d); return WC.uebergabe.blpAdresse(d).ok && n.positionen.reduce((s, x) => s + x.menge * x.einzelpreisCent, 0) === d.summen.netto; }));
+  ok("BEISPIEL: C-Kunde (Familie) zahlt je Stück mehr als derselbe Artikel bei B", (() => {
+    const p = rs[3].positionen[0].pos, b = Object.assign({}, L[3].kunde, { klasse: "B" });
+    return K.position(kat, p, { angebot: L[3], kunde: L[3].kunde }).netto > K.position(kat, p, { angebot: L[3], kunde: b }).netto; })());
 }
 
 /* ── STUFE 2: Klaus' Symbol ── */

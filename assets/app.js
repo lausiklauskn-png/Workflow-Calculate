@@ -212,7 +212,7 @@
       " Löschst du die Browserdaten oder wechselst das Gerät, sind sie sonst weg. ",
       knopf("🔐 Jetzt sichern", function () { S.reiter = "einstellungen"; zeichne(); var k = document.getElementById("sicherung-kasten"); if (k) k.scrollIntoView(); }, "klein pri"), " ",
       knopf("Später", function () { ssSet("workflowcalculate_sicherung_spaeter", "1"); zeichne(); }, "klein")));
-    main.append(h("div", { class: "band", style: "margin-bottom:12px" }, knopf("＋ Neues Angebot", neuesAngebot, "pri", { id: "neues-angebot" })));
+    main.append(h("div", { class: "band", style: "margin-bottom:12px" }, knopf("＋ Neues Angebot", neuesAngebot, "pri", { id: "neues-angebot" }), beispielSteuerung()));
     if (!S.angebote.length) { main.append(h("p", { class: "gedaempft", text: "Noch kein Angebot." })); return; }
     var kat = S.katalog;
     var t = h("table", null, h("thead", null, h("tr", null, ["Nummer", "Kunde", "Titel", "Status", "netto", ""].map(function (x, i) { return h("th", { class: i === 4 ? "r" : "", text: x }); }))));
@@ -226,6 +226,61 @@
     });
     t.append(tb);
     main.append(h("div", { class: "karte" }, h("div", { class: "tabelle-huelle" }, t)));
+    var nk = nachkalkVorlagenKarte();
+    if (nk) main.append(nk);
+  }
+
+  /* Beispiel-Angebote laden (wie Workflow-Needs „Beispiele“) — zum Ansehen, Lernen und Testen der Übergaben */
+  function beispielLaden(bids) {
+    var neu = [], gebiete = [], schon = 0;
+    bids.forEach(function (bid) {
+      var r = WC.beispielAngebot(S.angebote, S.katalog, bid);
+      if (!r.ok) { schon++; return; }
+      S.angebote.unshift(r.angebot); merken(r.angebot); neu.push(r.angebot);
+      r.gebieteNeu.forEach(function (gname) { if (gebiete.indexOf(gname) < 0) gebiete.push(gname); });
+    });
+    if (gebiete.length) katalogSpeichern();
+    if (!neu.length) { melde("Schon geladen — jedes Beispiel steht nur einmal in der Liste.", ""); return; }
+    if (neu.length === 1) { S.aktiv = neu[0].id; lsSet(LS.aktiv, S.aktiv); S.reiter = "angebot"; lsSet(LS.reiter, "angebot"); }
+    melde(neu.length + " Beispiel-Angebot(e) geladen: " + neu.map(function (a) { return a.nummer + " " + a.titel; }).join(" · ") +
+      (gebiete.length ? ". Dazu ins Katalog geholt: " + gebiete.join(", ") : "") + ". Kunden sind erfunden; die Preise rechnet dein Katalog (Platzhalter, bis du eigene Zahlen einträgst).", "");
+  }
+  function beispielSteuerung() {
+    var geladen = {}; S.angebote.forEach(function (a) { if (a.beispiel) geladen[a.beispiel] = 1; });
+    var L = WC.BEISPIEL_ANGEBOTE || [], erstes = L.filter(function (b) { return !geladen[b.bid]; })[0];
+    var wahl = h("select", { id: "beispiel-wahl", "aria-label": "Beispiel-Angebot", style: "flex:1 1 160px;min-width:0;max-width:100%" }, L.map(function (b) {
+      return h("option", { value: b.bid, selected: erstes && b.bid === erstes.bid, text: (geladen[b.bid] ? "✓ " : "") + b.titel + " (" + b.positionen.length + " Positionen)" });
+    }));
+    return h("span", { class: "band", "data-beispiel-angebote": "", style: "max-width:100%;min-width:0" }, h("span", { class: "gedaempft klein", text: "Beispiele:" }), wahl,
+      knopf("Laden", function () { beispielLaden([wahl.value]); }, "klein", { id: "beispiel-laden" }),
+      knopf("Alle laden", function () { beispielLaden(L.map(function (b) { return b.bid; })); }, "klein", { id: "beispiel-alle" }));
+  }
+
+  /* Über alle gestellten Angebote: Arbeitszeit je Vorlage, Plan gegen Ist → ins Zeit-Muster übernehmen */
+  function nachkalkVorlagenKarte() {
+    var zl = WC.nachkalk.jeVorlage(S.angebote, function (a) { return A.rechne(a, S.katalog, kundeVon(a), S.einst.kleinunternehmer); });
+    if (!zl.length) return null;
+    var t = h("table", null, h("thead", null, h("tr", null, ["Vorlage", "Positionen", "Plan min", "Ist min", "Faktor", ""].map(function (x, i) { return h("th", { class: i && i < 5 ? "r" : "", text: x }); }))));
+    var tb = h("tbody");
+    zl.forEach(function (z) {
+      var v = finde(S.katalog.vorlagen, z.vorlage), pct = Math.round((z.faktor - 1) * 1000) / 10;
+      var tat = !v ? h("span", { class: "gedaempft klein", text: "nicht mehr im Katalog" })
+        : z.passt ? h("span", { class: "gedaempft klein", "data-nk-passt": z.vorlage, text: "passt (unter " + WC.nachkalk.PASST_PCT + " %)" })
+        : WC.nachkalk.schonUebernommen(S.katalog, z) ? h("span", { class: "gedaempft klein", "data-nk-uebernommen": z.vorlage, text: "übernommen — steht im Verlauf der Vorlage" })
+        : knopf("Zeit-Muster × " + deZahl(z.faktor) + " übernehmen", function () {
+          var e = WC.nachkalk.kalibrieren(S.katalog, z, A.heute());
+          if (!e.ok) { melde("Nicht übernommen: " + (e.grund || "") + ".", "warn"); return; }
+          katalogSpeichern();
+          melde("Zeit-Muster von „" + v.name + "“ × " + deZahl(z.faktor) + " übernommen — neue Angebote rechnen damit. Gestellte bleiben, wie sie sind. Rücknehmbar im Katalog unter „Verlauf“.", "");
+        }, "klein pri", { "data-kalibrieren": z.vorlage });
+      tb.append(h("tr", { "data-nk-vorlage": z.vorlage, "data-faktor": String(z.faktor) }, h("td", { text: v ? v.name : z.vorlage }), h("td", { class: "r", text: String(z.n) }),
+        h("td", { class: "r", text: deZahl(Math.round(z.planMin)) }), h("td", { class: "r", text: deZahl(Math.round(z.istMin)) }),
+        h("td", { class: "r" + (pct > 0 ? " minus" : ""), text: "× " + deZahl(z.faktor) + " (" + (pct > 0 ? "+" : "") + fmtPct(pct) + " %)" }), h("td", null, tat)));
+    });
+    t.append(tb);
+    return h("div", { class: "karte", "data-nk-vorlagen": "" }, h("h3", null, "📏 Nachkalkulation je Vorlage ", h("span", { class: "badge intern", text: "🔒 intern" })),
+      h("p", { class: "gedaempft klein", text: "Arbeitszeit aus allen gestellten Angeboten mit erfassten Ist-Minuten. Der Faktor wirkt auf alle Arbeitsschritte der Vorlage; jede Übernahme steht im Verlauf und ist rücknehmbar." }),
+      h("div", { class: "tabelle-huelle" }, t));
   }
 
   /* ════ Angebot ════ */
@@ -251,6 +306,7 @@
           knopf("🧾 An BookLedgerPro", function () { anBlp(a); }, "klein", { id: "an-blp" }),
           ro ? null : knopf("🔒 Angebot stellen", function () { A.stellen(a, S.katalog); merken(a); melde("Angebot gestellt — Sätze und Einkaufspreise sind jetzt eingefroren. Änderungen ergeben eine neue Fassung.", ""); }, "klein", { id: "stellen" }))),
       ro ? nurLesenBanner(a) : null,
+      a.notiz ? h("p", { class: "gedaempft klein", "data-notiz": "" }, a.beispiel ? h("span", { class: "badge gelb", text: "Beispiel" }) : null, " " + a.notiz) : null,
       h("div", { class: "feldgitter" },
         feld("Titel", h("input", { value: a.titel, "data-key": "titel", disabled: ro, oninput: function () { a.titel = this.value; merken(a); zeichneKopf(); } })),
         feld("Kunde", kundenWahl),
@@ -293,6 +349,52 @@
         knopf("📤 An WorkFloh übergeben", function () { uebergeben(a); }, "klein"),
         knopf("🧾 An BookLedgerPro", function () { anBlp(a); }, "klein"),
         h("span", { class: "gedaempft klein", text: "WorkFloh: die Datei mit „📥 Importieren“ einlesen — daraus wird ein Auftrag. BookLedgerPro öffnet sich mit dem vorbefüllten Angebot; gespeichert wird dort erst auf Klick." }))));
+
+    /* Stufe 3: Nachkalkulation — erst am gestellten Angebot, denn verglichen wird mit dem, was angeboten wurde */
+    if (a.status === "gestellt") main.append(nachkalkKarte(a, r));
+  }
+
+  /* ── Nachkalkulation: Plan gegen Ist (intern) ── */
+  function nachkalkKarte(a, r) {
+    var N = WC.nachkalk.angebot(a, r), schl = "nk:" + a.id;
+    var offen = S.offen[schl] != null ? S.offen[schl] : N.summe.erfasst > 0 || N.summe.versandErfasst;
+    var box = h("details", { class: "karte", open: offen, "data-nachkalk": a.id, ontoggle: function () { S.offen[schl] = this.open; } },
+      h("summary", null, h("b", { text: "📏 Nachkalkulation — Plan gegen Ist" }), " ", h("span", { class: "badge intern", text: "🔒 intern" }),
+        h("span", { class: "gedaempft klein", text: N.summe.erfasst ? " · " + N.summe.erfasst + " von " + N.summe.gesamt + " Position(en) erfasst" : " · noch nichts erfasst" })));
+    box.append(h("p", { class: "gedaempft klein", text: "Nach dem Auftrag eintragen, was es wirklich gebraucht hat. Leer heißt „nicht erfasst“ und zählt mit dem Plan. Arbeitszeit = Lohnminuten, ohne Maschinenlaufzeit. Das Angebot selbst ändert sich nicht." }));
+    function ist(pid) { a.ist = a.ist || { pos: {} }; a.ist.pos = a.ist.pos || {}; return (a.ist.pos[pid] = a.ist.pos[pid] || {}); }
+    function setzen(pid, feldName, wert) {
+      var o = ist(pid);
+      if (wert == null) delete o[feldName]; else o[feldName] = wert;
+      a.ist.datum = A.heute(); merken(a); zeichne();
+    }
+    N.positionen.forEach(function (q) {
+      var x = WC.nachkalk.istVon(a, q.id);
+      var mm = q.minutenPct;
+      box.append(h("div", { class: "eintrag-kat", "data-nk-zeile": q.id, "data-sk-ist": String(q.ist.selbstkosten), "data-db-ist": String(q.dbIst) },
+        h("div", null, h("span", { class: "badge kennung", text: q.id }), " ", h("b", { text: q.titel })),
+        h("div", { class: "feldgitter" },
+          feld("Arbeitszeit Ist (min) · Plan " + deZahl(q.plan.minuten), h("input", { inputmode: "decimal", value: x.minuten != null ? deZahl(x.minuten) : "", placeholder: deZahl(q.plan.minuten), "data-ist": q.id + ":minuten",
+            onchange: function () { var n = this.value.trim() === "" ? null : zahlPunkt(this.value); setzen(q.id, "minuten", n != null && n >= 0 ? n : null); } })),
+          feld("Material Ist (€) · Plan " + euro(q.plan.mek), h("input", { inputmode: "decimal", value: x.materialCent != null ? G.formatCents(x.materialCent) : "", placeholder: G.formatCents(q.plan.mek), "data-ist": q.id + ":materialCent",
+            onchange: function () { var c = this.value.trim() === "" ? null : G.parseEuroToCents(this.value); setzen(q.id, "materialCent", Number.isFinite(c) && c >= 0 ? c : null); } })),
+          q.plan.maschinenH > 0 ? feld("Maschine Ist (h) · Plan " + deZahl(q.plan.maschinenH), h("input", { inputmode: "decimal", value: x.maschinenH != null ? deZahl(x.maschinenH) : "", placeholder: deZahl(q.plan.maschinenH), "data-ist": q.id + ":maschinenH",
+            onchange: function () { var n = this.value.trim() === "" ? null : zahlPunkt(this.value); setzen(q.id, "maschinenH", n != null && n >= 0 ? n : null); } })) : null),
+        h("p", { class: "klein" + (q.dbIst < 0 ? " verlust" : "") }, q.erfasst ? "Selbstkosten " + euro(q.plan.selbstkosten) + " → " + euro(q.ist.selbstkosten) + " (" + delta(q.plan.selbstkosten, q.ist.selbstkosten) + ")" +
+          (mm != null ? " · Arbeitszeit " + (mm > 0 ? "+" : "") + fmtPct(mm) + " %" : "") + " · Deckungsbeitrag " + euro(q.dbPlan) + " → " + euro(q.dbIst)
+          : "nicht erfasst — zählt mit dem Plan (Selbstkosten " + euro(q.plan.selbstkosten) + ")")));
+    });
+    var vi = a.ist && a.ist.versandCent != null ? a.ist.versandCent : null;
+    box.append(feld("Verpackung & Versand Ist (€) · Plan " + euro(N.versand.plan), h("input", { inputmode: "decimal", value: vi != null ? G.formatCents(vi) : "", placeholder: G.formatCents(N.versand.plan), "data-ist-versand": "",
+      onchange: function () { var c = this.value.trim() === "" ? null : G.parseEuroToCents(this.value); a.ist = a.ist || { pos: {} }; if (Number.isFinite(c) && c >= 0) a.ist.versandCent = c; else delete a.ist.versandCent; a.ist.datum = A.heute(); merken(a); zeichne(); } })));
+    var su = N.summe;
+    box.append(h("div", { class: "preis-leiste intern", "data-nk-summe": "", "data-db-plan": String(su.dbPlan), "data-db-ist": String(su.dbIst) },
+      h("span", { class: "badge", text: "Angebot netto " + euro(su.netto) }),
+      h("span", { class: "badge", text: "Selbstkosten Plan " + euro(su.skPlan) + " → Ist " + euro(su.skIst) }),
+      h("span", { class: "badge " + (su.dbIst < 0 ? "verlust" : "ok") }, "Deckungsbeitrag Plan " + euro(su.dbPlan) + " → Ist ", h("b", { text: euro(su.dbIst) })),
+      su.ausPlan ? h("span", { class: "badge gelb", "data-nk-ausplan": String(su.ausPlan) }, su.ausPlan + " Position(en) ohne Ist-Werte zählen mit dem Plan") : null));
+    box.append(h("p", { class: "gedaempft klein", text: "Weicht die Arbeitszeit bei einer Vorlage immer wieder ab, lässt sie sich im Reiter „Angebote“ unter „Nachkalkulation je Vorlage“ ins Zeit-Muster übernehmen." }));
+    return box;
   }
 
   /* ── Gestellt: nur lesen, Weg zur neuen Fassung (wie Workflow-Needs) ── */
@@ -407,7 +509,8 @@
       g.append(feld(v.mengenregel === "laenge" ? "Länge mm" : "Breite mm", h("input", { inputmode: "decimal", value: deZahl(p.breiteMm), "data-key": p.id + "-b", "data-feld": "breite", disabled: ro, onchange: setze(function () { p.breiteMm = zahlPunkt(this.value) || ""; }) })));
       g.append(feld("Höhe mm", h("input", { inputmode: "decimal", value: deZahl(p.hoeheMm), "data-key": p.id + "-h", "data-feld": "hoehe", disabled: ro, onchange: setze(function () { p.hoeheMm = zahlPunkt(this.value) || ""; }) })));
     }
-    g.append(feld("Menge (für die Summe)", h("input", { inputmode: "numeric", value: p.menge, "data-key": p.id + "-menge", "data-feld": "menge", disabled: ro, onchange: setze(function () { var n = Math.max(1, Math.round(zahlPunkt(this.value) || 1)); p.menge = n; if (p.staffeln.indexOf(n) < 0) p.staffeln = p.staffeln.concat([n]).sort(function (q, w) { return q - w; }); }) })));
+    var einh = v.einheitText || "Stk.";
+    g.append(feld("Menge in " + einh + " (für die Summe)", h("input", { inputmode: "numeric", value: p.menge, "data-key": p.id + "-menge", "data-feld": "menge", disabled: ro, onchange: setze(function () { var n = Math.max(1, Math.round(zahlPunkt(this.value) || 1)); p.menge = n; if (p.staffeln.indexOf(n) < 0) p.staffeln = p.staffeln.concat([n]).sort(function (q, w) { return q - w; }); }) })));
     g.append(feld("Staffel (Mengen, mit Komma)", h("input", { value: p.staffeln.join(", "), "data-key": p.id + "-staffel", "data-feld": "staffel", disabled: ro, onchange: setze(function () {
       var l = this.value.split(/[,;\s]+/).map(function (q) { return Math.round(Number(q)); }).filter(function (q) { return q > 0; });
       l = l.filter(function (q, i2) { return l.indexOf(q) === i2; }).sort(function (q, w) { return q - w; });
@@ -416,6 +519,8 @@
       g.append(feld("Verfahren", h("select", { "data-feld": "verfahren", disabled: ro, onchange: setze(function () { p.verfahren = this.value; }) },
         v.verfahrenWahl.map(function (id) { var vf = finde(kat.verfahren, id); return h("option", { value: id, text: vf ? vf.name : id, selected: id === (p.verfahren || v.verfahrenVorgabe) }); }))));
     }
+    if (v.stiche) g.append(feld("Stichzahl je Stück", h("input", { inputmode: "numeric", value: p.stiche != null && p.stiche !== "" ? p.stiche : v.sticheVorgabe || "", "data-key": p.id + "-stiche", "data-feld": "stiche", disabled: ro,
+      onchange: setze(function () { var n = Math.round(zahlPunkt(this.value) || 0); p.stiche = n > 0 ? n : ""; }) })));
     if ((+v.farbenMax || 1) > 1) {
       var vfA = finde(kat.verfahren, p.verfahren || v.verfahrenVorgabe);
       var opts = []; for (var f = 1; f <= v.farbenMax; f++) opts.push(h("option", { value: f, text: f + (f === 1 ? " Farbe" : " Farben"), selected: f === (+p.farben || 1) }));
@@ -451,7 +556,7 @@
       : e.lage === "unter_sk" ? "unter Selbstkosten — Verlust je Stück " + euro(Math.round((e.selbstkosten - e.netto) / e.menge)) + "; deckt die Gemeinkosten nicht" : "";
     karte.append(h("div", { class: "band", style: "justify-content:space-between" },
       h("div", null, h("div", { class: "preis-gross" + (e.lage !== "ok" ? " verlust" : ""), "data-pos-netto": String(e.netto) }, euro(e.netto)),
-        h("div", { class: "gedaempft klein" }, e.menge + " Stück · " + euro(e.stueckCent) + " je Stück netto" + (e.eigen != null ? " · eigener Preis" : ""))),
+        h("div", { class: "gedaempft klein" }, e.menge + " " + einh + " · " + euro(e.stueckCent) + " je " + einh + " netto" + (e.eigen != null ? " · eigener Preis" : ""))),
       h("div", { class: "band" },
         h("span", { class: "badge intern", "data-pos-sk": String(e.selbstkosten) }, "Selbstkosten " + euro(e.selbstkosten)),
         e.eigen != null ? h("span", { class: "badge gelb", "data-eigen-abstand": "" }, abstandText(e)) : null)));
@@ -500,8 +605,8 @@
 
   /* ── Staffel: Menge → Stückpreis, Summe, Selbstkosten; eigener Preis je Zeile ── */
   function staffelTabelle(a, x, kat, ro) {
-    var p = x.pos;
-    var t = h("table", { "data-staffel": p.id }, h("thead", null, h("tr", null, h("th", { text: "Menge" }), h("th", { class: "r", text: "je Stück" }), h("th", { class: "r", text: "netto" }),
+    var p = x.pos, einhS = (finde(kat.vorlagen, p.vorlage) || {}).einheitText || "Stk.";
+    var t = h("table", { "data-staffel": p.id }, h("thead", null, h("tr", null, h("th", { text: "Menge" }), h("th", { class: "r", text: "je " + einhS }), h("th", { class: "r", text: "netto" }),
       h("th", { class: "r", text: "🔒 Selbstk." }), h("th", { text: "Eigener Preis netto" }))));
     var tb = h("tbody");
     x.staffel.forEach(function (st) {
@@ -695,7 +800,7 @@
   /* ── Beispiele mit Bildern in mehreren Ansichten — Preis aus der AKTUELLEN Kalkulation ── */
   function beispielPosition(v, b) {
     var p = { vorlage: v.id, menge: b.menge || 1, staffeln: [b.menge || 1], breiteMm: b.breiteMm || v.breiteVorgabe || "", hoeheMm: b.hoeheMm || v.hoeheVorgabe || "",
-      farben: b.farben || 1, verfahren: b.verfahren || v.verfahrenVorgabe || "", wahl: Object.assign({}, b.wahl || {}), zeiten: {}, saetze: {}, eigen: {}, bilder: [] };
+      farben: b.farben || 1, verfahren: b.verfahren || v.verfahrenVorgabe || "", stiche: b.stiche || "", wahl: Object.assign({}, b.wahl || {}), zeiten: {}, saetze: {}, eigen: {}, bilder: [] };
     (v.slots || []).forEach(function (s) { if (!Object.prototype.hasOwnProperty.call(p.wahl, s.id)) p.wahl[s.id] = s.vorgabe || ""; });
     return p;
   }
@@ -712,7 +817,7 @@
         })) : null,
         h("b", { text: b.titel }),
         h("span", { class: "gedaempft klein", text: ansichten.length ? "Ansicht: " + ansichten[i][0] : "" }),
-        erg.ok ? h("span", { "data-beispiel-preis": String(erg.netto) }, "≈ ", h("b", { text: euro(erg.netto) }), " netto · " + euro(erg.stueckCent) + "/Stück",
+        erg.ok ? h("span", { "data-beispiel-preis": String(erg.netto) }, "≈ ", h("b", { text: euro(erg.netto) }), " netto · " + euro(erg.stueckCent) + " je " + (v.einheitText || "Stk."),
           erg.platzhalter ? h("span", { class: "platzhalter-marke", text: " · mit Platzhalter-Werten" }) : null)
           : h("span", { class: "gedaempft klein", text: "nicht kalkulierbar: " + erg.offen.join(" · ") }),
         nehmen ? knopf("Als Position übernehmen", function () { nehmen(beispielPosition(v, b), b); }, "klein pri", { "data-beispiel-nehmen": v.id + ":" + b.id }) : null);
@@ -733,7 +838,7 @@
     S.angebote.forEach(function (b) { if (b === a) return; b.positionen.forEach(function (p) { frueher.push({ a: b, p: p }); }); });
     if (frueher.length) {
       var fw = h("select", { id: "frueher-wahl", "aria-label": "Position aus früherem Angebot" }, h("option", { value: "", text: "— oder aus früherem Angebot übernehmen —" }),
-        frueher.map(function (x, i) { return h("option", { value: String(i), text: x.a.nummer + " · " + ((x.a.kunde || {}).name || "ohne Kunde") + " · " + (x.p.titel || x.p.vorlage) + " · " + x.p.menge + " Stk." }); }));
+        frueher.map(function (x, i) { return h("option", { value: String(i), text: x.a.nummer + " · " + ((x.a.kunde || {}).name || "ohne Kunde") + " · " + (x.p.titel || x.p.vorlage) + " · " + x.p.menge + " " + ((finde(kat.vorlagen, x.p.vorlage) || {}).einheitText || "Stk.") }); }));
       karte.append(h("div", { class: "zeile" }, fw, knopf("Übernehmen", function () {
         if (fw.value === "") return; var q = kopie(frueher[+fw.value].p); vorher(a); a.zaehler = (a.zaehler || 0) + 1; q.id = "P-" + a.zaehler; a.positionen.push(q); merken(a); zeichne();
       }, "", { id: "frueher-uebernehmen" })));
@@ -744,7 +849,7 @@
       karte.append(galerie(v, kat, { angebot: a, kunde: kunde }, function (pp, b) {
         vorher(a); var p = A.neuePosition(a, kat, v.id);
         Object.assign(p, { menge: pp.menge, staffeln: (v.staffelVorgabe || []).concat([pp.menge]).filter(function (m, i, s) { return s.indexOf(m) === i; }).sort(function (x, y) { return x - y; }),
-          breiteMm: pp.breiteMm, hoeheMm: pp.hoeheMm, farben: pp.farben, verfahren: pp.verfahren, wahl: pp.wahl, titel: b.titel });
+          breiteMm: pp.breiteMm, hoeheMm: pp.hoeheMm, farben: pp.farben, verfahren: pp.verfahren, stiche: pp.stiche, wahl: pp.wahl, titel: b.titel });
         S.neuPos = null; merken(a); zeichne();
       }));
     }
@@ -780,13 +885,13 @@
     b.append(h("div", { class: "kopfzeile" }, h("div", { class: "meta" }, h("div", { text: d.kunde.name }), h("div", { style: "white-space:pre-line", text: d.kunde.anschrift })), abs));
     b.append(h("h1", { text: "Angebot " + d.nummer + (d.fassung > 1 ? " · Fassung " + d.fassung : "") }));
     b.append(h("p", { class: "meta", text: "Datum: " + datumDe(d.datum) + " · gültig bis " + datumDe(d.gueltigBis) + (d.titel ? " · " + d.titel : "") }));
-    var t = h("table", null, h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { text: "Leistung" }), h("th", { class: "r", text: "Menge" }), h("th", { class: "r", text: "je Stück" }), h("th", { class: "r", text: "Gesamt netto" }))));
+    var t = h("table", null, h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { text: "Leistung" }), h("th", { class: "r", text: "Menge" }), h("th", { class: "r", text: "Einzelpreis" }), h("th", { class: "r", text: "Gesamt netto" }))));
     var tb = h("tbody");
     d.positionen.forEach(function (p) {
       tb.append(h("tr", null, h("td", null, p.bild ? h("img", { class: "pos-bild", src: bildQuelle(p.bild), alt: "" }) : null),
         h("td", null, h("b", { text: p.titel }), p.beschreibung ? h("div", { class: "klein", text: p.beschreibung }) : null,
-          p.staffel.length ? h("div", { class: "staffel", text: "Staffel: " + p.staffel.map(function (s) { return s.menge + " Stk. à " + euro(s.stueckCent); }).join(" · ") }) : null),
-        h("td", { class: "r", text: String(p.menge) }), h("td", { class: "r", text: euro(p.stueckCent) }), h("td", { class: "r", text: euro(p.gesamtCent) })));
+          p.staffel.length ? h("div", { class: "staffel", text: "Staffel: " + p.staffel.map(function (s) { return s.menge + " " + (p.einheit || "Stk.") + " à " + euro(s.stueckCent); }).join(" · ") }) : null),
+        h("td", { class: "r", "data-blatt-menge": "", text: p.menge + " " + (p.einheit || "Stk.") }), h("td", { class: "r", text: euro(p.stueckCent) }), h("td", { class: "r", text: euro(p.gesamtCent) })));
     });
     if (d.versand) tb.append(h("tr", null, h("td"), h("td", { text: d.versand.text }), h("td"), h("td"), h("td", { class: "r", text: euro(d.versand.nettoCent) })));
     t.append(tb); b.append(t);
@@ -835,11 +940,12 @@
   /* ════ Katalog ════ */
   var FELDER = {
     gebiete: [["name", "Name", "text"]],
-    materialien: [["name", "Name", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["einheit", "Einheit", "wahl", ["m2", "lfm", "stueck", "platte"]], ["ekCent", "Einkaufspreis je Einheit €", "cent"],
+    materialien: [["name", "Name", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["einheit", "Einheit", "wahl", ["m2", "lfm", "stueck", "platte", "tsd_stiche"]], ["ekCent", "Einkaufspreis je Einheit €", "cent"],
       ["verschnittPct", "Verschnitt %", "zahl"], ["rollenbreiteMm", "Rollenbreite mm", "zahl"], ["platteBMm", "Platte Breite mm", "zahl"], ["platteHMm", "Platte Höhe mm", "zahl"], ["gewichtG", "Gewicht g je Einheit", "zahl"]],
     verfahren: [["name", "Name", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["maschinensatzCent", "Maschinenstundensatz €/h", "cent"], ["leistung", "Leistung je Stunde", "zahl"],
-      ["leistungEinheit", "Leistung in", "wahl", ["m2", "stueck"]], ["ruestMin", "Rüstzeit min", "zahl"], ["farbregel", "Farbregel", "wahl", ["ein", "je_farbe", "digital"]], ["jeFarbe", "Maschine läuft je Farbe", "bool"]],
-    vorlagen: [["name", "Name", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["mengenregel", "Mengenregel", "wahl", ["stueck", "flaeche", "rolle", "platte", "laenge"]], ["beschreibungVorgabe", "Beschreibung (Vorgabe)", "text"],
+      ["leistungEinheit", "Leistung in", "wahl", ["m2", "stueck", "tsd_stiche"]], ["ruestMin", "Rüstzeit min", "zahl"], ["farbregel", "Farbregel", "wahl", ["ein", "je_farbe", "digital"]], ["jeFarbe", "Maschine läuft je Farbe", "bool"]],
+    vorlagen: [["name", "Name", "text"], ["gebiet", "Arbeitsgebiet", "gebiet"], ["mengenregel", "Mengenregel", "wahl", ["stueck", "flaeche", "rolle", "platte", "laenge"]], ["beschreibungVorgabe", "Beschreibung (Vorgabe)", "text"], ["einheitText", "Mengen-Einheit auf dem Angebot (Stk., Std., km)", "text"],
+      ["stiche", "Stickerei: Stichzahl abfragen", "bool"], ["sticheVorgabe", "Stichzahl je Stück (Vorgabe)", "zahl"],
       ["breiteVorgabe", "Breite mm (Vorgabe)", "zahl"], ["hoeheVorgabe", "Höhe mm (Vorgabe)", "zahl"], ["abstandMm", "Abstand mm (Nesting)", "zahl"], ["farbenMax", "Farben höchstens", "zahl"],
       ["verfahrenWahl", "Verfahren (Auswahl)", "multi:verfahren"], ["verfahrenVorgabe", "Verfahren (Vorgabe)", "ref:verfahren"],
       ["versandArt", "Versand als", "wahl", ["stueck", "flach", "rolle", "keiner"]], ["volumenJeStueckL", "Volumen je Stück l", "zahl"], ["laengeMm", "Längstes Maß je Stück mm", "zahl"], ["dickeMm", "Dicke mm (flach/rolle)", "zahl"],
@@ -887,6 +993,7 @@
           file.text().then(function (t) { var r = KAT.importieren(t); if (!r.ok) { melde("Nicht eingelesen: " + r.fehler.join(" · "), "bad"); return; } S.katalog = r.katalog; katalogSpeichern(); melde("Katalog eingelesen.", ""); });
         } })),
         knopf("Startkatalog wiederherstellen", function () { if (confirm("Den ganzen Katalog durch den Startkatalog ersetzen? Eigene Einträge gehen verloren (vorher als Datei sichern).")) { S.katalog = kopie(WC.START); katalogSpeichern(); zeichne(); } }, "klein gefahr"))));
+    main.append(gebieteKarte(kat));
     var nav = h("div", { class: "band", style: "margin-bottom:10px" });
     Object.keys(KAT_NAMEN).forEach(function (k) { nav.append(knopf(KAT_NAMEN[k] + " (" + kat[k].length + ")", function () { S.katReiter = k; S.katOffen = null; zeichne(); }, "chip" + (S.katReiter === k ? " on" : ""), { "data-kat-reiter": k })); });
     main.append(nav);
@@ -912,6 +1019,23 @@
       var n = neuerEintrag(S.katReiter); liste.push(n); katalogSpeichern(); S.katOffen = n.id; zeichne();
     }, "pri", { id: "kat-neu" }));
     main.append(karte);
+  }
+  /* Stufe 3: mitgelieferte Arbeitsgebiete in den eigenen Katalog holen — eigene Einträge bleiben unberührt */
+  function gebieteKarte(kat) {
+    var box = h("div", { class: "karte", "data-gebiete-start": "" }, h("h3", { text: "Arbeitsgebiete" }),
+      h("p", { class: "gedaempft klein", text: "Mitgelieferte Gebiete mit eigenem Startkatalog (Platzhalter-Zahlen). Hinzufügen ändert nichts an dem, was schon da ist." }));
+    Object.keys(WC.STARTKATALOGE || {}).forEach(function (id) {
+      var pk = WC.STARTKATALOGE[id], da = KAT.gebietDa(kat, id);
+      box.append(h("div", { class: "zeile", "data-gebiet-start": id },
+        h("span", null, h("b", { text: pk.name }), h("span", { class: "gedaempft klein", text: " — " + pk.beschreibung + " (" + (pk.vorlagen || []).length + " Produktvorlagen)" })),
+        da ? h("span", { class: "badge ok", text: "✓ im Katalog" }) : knopf("＋ hinzufügen", function () {
+          var r = KAT.gebietHinzufuegen(S.katalog, pk);
+          katalogSpeichern();
+          melde("„" + pk.name + "“ hinzugefügt: " + r.neu.vorlagen + " Produktvorlagen, " + r.neu.materialien + " Materialien, " + r.neu.verfahren + " Verfahren" +
+            (r.schonDa ? " · " + r.schonDa + " Einträge waren schon da und bleiben, wie sie sind" : "") + ". Alle Zahlen sind Platzhalter — eigene im Katalog eintragen.", "");
+        }, "klein pri", { "data-gebiet-hinzu": id })));
+    });
+    return box;
   }
   function neuerEintrag(art) {
     var gb = S.katalog.gebiete[0] ? S.katalog.gebiete[0].id : "";
@@ -939,7 +1063,7 @@
     var box = h("div");
     v.slots = v.slots || []; v.schritte = v.schritte || []; v.beispiele = v.beispiele || []; v.markt = v.markt || []; v.marktGrenzen = v.marktGrenzen || {};
     box.append(feld("Staffel (Vorgabe, mit Komma)", h("input", { value: (v.staffelVorgabe || []).join(", "), onchange: function () { v.staffelVorgabe = this.value.split(/[,;\s]+/).map(Number).filter(function (n) { return n > 0; }); katalogSpeichern(); } })));
-    box.append(listenEditor("Material-Platz", v.slots, [["name", "Name", "text"], ["bezug", "Menge aus", "wahl", ["regel", "flaeche", "stueck"]], ["wahl", "Materialien", "multi:materialien"],
+    box.append(listenEditor("Material-Platz", v.slots, [["name", "Name", "text"], ["bezug", "Menge aus", "wahl", ["regel", "flaeche", "stueck", "stiche"]], ["wahl", "Materialien", "multi:materialien"],
       ["vorgabe", "Vorgabe", "ref:materialien"], ["optional", "darf fehlen", "bool"], ["jeFarbe", "je Farbe", "bool"], ["nurBei", "nur bei Verfahren", "multi:verfahren"]],
       function () { return { id: KAT.neueKennung(v.slots, "platz"), name: "Material", bezug: "regel", wahl: [], vorgabe: "" }; }, { "data-slots": "" }));
     box.append(listenEditor("Arbeitsschritt (Zeit-Muster)", v.schritte, [["name", "Name", "text"], ["ruestMin", "Rüsten min", "zahl"], ["minJeStueck", "min je Stück", "zahl"], ["minJeM2", "min je m²", "zahl"],

@@ -5,7 +5,7 @@
   "use strict";
   var WC = g.WC = g.WC || {};
   var LISTEN = ["gebiete", "materialien", "verfahren", "vorlagen", "verpackungen", "versand"];
-  var EINHEITEN = ["m2", "lfm", "stueck", "platte"];
+  var EINHEITEN = ["m2", "lfm", "stueck", "platte", "tsd_stiche"];
   var FARBREGELN = ["ein", "je_farbe", "digital"];
 
   function kopie(x) { return JSON.parse(JSON.stringify(x)); }
@@ -60,6 +60,21 @@
     return id;
   }
 
-  WC.katalog = { LISTEN: LISTEN, EINHEITEN: EINHEITEN, FARBREGELN: FARBREGELN, pruefe: pruefe, platzhalter: platzhalter,
+  /* Ein mitgeliefertes Arbeitsgebiet (WC.STARTKATALOGE[id]) in den eigenen Katalog holen.
+     Fügt nur hinzu, was es dort noch nicht gibt (gleiche Kennung = bleibt, wie es ist) — eigene Zahlen werden nie überschrieben. */
+  function gebietHinzufuegen(kat, paket) {
+    var neu = {}, schonDa = 0;
+    LISTEN.forEach(function (l) {
+      neu[l] = 0; kat[l] = kat[l] || [];
+      (paket[l] || []).forEach(function (x) {
+        if (kat[l].some(function (y) { return y.id === x.id; })) { schonDa++; return; }
+        kat[l].push(kopie(x)); neu[l]++;
+      });
+    });
+    return { neu: neu, schonDa: schonDa, summe: LISTEN.reduce(function (s, l) { return s + neu[l]; }, 0) };
+  }
+  function gebietDa(kat, id) { return (kat.gebiete || []).some(function (g) { return g.id === id; }); }
+
+  WC.katalog = { gebietHinzufuegen: gebietHinzufuegen, gebietDa: gebietDa, LISTEN: LISTEN, EINHEITEN: EINHEITEN, FARBREGELN: FARBREGELN, pruefe: pruefe, platzhalter: platzhalter,
     exportieren: exportieren, importieren: importieren, neueKennung: neueKennung, kopie: kopie };
 })(typeof window !== "undefined" ? window : globalThis);

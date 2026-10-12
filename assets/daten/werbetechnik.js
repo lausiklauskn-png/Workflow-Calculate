@@ -148,4 +148,7 @@
         stufen: [{ bisG: 1000000, cent: 8900 }] },
     ],
   };
+  /* Mitgelieferte Arbeitsgebiete (Stufe 3) — im Katalog „＋ Arbeitsgebiet hinzufügen“ */
+  WC.STARTKATALOGE = WC.STARTKATALOGE || {};
+  WC.STARTKATALOGE.werbetechnik = Object.assign({ name: "Werbetechnik", beschreibung: "Digitaldruck, Schilder, Tassen, Kulis, T-Shirts, Fahrzeugfolierung, Schriftzüge." }, WC.START);
 })(typeof window !== "undefined" ? window : globalThis);

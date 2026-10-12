@@ -70,6 +70,77 @@
       '<text x="200" y="168" font-family="Georgia,serif" font-size="46" font-style="italic" fill="none" stroke="#1d232a" stroke-width="1.5" text-anchor="middle">Bäckerei</text>' +
       '<text x="200" y="235" font-family="Arial" font-size="13" text-anchor="middle" fill="#4b5560">entgittert, mit Übertragungsfolie</text>'),
   };
+  /* Stufe 3: Stickerei und Montage & Dienstleistung */
+  function stich(x, y, w, h, n) {
+    var t = "";
+    for (var i = 0; i < n; i++) t += '<rect x="' + (x + i * 6) + '" y="' + (y + i * 6) + '" width="' + w + '" height="' + h + '" rx="6" fill="none" stroke="' + FARBEN[i % 4] + '" stroke-width="5" stroke-dasharray="2 2"/>';
+    return t;
+  }
+  function polo(detail, n) {
+    if (detail) return rahmen('<rect x="90" y="70" width="220" height="150" fill="#fff" stroke="#9aa7b4" stroke-width="2"/>' + stich(140, 100, 100, 70, n) +
+      '<text x="200" y="250" font-family="Arial" font-size="13" text-anchor="middle" fill="#4b5560">Stickmotiv · ' + n + (n > 1 ? " Garnfarben" : " Garnfarbe") + ' · Vlies auf der Rückseite</text>');
+    return rahmen('<path d="M130 60 l-60 35 l25 45 l30 -15 v140 h150 v-140 l30 15 l25 -45 l-60 -35 l-25 25 h-20z" fill="#fff" stroke="#9aa7b4" stroke-width="3"/>' +
+      '<path d="M175 60 l25 30 l25 -30" fill="none" stroke="#9aa7b4" stroke-width="3"/>' + stich(225, 130, 40, 26, n));
+  }
+  function cap(seite) {
+    if (seite) return rahmen('<path d="M90 190 q20 -110 120 -110 q90 0 100 110z" fill="#fff" stroke="#9aa7b4" stroke-width="3"/><path d="M300 190 q50 5 70 20 l-90 0z" fill="#dfe6ee" stroke="#9aa7b4" stroke-width="3"/>' +
+      '<text x="200" y="240" font-family="Arial" font-size="13" text-anchor="middle" fill="#4b5560">Seite: Stick nur vorn, Rückseite offen</text>');
+    return rahmen('<path d="M100 190 q0 -110 100 -110 q100 0 100 110z" fill="#fff" stroke="#9aa7b4" stroke-width="3"/><path d="M90 190 h220 q-20 35 -110 35 q-90 0 -110 -35z" fill="#dfe6ee" stroke="#9aa7b4" stroke-width="3"/>' + stich(160, 120, 80, 45, 2));
+  }
+  function handtuch(detail) {
+    if (detail) return rahmen('<rect x="60" y="110" width="280" height="90" fill="#fff" stroke="#9aa7b4" stroke-width="2"/>' +
+      '<text x="200" y="170" font-family="Georgia,serif" font-size="40" font-style="italic" fill="none" stroke="#1f6fb2" stroke-width="2" stroke-dasharray="2 2" text-anchor="middle">Anna</text>' +
+      '<text x="200" y="235" font-family="Arial" font-size="13" text-anchor="middle" fill="#4b5560">Name in Schreibschrift, einfarbig</text>');
+    return rahmen('<rect x="90" y="50" width="220" height="200" rx="6" fill="#fff" stroke="#9aa7b4" stroke-width="3"/>' +
+      '<line x1="90" y1="215" x2="310" y2="215" stroke="#9aa7b4" stroke-width="2"/><line x1="90" y1="225" x2="310" y2="225" stroke="#9aa7b4" stroke-width="2"/>' +
+      '<text x="200" y="200" font-family="Georgia,serif" font-size="28" font-style="italic" fill="#1f6fb2" text-anchor="middle">Anna</text>');
+  }
+  function patch(seite) {
+    if (seite) return rahmen('<ellipse cx="200" cy="150" rx="120" ry="80" fill="#dfe6ee" stroke="#9aa7b4" stroke-width="3"/>' +
+      '<text x="200" y="155" font-family="Arial" font-size="13" text-anchor="middle" fill="#4b5560">Rückseite: Bügelkleber / Klett</text>');
+    return rahmen('<ellipse cx="200" cy="150" rx="120" ry="80" fill="#fff" stroke="' + FARBEN[0] + '" stroke-width="8"/>' + logo(200, 140, 50, 3));
+  }
+  function uhr(stunden) {
+    var t = '<circle cx="150" cy="150" r="80" fill="#fff" stroke="#9aa7b4" stroke-width="4"/><line x1="150" y1="150" x2="150" y2="95" stroke="#1d232a" stroke-width="5"/>' +
+      '<line x1="150" y1="150" x2="190" y2="150" stroke="#1d232a" stroke-width="4"/><path d="M150 150 L150 70 A80 80 0 0 1 ' + (150 + 80 * Math.sin(stunden / 12 * 2 * Math.PI)) + " " + (150 - 80 * Math.cos(stunden / 12 * 2 * Math.PI)) + ' z" fill="' + FARBEN[0] + '" fill-opacity=".25"/>';
+    return rahmen(t + '<text x="300" y="155" font-family="Arial" font-weight="700" font-size="28" text-anchor="middle" fill="#1d232a">' + stunden + ' Std.</text>');
+  }
+  function werkzeugkoffer() {
+    return rahmen('<rect x="90" y="110" width="220" height="120" rx="10" fill="' + FARBEN[1] + '" fill-opacity=".85"/><rect x="160" y="85" width="80" height="30" rx="8" fill="none" stroke="#1d232a" stroke-width="6"/>' +
+      '<rect x="90" y="150" width="220" height="10" fill="#1d232a" fill-opacity=".4"/><text x="200" y="260" font-family="Arial" font-size="13" text-anchor="middle" fill="#4b5560">Montage vor Ort</text>');
+  }
+  function karte(km) {
+    return rahmen('<path d="M60 230 C120 120 200 260 330 80" fill="none" stroke="' + FARBEN[0] + '" stroke-width="6" stroke-dasharray="12 8"/>' +
+      '<circle cx="60" cy="230" r="12" fill="' + FARBEN[2] + '"/><circle cx="330" cy="80" r="12" fill="' + FARBEN[1] + '"/>' +
+      '<text x="200" y="60" font-family="Arial" font-weight="700" font-size="24" text-anchor="middle" fill="#1d232a">' + km + ' km</text>');
+  }
+  function auto() {
+    return rahmen('<path d="M60 200 v-50 l40 -40 h150 l40 40 h30 v50z" fill="#fff" stroke="#9aa7b4" stroke-width="3"/><circle cx="110" cy="205" r="20" fill="#4b5560"/><circle cx="270" cy="205" r="20" fill="#4b5560"/>' +
+      '<text x="200" y="260" font-family="Arial" font-size="13" text-anchor="middle" fill="#4b5560">Hin- und Rückfahrt</text>');
+  }
+  function montageWand() {
+    return rahmen('<rect x="40" y="40" width="320" height="220" fill="#e8e1d6"/><rect x="110" y="90" width="180" height="110" rx="4" fill="#fff" stroke="#9aa7b4" stroke-width="4"/>' + logo(170, 140, 40, 2) +
+      [[122, 102], [278, 102], [122, 188], [278, 188]].map(function (p) { return '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="5" fill="#4b5560"/>'; }).join(""));
+  }
+  function montageDetail() {
+    return rahmen('<rect x="60" y="120" width="280" height="14" fill="#c7d0da" stroke="#6b7a8a"/><rect x="190" y="80" width="12" height="110" fill="#6b7a8a"/><rect x="180" y="190" width="32" height="30" rx="4" fill="#9aa7b4"/>' +
+      '<text x="200" y="250" font-family="Arial" font-size="13" text-anchor="middle" fill="#4b5560">Abstandshalter, Dübel, Schrauben</text>');
+  }
+  function entwurf(n) {
+    var t = "";
+    for (var i = 0; i < n; i++) t += '<rect x="' + (50 + i * 110) + '" y="80" width="90" height="120" rx="6" fill="#fff" stroke="#9aa7b4" stroke-width="3"/>' + logo(95 + i * 110, 130, 34, i + 1);
+    return rahmen(t + '<text x="200" y="240" font-family="Arial" font-size="13" text-anchor="middle" fill="#4b5560">' + n + " Entwürfe zur Auswahl</text>");
+  }
+  Object.assign(WC.BILDER, {
+    "polo-vorne": polo(false, 2), "polo-detail": polo(true, 2), "polo-vorne-4": polo(false, 4), "polo-detail-4": polo(true, 4),
+    "cap-vorne": cap(false), "cap-seite": cap(true),
+    "handtuch-ganz": handtuch(false), "handtuch-detail": handtuch(true),
+    "patch-vorne": patch(false), "patch-rueck": patch(true),
+    "uhr-4": uhr(4), "koffer": werkzeugkoffer(),
+    "karte-60": karte(60), "auto": auto(),
+    "montage-wand": montageWand(), "montage-detail": montageDetail(),
+    "entwurf-3": entwurf(3), "uhr-3": uhr(3),
+  });
   /* data-URL für <img> */
   WC.bildUrl = function (key) {
     var s = WC.BILDER[String(key).replace(/^svg:/, "")];

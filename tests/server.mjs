@@ -4,11 +4,13 @@ import { readFile } from "node:fs/promises";
 import { join, normalize, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const WURZEL = normalize(join(fileURLToPath(import.meta.url), "..", ".."));
+const WURZEL_EIGEN = normalize(join(fileURLToPath(import.meta.url), "..", ".."));
 const ARTEN = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
-  ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".md": "text/markdown; charset=utf-8" };
+  ".json": "application/json", ".png": "image/png", ".webmanifest": "application/manifest+json", ".jpg": "image/jpeg", ".webp": "image/webp", ".svg": "image/svg+xml", ".md": "text/markdown; charset=utf-8" };
 
-export function starteServer(port = 0) {
+/* wurzel: anderer Baum (z. B. ein WorkFloh-Klon daneben, für die Import-Probe) */
+export function starteServer(port = 0, wurzel) {
+  const WURZEL = normalize(wurzel || WURZEL_EIGEN);
   return new Promise((ok) => {
     const s = createServer(async (req, res) => {
       const pfad = decodeURIComponent(new URL(req.url, "http://x").pathname);

@@ -2,6 +2,10 @@
    Rückgabe 0 = grün · 1 = rot · 2 = nicht lauffähig (kein playwright-core oder kein Chromium) — nie grün. */
 import { findeChromium } from "./chromium-finden.mjs";
 import { starteServer } from "./server.mjs";
+import { existsSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+const NEBEN = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 let chromium;
 try { ({ chromium } = await import("playwright-core")); } catch { console.log("nicht lauffähig: playwright-core fehlt (npm install)"); process.exit(2); }
@@ -210,6 +214,102 @@ try {
   ok("SICHERUNG: die Angebote stehen im frischen Browser", await f.p.locator("[data-angebot-zeile]").count() === 4);
   ok("SICHERUNG: der eigene Katalog (EK 7,31 €) kam mit", await f.p.evaluate(() => JSON.parse(localStorage.getItem("workflowcalculate_katalog") || "null")?.materialien.find((m) => m.id === "tasse_11").ekCent) === 731);
   await f.ctx.close();
+
+  /* ── Stufe 3: Arbeitsgebiete, Stickerei, Einheit, Nachkalkulation ── */
+  {
+    const s3 = await seite(1200), q = s3.p;
+    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    await tippe(q, '[data-reiter="katalog"]', "Reiter Katalog");
+    ok("GEBIET-SEITE: Stickerei und Dienstleistung stehen zum Hinzufügen da", await q.locator('[data-gebiet-hinzu="stickerei"]').count() === 1 && await q.locator('[data-gebiet-hinzu="dienstleistung"]').count() === 1);
+    await tippe(q, '[data-gebiet-hinzu="stickerei"]', "Stickerei hinzufügen");
+    await tippe(q, '[data-gebiet-hinzu="dienstleistung"]', "Dienstleistung hinzufügen");
+    const katS = await q.evaluate(() => JSON.parse(localStorage.getItem("workflowcalculate_katalog") || "null"));
+    ok("GEBIET-SEITE: Stickerei steht danach im Katalog (gespeichert)", !!katS && katS.gebiete.some((g) => g.id === "stickerei") && katS.vorlagen.some((v) => v.id === "polo_stick"));
+    ok("GEBIET-SEITE: ein zweites Mal gibt es den Knopf nicht", await q.locator('[data-gebiet-hinzu="stickerei"]').count() === 0);
+
+    await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
+    await tippe(q, "#neues-angebot", "Neues Angebot");
+    await q.selectOption("#vorlage-wahl", "polo_stick");
+    await tippe(q, '[data-beispiel-nehmen="polo_stick:b1"]', "Beispiel Polo");
+    ok("STICK-SEITE: die Position fragt nach der Stichzahl (6000 aus dem Beispiel)", await q.inputValue('[data-position="P-1"] [data-feld="stiche"]').catch(() => "") === "6000");
+    const n1 = await netto(q, "P-1");
+    await q.fill('[data-position="P-1"] [data-feld="stiche"]', "12000"); await q.press('[data-position="P-1"] [data-feld="stiche"]', "Tab");
+    const n2 = await netto(q, "P-1");
+    ok("STICK-SEITE: doppelte Stichzahl macht die Position teurer", n2 > n1, [n1, n2]);
+    await q.selectOption("#vorlage-wahl", "arbeit_std");
+    await tippe(q, '[data-beispiel-nehmen="arbeit_std:b1"]', "Beispiel Arbeit");
+    const bl = await druck(q, "#druck-angebot");
+    ok("EINHEIT-SEITE: das Kundenblatt sagt „4 Std.“ und „20 Stk.“", /4 Std\./.test(bl.text) && /20 Stk\./.test(bl.text), bl.text.slice(0, 300));
+
+    ok("NK-SEITE: am Entwurf steht keine Nachkalkulation", await q.locator("[data-nachkalk]").count() === 0);
+    await tippe(q, "#stellen", "Angebot stellen");
+    ok("NK-SEITE: am gestellten Angebot steht die Nachkalkulation", await q.locator("[data-nachkalk]").count() === 1);
+    await q.evaluate(() => { const d = document.querySelector("[data-nachkalk]"); if (d) d.open = true; });
+    const planMin = await q.getAttribute('[data-ist="P-1:minuten"]', "placeholder").catch(() => "");
+    const dbVor = Number(await q.getAttribute("[data-nk-summe]", "data-db-ist").catch(() => "NaN"));
+    await q.fill('[data-ist="P-1:minuten"]', String(Number(planMin.replace(",", ".")) * 2).replace(".", ","));
+    await q.press('[data-ist="P-1:minuten"]', "Tab");
+    const dbNach = Number(await q.getAttribute("[data-nk-summe]", "data-db-ist").catch(() => "NaN"));
+    ok("NK-SEITE: doppelte Ist-Zeit senkt den Deckungsbeitrag", planMin !== "" && dbNach < dbVor, [planMin, dbVor, dbNach]);
+    ok("NK-SEITE: die zweite Position ohne Ist-Werte wird benannt", await q.getAttribute("[data-nk-ausplan]", "data-nk-ausplan").catch(() => "") === "1");
+    ok("NK-SEITE: die Eingabe ändert das Angebot nicht", await q.locator("[data-nur-lesen]").count() === 1);
+    const bl2 = await druck(q, "#druck-angebot");
+    ok("NK-SEITE: nichts von der Nachkalkulation auf dem Kundenblatt", bl2.text === bl.text.replace(/./g, (x) => x) && !/Nachkalk|Ist|Plan/.test(bl2.text));
+
+    await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
+    ok("NK-SEITE: je Vorlage steht der Faktor × 2", await q.getAttribute('[data-nk-vorlage="polo_stick"]', "data-faktor").catch(() => "") === "2");
+    await tippe(q, '[data-kalibrieren="polo_stick"]', "Zeit-Muster übernehmen");
+    const katN = await q.evaluate(() => JSON.parse(localStorage.getItem("workflowcalculate_katalog") || "null"));
+    const polo = katN && katN.vorlagen.find((v) => v.id === "polo_stick");
+    ok("NK-SEITE: übernommen — Punchen 45 → 90 min, im Verlauf der Vorlage", polo && polo.schritte.find((s) => s.id === "punchen").ruestMin === 90 && polo.verlauf.length === 1);
+    ok("NK-SEITE: danach kein zweites Übernehmen", await q.locator('[data-kalibrieren="polo_stick"]').count() === 0 && await q.locator('[data-nk-uebernommen="polo_stick"]').count() === 1);
+    await q.setViewportSize({ width: 380, height: 900 });
+    const breitL = await q.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+    await q.locator("[data-angebot-zeile]").first().click();
+    await q.evaluate(() => { const d = document.querySelector("[data-nachkalk]"); if (d) d.open = true; });
+    const breitA = await q.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+    ok("HANDY: Nachkalkulation und Liste je Vorlage passen auf 380 px", breitL && breitA, [breitL, breitA]);
+    await s3.ctx.close();
+  }
+
+  /* ── Beispiel-Angebote: laden, ansehen, an WorkFloh und BookLedgerPro übergeben ── */
+  {
+    const s4 = await seite(1200), q = s4.p;
+    await q.goto(url); await q.waitForSelector("body[data-bereit]");
+    ok("BEISPIEL-SEITE: Auswahl und „Alle laden“ stehen gleich bei „＋ Neues Angebot“", await q.locator("[data-beispiel-angebote] #beispiel-wahl option").count() === 4);
+    await tippe(q, "#beispiel-alle", "Alle Beispiele laden");
+    ok("BEISPIEL-SEITE: vier Angebote stehen in der Liste", await q.locator("[data-angebot-zeile]").count() === 4);
+    await tippe(q, "#beispiel-alle", "noch einmal alle laden");
+    ok("BEISPIEL-SEITE: ein zweites Laden legt nichts doppelt an", await q.locator("[data-angebot-zeile]").count() === 4 && /Schon geladen/.test(await q.textContent("[data-meldung]").catch(() => "")));
+    await q.locator("[data-angebot-zeile]", { hasText: "Sportverein" }).click();
+    ok("BEISPIEL-SEITE: das Vereins-Angebot hat 5 kalkulierte Positionen", await q.locator("[data-position] [data-pos-netto]").count() === 5 && await q.locator("[data-nicht-kalkuliert]").count() === 0);
+    ok("BEISPIEL-SEITE: es sagt, dass es ein Beispiel ist", await q.locator("[data-notiz] .badge").count() === 1);
+    await q.evaluate(() => { window.__wcUebergabe = null; });
+    await tippe(q, "#uebergabe", "An WorkFloh übergeben");
+    const ub = await q.evaluate(() => window.__wcUebergabe || "");
+    let bu = null; try { bu = JSON.parse(ub); } catch { /* bleibt null */ }
+    /* Gegen die echten WorkFlohs: dieselbe Datei über deren eigenes applyForwardBundle — nur wenn der Klon daneben liegt */
+    for (const [name, pfadWF] of [["Mein WorkFloh", process.env.WORKFLOH_KLON || join(NEBEN, "Mein-WorkFloh")], ["Tomys WorkFloh", process.env.TOMYS_KLON || join(NEBEN, "Tomys-Hub", "workfloh")]]) {
+      if (!existsSync(join(pfadWF, "index.html")) || !bu) { console.log("hinweis: " + name + " liegt nicht daneben — Import-Probe übersprungen"); continue; }
+      const sv = await starteServer(0, pfadWF), wf = await seite(1200);
+      wf.p.on("dialog", (d) => d.accept());
+      await wf.p.goto(sv.url); await wf.p.waitForFunction(() => typeof applyForwardBundle === "function", null, { timeout: 20000 }).catch(() => {});
+      const auf = await wf.p.evaluate(async (o) => { await applyForwardBundle(o); return AUF.filter((a) => a.nr === o.auftraege[0].nr).map((a) => ({ nr: a.nr, status: a.status, kunde: a.data.nameFirma, preis: a.data.preis, text: a.data.beschreibung })); }, bu).catch((e) => String(e));
+      ok("WORKFLOH-IMPORT: " + name + " liest den Beispiel-Auftrag ein (Nr., Kunde, Preis, Positionen)", Array.isArray(auf) && auf.length === 1 && auf[0].status === "angebot" &&
+        auf[0].kunde === "Sportverein Beispiel e. V." && /brutto/.test(auf[0].preis) && /Trainer-Polo/.test(auf[0].text) && /Aufnäher/.test(auf[0].text), auf);
+      await wf.ctx.close(); sv.server.close();
+    }
+    ok("BEISPIEL-SEITE: WorkFloh-Datei mit Kunde und allen 5 Positionen", !!bu && bu.wf === "forward" && /Sportverein Beispiel/.test(ub) && /Trainer-Polo/.test(ub) && /Aufnäher/.test(ub), ub.slice(0, 200));
+    await q.evaluate(() => { window.__wcSprungAbfangen = true; window.__wcSprung = null; });
+    await tippe(q, "#an-blp", "An BookLedgerPro");
+    await q.waitForFunction(() => !!window.__wcSprung, null, { timeout: 5000 }).catch(() => {});
+    ok("BEISPIEL-SEITE: Sprung nach BookLedgerPro mit dem Beispiel", (await q.evaluate(() => window.__wcSprung || "")).startsWith("https://lausiklauskn-png.github.io/BookLedgerPro/?uebernahme="));
+    await tippe(q, '[data-reiter="angebote"]', "Reiter Angebote");
+    await q.locator("[data-angebot-zeile]", { hasText: "Handwerk" }).click();
+    const bl = await druck(q, "#druck-angebot");
+    ok("BEISPIEL-SEITE: Kundenblatt der Fahrzeugbeschriftung nennt „3 Std.“ Gestaltung", /3 Std\./.test(bl.text) && /Handwerk Beispiel GmbH/.test(bl.text));
+    await s4.ctx.close();
+  }
 
   /* ── Handy: keine waagerechte Rollbahn ── */
   const h = await seite(380);
