@@ -10,7 +10,7 @@
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
 <link rel="icon" href="icons/favicon-48.png" sizes="48x48">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/app.css?v=3">
+<link rel="stylesheet" href="assets/app.css?v=4">
 </head>
 <body>
 <header class="kopf">
@@ -19,6 +19,7 @@
     <div style="min-width:0"><b id="app-name">Workflow Calculate</b><small id="app-unter"></small></div>
   </div>
   <div class="kopf-knoepfe">
+    <button type="button" class="btn rund zurueck-knopf" id="seite-zurueck" title="Zurück" aria-label="Zurück" disabled>←</button>
     <button type="button" class="btn handel-knopf" id="handel-knopf" title="Handelsware — fertig eingekauft, mit Aufschlag weiterverkauft">🛒<span class="lang"> Handelsware</span></button>
     <button type="button" class="btn rund" id="thema" title="Hell">☀</button>
     <button type="button" class="btn rund" id="neuladen" title="Neu laden" aria-label="Neu laden">⟳</button>
@@ -58,7 +59,7 @@
 <script src="assets/daten/laser.js?v=1"></script>
 <script src="assets/daten/beispiel-angebote.js?v=2"></script>
 <script src="assets/daten/bilder.js?v=3"></script>
-<script src="assets/app.js?v=11"></script>
+<script src="assets/app.js?v=12"></script>
 <script src="assets/installieren.js" data-name="Workflow Calculate" data-vor="thema"></script>
 <script>
   if ("serviceWorker" in navigator && location.protocol !== "file:") {

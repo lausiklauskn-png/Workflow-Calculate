@@ -191,14 +191,53 @@
     });
   }
   /* Die Seite „🛒 Handelsware“ hat eine eigene Adresse (#handel) — als Lesezeichen oder in einem neuen Tab zu öffnen.
-     Gleicher Speicher, gleicher Katalog: es gibt keinen zweiten Zustand. */
-  function adresseSetzen(reiter) {
-    var soll = reiter === "handel" ? "#handel" : "";
-    if ((location.hash || "") === soll) return;
-    try { history.replaceState(null, "", location.pathname + location.search + soll); } catch (_e) {}
+     Gleicher Speicher, gleicher Katalog: es gibt keinen zweiten Zustand.
+     ⚠ Zurück-Taste (Klaus 2026-10-12: „die App schließt automatisch … sollte einmal, vielleicht zweimal zurückgehen“):
+     jeder Wechsel der Ansicht (Reiter, Katalog-Reiter, aufgeklappter Katalog-Eintrag, offenes Angebot) legt EINEN
+     Eintrag in den Verlauf des Browsers (`verlaufMerken`, an EINER Stelle: am Ende von `zeichne`). Zurück stellt die
+     vorige Ansicht wieder her (`popstate`), erst am Anfang des Verlaufs schließt Android die App. */
+  function ansicht() {
+    return { wc: 1, reiter: S.reiter, katReiter: S.reiter === "katalog" ? S.katReiter : "", katOffen: S.reiter === "katalog" ? (S.katOffen || "") : "",
+      aktiv: S.reiter === "angebot" ? (S.aktiv || "") : "" };
+  }
+  function gleicheAnsicht(x, y) { return !!x && !!y && ["reiter", "katReiter", "katOffen", "aktiv"].every(function (k) { return (x[k] || "") === (y[k] || ""); }); }
+  function adresseVon(reiter) { return location.pathname + location.search + (reiter === "handel" ? "#handel" : ""); }
+  var verlaufRuhig = false;
+  function verlaufMerken() {
+    if (verlaufRuhig) return;
+    var jetzt = ansicht(), alt = null;
+    try { alt = history.state; } catch (_e) {}
+    try {
+      if (!alt || !alt.wc) { jetzt.tiefe = 0; history.replaceState(jetzt, "", adresseVon(S.reiter)); return; }
+      if (gleicheAnsicht(alt, jetzt)) return;
+      var mitLage = Object.assign({}, alt, { y: window.scrollY || 0 });
+      history.replaceState(mitLage, "", location.href);
+      jetzt.tiefe = (alt.tiefe || 0) + 1;
+      history.pushState(jetzt, "", adresseVon(S.reiter));
+    } catch (_e) {}
+    zurueckKnopf();
+  }
+  /* Knopf „←“ oben (Klaus 2026-10-12: „einen Button … wie bei meinem Rezeptbuch, mehrmals zurück … 10 Mal“): geht denselben
+     Verlauf zurück wie die Zurück-Taste von Android, so oft es Schritte gibt — am Anfang ist er grau und schließt nie die App. */
+  function verlaufTiefe() { try { return (history.state && history.state.wc && history.state.tiefe) || 0; } catch (_e) { return 0; } }
+  function zurueckKnopf() {
+    var b = document.getElementById("seite-zurueck"); if (!b) return;
+    var n = verlaufTiefe();
+    b.disabled = n < 1; b.dataset.tiefe = String(n);
+    b.title = n ? "Zurück (" + n + " Schritt" + (n === 1 ? "" : "e") + ")" : "Zurück — schon am Anfang";
+  }
+  function verlaufZurueck(st) {
+    if (!st || !st.wc) return false;
+    S.reiter = st.reiter || "angebote"; lsSet(LS.reiter, S.reiter); S.meldung = null;
+    if (st.reiter === "katalog") { S.katReiter = st.katReiter || "vorlagen"; S.katOffen = st.katOffen || null; }
+    if (st.reiter === "angebot" && st.aktiv && S.angebote.some(function (a) { return a.id === st.aktiv; })) { S.aktiv = st.aktiv; lsSet(LS.aktiv, st.aktiv); }
+    verlaufRuhig = true; try { zeichne(); } finally { verlaufRuhig = false; }
+    window.scrollTo(0, st.y || 0);
+    zurueckKnopf();
+    return true;
   }
   function geheZu(reiter) {
-    S.reiter = reiter; lsSet(LS.reiter, reiter); S.meldung = null; adresseSetzen(reiter); zeichne(); window.scrollTo(0, 0);
+    S.reiter = reiter; lsSet(LS.reiter, reiter); S.meldung = null; zeichne(); window.scrollTo(0, 0);
   }
   function zeichne() {
     var fk = fokusMerken();
@@ -208,6 +247,7 @@
     var fn = { angebote: zAngebote, angebot: zAngebot, katalog: zKatalog, kunden: zKunden, einstellungen: zEinstellungen, handel: zHandel }[S.reiter] || zAngebote;
     fn(main);
     fokusZurueck(fk);
+    verlaufMerken();
   }
 
   /* ════ Angebote (Liste) ════ */
@@ -325,7 +365,7 @@
       var e = AN.entwurf(an, kat, S.angebote, S.kunden, basis || null);
       S.angebote.unshift(e.angebot); S.aktiv = e.angebot.id; lsSet(LS.aktiv, e.angebot.id); merken(e.angebot);
       S.anfrage = null; S.anfrageText = ""; S.anfrageOffen = false;
-      S.reiter = "angebot"; lsSet(LS.reiter, "angebot"); adresseSetzen("angebot");
+      S.reiter = "angebot"; lsSet(LS.reiter, "angebot");
       melde("Entwurf " + e.angebot.nummer + " aus der Anfrage: " + e.weg.join(" · ") + (e.offen.length ? " — Offen: " + e.offen.join(" · ") : "") + ". Bitte prüfen.", e.offen.length ? "warn" : "");
       window.scrollTo(0, 0);
     }
@@ -1269,7 +1309,7 @@
     var p = A.neuePosition(a, S.katalog, v.id);
     p.menge = menge; if (p.staffeln.indexOf(menge) < 0) p.staffeln = p.staffeln.concat([menge]).sort(function (x, y) { return x - y; });
     merken(a);
-    S.reiter = "angebot"; lsSet(LS.reiter, "angebot"); adresseSetzen("angebot");
+    S.reiter = "angebot"; lsSet(LS.reiter, "angebot");
     melde("„" + v.name + "“, " + menge + " " + (v.einheitText || "Stk.") + ", steht als Position " + p.id + " in Angebot " + a.nummer +
       (neu ? " — neu angelegt, weil kein Angebot als Entwurf offen war." : "."), "");
     window.scrollTo(0, 0);
@@ -1759,7 +1799,7 @@
   }
 
   function start() {
-    try { if (/[?&]frisch=/.test(location.search) && history.replaceState) history.replaceState(null, "", location.pathname + location.hash); } catch (_e) {}
+    try { if (/[?&]frisch=/.test(location.search) && history.replaceState) history.replaceState(history.state, "", location.pathname + location.hash); } catch (_e) {}
     if (lsGet(LS.thema) === "light") document.documentElement.dataset.theme = "light";
     document.getElementById("thema").addEventListener("click", function () {
       var hell = document.documentElement.dataset.theme !== "light";
@@ -1768,7 +1808,9 @@
     });
     document.getElementById("neuladen").addEventListener("click", neuLaden);
     var hkn = document.getElementById("handel-knopf"); if (hkn) hkn.addEventListener("click", function () { geheZu("handel"); });
-    if (location.hash === "#handel") S.reiter = "handel"; else if (S.reiter === "handel") adresseSetzen("handel");
+    if (location.hash === "#handel") S.reiter = "handel";
+    window.addEventListener("popstate", function (e) { verlaufZurueck(e.state); });
+    var zk = document.getElementById("seite-zurueck"); if (zk) zk.addEventListener("click", function () { if (verlaufTiefe() > 0) history.back(); });
     window.addEventListener("hashchange", function () {
       if (location.hash === "#handel") { if (S.reiter !== "handel") { S.reiter = "handel"; lsSet(LS.reiter, "handel"); S.meldung = null; zeichne(); } }
       else if (S.reiter === "handel") { S.reiter = "angebote"; lsSet(LS.reiter, "angebote"); zeichne(); }

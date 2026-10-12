@@ -101,6 +101,12 @@ Fremdfertigung (2026-10-13): am Verfahren `vorhanden` (fehlt = da), an der Vorla
   `kleinmenge` bleibt ohne Zuschlag — gestellte Angebote ändern sich nicht.
   **Vollbild auch hier** (Klaus 2026-10-13): Seite so breit wie das Fenster auf Handy hoch/quer, Tablet, großem Schirm; die Spalten
   „Menge + ins Angebot“ und „Verkauf“ stehen vorn, damit sie am Handy ohne Wischen da sind; ab 1024 px passt die ganze Tabelle.
+- **← Zurück** (Klaus 2026-10-12: „die App schließt automatisch … einen Button wie bei meinem Rezeptbuch, mehrmals zurück“):
+  jeder Wechsel der Ansicht (Reiter, Katalog-Reiter, aufgeklappter Katalog-Eintrag, offenes Angebot) legt EINEN Eintrag in den
+  Verlauf (`verlaufMerken`, nur am Ende von `zeichne` — nirgends sonst `pushState`). Der Knopf `#seite-zurueck` oben und die
+  Zurück-Taste von Android gehen dieselben Schritte zurück (`popstate` → `verlaufZurueck`, Rolllage wird mitgenommen); am Anfang
+  ist der Knopf grau. ⚠ `#zurueck` ist vergeben (↶ Rückgängig im Angebot). ⚠ Die Zurück-Taste schließt die App am Anfang des
+  Verlaufs weiter — das bestimmt Android, nicht die App.
 - **Vollbild** (Klaus 2026-10-12): `main` hat keine Höchstbreite, die Vorschau füllt den Schirm; nur das Papier-Blatt bleibt A4-breit.
 - **Mengen-Einheit** (`einheitText`: Stk., Std., km) geht über die Whitelist (`einheit`) aufs Blatt, in WorkFloh und BLP-Texte.
 - **Die Gegenprobe gibt Klon-Pfade weiter** (`BLP_KLON`, `WORKFLOH_KLON`, `TOMYS_KLON`) — ohne sie wären Parser- und
