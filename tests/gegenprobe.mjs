@@ -163,6 +163,12 @@ const FAELLE = [
     an: [["datenschutz.html", "das Modell vom Server des Anbieters dieser App (family-projekt.de, Hetzner, Deutschland; Stand 2026-10-13),", "das Modell"]] },
   { name: "MODELL: Modul 03 in alter Fassung", probe: K, erwartet: "PIN: Sage-Module 03/04",
     an: [["vendor/sbkim/03_embedding.js", "  var MODEL_ROOT_SETTING = \"SBKIM_MODEL_ROOT\";", "  var MODEL_ROOT_SETTING = \"SBKIM_MODEL_ROOT_X\";"]] },
+  { name: "QUELLE: Leiste nennt die Quelle nicht", probe: B, erwartet: "BEDEUTUNG: die Leiste sagt, woher das Modell kam",
+    an: [["assets/app.js", "\" Produkte\" + bedQuelle().text", "\" Produkte\""]] },
+  { name: "QUELLE: Hugging Face wird als eigener Server ausgegeben", probe: B, erwartet: "BEDEUTUNG: Hugging Face und die eigene Adresse",
+    an: [["assets/app.js", "if (src === \"remote\") return { kurz: \"huggingface\", text: \" · Modell von Hugging Face\" };", ""]] },
+  { name: "QUELLE: ohne Angabe wird etwas behauptet", probe: B, erwartet: "BEDEUTUNG: Hugging Face und die eigene Adresse",
+    an: [["assets/app.js", "if (src !== \"local\") return { kurz: \"unbekannt\", text: \"\" };", "if (src !== \"local\") return { kurz: \"huggingface\", text: \" · Modell von Hugging Face\" };"]] },
   /* ── Handelsware (Klaus 2026-10-13) ── */
   { name: "HANDEL: Handlungskosten fallen weg", probe: K, erwartet: "HANDEL: Handrechnung",
     an: [["assets/kern/kalkulation.js", "hk = rund(bez * (+s.handlungskostenPct || 0) / 100)", "hk = 0"]] },
