@@ -720,8 +720,8 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
     ok("MODELL: die App holt das Modell von family-projekt.de (window.SBKIM_MODEL_ROOT vor dem Laden von Modul 03)",
       /MODELL_SERVER = "https:\/\/family-projekt\.de\/models\/"/.test(app) && app.indexOf("window.SBKIM_MODEL_ROOT = MODELL_SERVER") > -1 &&
       app.indexOf("window.SBKIM_MODEL_ROOT = MODELL_SERVER") < app.indexOf('skriptLaden("vendor/sbkim/03_embedding.js'));
-    ok("MODELL: Frage vor dem Laden und Datenschutz nennen family-projekt.de und 118 MB (nicht ~30 MB)",
-      /family-projekt\.de[^"]*Hugging Face/.test(app) && /118 MB/.test(app) && !/~30 MB/.test(app) && /das Modell vom Server des Anbieters dieser App \(family-projekt\.de/.test(ds) && /118 MB/.test(ds));
+    ok("MODELL: Frage vor dem Laden und Datenschutz nennen family-projekt.de und rund 135 MB (nicht ~30 MB, nicht nur die 118 MB der ONNX-Datei)",
+      /family-projekt\.de[^"]*Hugging Face/.test(app) && /rund 135 MB/.test(app) && !/118 MB/.test(app) && !/~30 MB/.test(app) && /das Modell vom Server des Anbieters dieser App \(family-projekt\.de/.test(ds) && /rund 135 MB/.test(ds));
   }
   ok("PIN: Sage-Module 03/04 sind byte-gleich (03 aus Sage #1071, 04 über Workflow PDF)", sha("vendor/sbkim/03_embedding.js") === "a6ac64d7536da3fa5cc426d0f7db9440fdaf5ab4460f0bdc66a10eb8203b1b68" &&
     sha("vendor/sbkim/04_match.js") === "5de95923c3f62f141e94f576feebcac0eecc55c60e40b564540a56420436a4cd");

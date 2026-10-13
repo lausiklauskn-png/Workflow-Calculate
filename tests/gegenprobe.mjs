@@ -158,7 +158,7 @@ const FAELLE = [
   { name: "MODELL: Server-Adresse fehlt (im Browser)", probe: B, erwartet: "BEDEUTUNG: Modul 03 bekommt den eigenen Server",
     an: [["assets/app.js", "    if (!window.SBKIM_MODEL_ROOT) window.SBKIM_MODEL_ROOT = MODELL_SERVER;\n", ""]] },
   { name: "MODELL: alter Satz ~30 MB / nur Hugging Face", probe: K, erwartet: "MODELL: Frage vor dem Laden und Datenschutz",
-    an: [["assets/app.js", "einmalig wird ein Sprachmodell (118 MB) geladen — von family-projekt.de, nur wenn das nicht antwortet von Hugging Face; das Programm dazu von jsDelivr.", "einmalig wird ein Sprachmodell (~30 MB) aus dem Netz geladen (jsDelivr, Hugging Face)."]] },
+    an: [["assets/app.js", "einmalig wird ein Sprachmodell (rund 135 MB) geladen — von family-projekt.de, nur wenn das nicht antwortet von Hugging Face; das Programm dazu von jsDelivr.", "einmalig wird ein Sprachmodell (~30 MB) aus dem Netz geladen (jsDelivr, Hugging Face)."]] },
   { name: "MODELL: Datenschutz nennt den Server nicht", probe: K, erwartet: "MODELL: Frage vor dem Laden und Datenschutz",
     an: [["datenschutz.html", "das Modell vom Server des Anbieters dieser App (family-projekt.de, Hetzner, Deutschland; Stand 2026-10-13),", "das Modell"]] },
   { name: "MODELL: Modul 03 in alter Fassung", probe: K, erwartet: "PIN: Sage-Module 03/04",
