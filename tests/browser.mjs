@@ -774,7 +774,9 @@ try {
     ok("SPRACHE: der Text steht schon beim Sprechen im Feld, die Karten folgen", (await q.inputValue("#suche-feld")) === "5 Schilder aus Alu" && await q.locator('[data-su-karte="schild"]').count() === 1 && await q.locator(".su-form [data-wfs]").count() === 1);
     await q.evaluate(() => window.__sag("5 Schilder aus Alu, 40 x 30 cm", true)); await tippe(q, ".wfs-fertig", "■ Stopp"); await q.waitForTimeout(120);
     ok("SPRACHE: Laufbalken im Suchfeld, Stopp beendet", await q.evaluate(() => document.querySelector("[data-wfs]").hidden));
-    /* 🧠 Bedeutung — gestelltes Modell (Modul 03/04 haben dieselbe Oberfläche), echte Rangfolge aus bedeutung.js */
+    /* 🧠 Bedeutung — gestelltes Modell (Modul 03/04 haben dieselbe Oberfläche), echte Rangfolge aus bedeutung.js.
+       Erst warten, bis die SBKIM-Kette durch ist: sie lädt das echte Modul 03 und überschriebe den Stub. */
+    await q.waitForFunction(() => window.WC_KNOTEN_BEREIT, null, { timeout: 20000 }).catch(() => {});
     await q.evaluate(() => {
       const D = ["tasse|henkel|kaffee|becher", "schild|alu|platte", "kugelschreiber|stift|kuli", "shirt|textil", "stick|polo|aufn"];
       const vek = (t) => { t = String(t).toLowerCase(); const v = D.map((d) => (new RegExp(d).test(t) ? 1 : 0)); v.push(0.2); const n = Math.hypot(...v); return Float32Array.from(v.map((x) => x / n)); };
@@ -863,6 +865,58 @@ try {
     await q.setInputFiles("#import-datei", { name: "angebote.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("PK") });
     ok("IMPORT: Excel wird nicht still verworfen — „als CSV speichern“", /CSV/.test(await q.locator("[data-import-fehler]").textContent().catch(() => "")));
     await d.ctx.close();
+  }
+
+  /* ── KNOTEN: SBKIM-Endknoten in der Kopfleiste (2026-10-13) ── */
+  {
+    const k = await seite(1200);
+    const fremd = [], ws = [], n03 = [];
+    const eigen = new URL(url).origin;
+    k.p.on("request", (r) => { const u = r.url(); if (!u.startsWith(eigen) && !u.startsWith("data:") && !u.startsWith("blob:")) fremd.push(u); if (/03_embedding\.js/.test(u)) n03.push(u); });
+    k.p.on("websocket", (w) => ws.push(w.url()));
+    await k.p.goto(url); await k.p.waitForSelector("body[data-bereit]");
+    await k.p.waitForFunction(() => window.WC_KNOTEN_BEREIT, null, { timeout: 20000 }).catch(() => {});
+    const lage = await k.p.evaluate(() => ({
+      lampen: ["lamp-alive", "lamp-traffic", "lamp-fremd"].every((id) => document.getElementById(id)),
+      siegel: !!document.querySelector("#siegel-platz #sbkim-siegel-badge"),
+      mycel: !!document.querySelector("[data-sbkim-mycel-platz] #sbkim-rdv-btn"),
+      embed: typeof window.SbkimEmbedding, match: typeof window.SbkimMatch, root: window.SBKIM_MODEL_ROOT, suffix: window.SBKIM_DB_SUFFIX
+    }));
+    ok("KNOTEN: drei Lampen in der Kopfleiste", lage.lampen);
+    ok("KNOTEN: das Siegel-Abzeichen hängt im Siegel-Platz", lage.siegel, lage);
+    ok("KNOTEN: der Mycel-Knopf hängt im Mycel-Platz der Leiste", lage.mycel, lage);
+    ok("KNOTEN: Modul 03/04 stehen bereit, Modell vom eigenen Server, Schublade workflowcalculate", lage.embed === "object" && lage.match === "object" && lage.root === "https://family-projekt.de/models/" && lage.suffix === "workflowcalculate", lage);
+    /* derselbe Lader wie die Suche: holt die Suche danach Modul 03, darf es keine zweite Anfrage geben */
+    await k.p.evaluate(() => window.WC_skriptEinmal && window.WC_skriptEinmal("vendor/sbkim/03_embedding.js?v=2"));
+    await k.p.waitForTimeout(150);
+    ok("KNOTEN: Modul 03 wird genau EINMAL angefordert, auch wenn die Suche es danach braucht", n03.length === 1, n03);
+    ok("KNOTEN: beim Laden geht kein Websocket hinaus", ws.length === 0, ws);
+    ok("KNOTEN: beim Laden geht keine Anfrage an einen fremden Rechner", fremd.length === 0, fremd);
+    /* die Netz-Box: Mycel-Blase öffnen, sie muss darin stehen — und es verbindet sich trotzdem nichts */
+    await tippe(k.p, "#sbkim-rdv-btn", "Mycel-Knopf");
+    await k.p.waitForSelector("[data-sbkim-netz-box]", { timeout: 5000 }).catch(() => {});
+    ok("KNOTEN: die Mycel-Blase trägt die Box „Netz“", await k.p.locator("#sbkim-rdv-panel [data-sbkim-netz-box]").count() === 1 && await k.p.locator("[data-sbkim-netz-box]").first().isVisible());
+    ok("KNOTEN: der Gerätename hängt im Verbinden-Panel", await k.p.locator("#sbkim-rdv-panel [data-sbkim-geraetename]").count() >= 1);
+    ok("KNOTEN: Öffnen der Blase verbindet nicht von selbst", ws.length === 0, ws);
+    await k.p.emulateMedia({ media: "print" });
+    ok("KNOTEN: im Druck (Kundenblatt) ist die Netzleiste verborgen", await k.p.evaluate(() => getComputedStyle(document.getElementById("netzleiste")).display === "none"));
+    await k.ctx.close();
+    for (const b of [320, 360, 380]) {
+      const h = await seite(b);
+      await h.p.goto(url); await h.p.waitForSelector("body[data-bereit]");
+      await h.p.waitForFunction(() => window.WC_KNOTEN_BEREIT, null, { timeout: 20000 }).catch(() => {});
+      const m = await h.p.evaluate(() => {
+        const sicht = (id) => { const e = document.getElementById(id); if (!e) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.right <= innerWidth && e.checkVisibility(); };
+        const kopf = document.querySelector("header") || document.querySelector(".kopf");
+        return { quer: document.documentElement.scrollWidth <= innerWidth + 1, zurueck: sicht("seite-zurueck"), handel: sicht("handel-knopf"), lampen: sicht("lampen"), kopfH: kopf ? Math.round(kopf.getBoundingClientRect().height) : -1 };
+      });
+      ok("KNOTEN: Kopfleiste passt bei " + b + " px — kein Querlaufen, ← Zurück, 🛒 und Lampen erreichbar, eine Zeile", m.quer && m.zurueck && m.handel && m.lampen && m.kopfH > 0 && m.kopfH <= 64, m);
+      await tippe(h.p, "#lampen", "Lampen");
+      await tippe(h.p, "#sbkim-rdv-btn", "Mycel-Knopf am Handy");
+      await h.p.waitForSelector("[data-sbkim-netz-box]", { timeout: 5000 }).catch(() => {});
+      ok("KNOTEN: am Handy (" + b + " px) erreicht man die Box „Netz“ über die Lampen", await h.p.locator("[data-sbkim-netz-box]").count() === 1);
+      await h.ctx.close();
+    }
   }
 
   /* ── Handy: keine waagerechte Rollbahn ── */

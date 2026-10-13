@@ -492,6 +492,8 @@
      neue Frage das Produkt auch über frühere Fragen. Die Vektoren liegen nur im Speicher (wenige Dutzend, Sekunden). ── */
   var BED = { zustand: "aus", prozent: null, geladen: 0, gesamt: 0, ordnet: { i: 0, n: 0 }, fehler: "", vek: new Map(), dateien: new Map(), sig: "", erg: null, frage: "" };
   function skriptLaden(src) {
+    /* Derselbe Lader wie die SBKIM-Kette (assets/sbkim-init.js): Modul 03/04 werden nie zweimal geholt. */
+    if (typeof window.WC_skriptEinmal === "function") return window.WC_skriptEinmal(src);
     return new Promise(function (res, rej) { var el = document.createElement("script"); el.src = src; el.onload = function () { res(); }; el.onerror = function () { rej(new Error("Datei fehlt: " + src)); }; document.head.appendChild(el); });
   }
   function bedTexte() {
