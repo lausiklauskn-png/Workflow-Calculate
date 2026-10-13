@@ -274,7 +274,9 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   ok("SICHERUNG: zu kurzes Passwort wird abgewiesen", await SI.verschliessen("kurz", inhalt).then(() => false, (e) => e.message === "kurz"));
   const d = await SI.verschliessen("ein-langes-passwort", inhalt, "2026-10-12T10:00:00Z");
   const t = JSON.stringify(d);
-  ok("SICHERUNG: kein Klartext in der Datei", d.art === SI.ART && !/GEHEIM|AN-2026|K-1/.test(t));
+  /* Gesucht wird nach Formen, die NUR im Klartext stehen können: das Paket ist base64url (mit „-“), dort tauchte
+     „K-1“ gelegentlich zufällig auf — die Probe flackerte (gemessen 2026-10-13, zweimal an einem Tag). */
+  ok("SICHERUNG: kein Klartext in der Datei", d.art === SI.ART && !/GEHEIM-KUNDE|"AN-2026-0001"|"K-1"/.test(t) && /GEHEIM-KUNDE/.test(JSON.stringify(inhalt.kunden)));
   ok("SICHERUNG: falsches Passwort → „passwort“", await SI.oeffnen("falsches-passwort", d).then(() => false, (e) => e.message === "passwort"));
   const o = await SI.oeffnen("ein-langes-passwort", d);
   const bytes = new Uint8Array(await o.bilder[0].blob.arrayBuffer());

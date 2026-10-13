@@ -332,7 +332,8 @@ details.weg-details summary{cursor:pointer;color:var(--intern)}
 .su-alt{display:flex;gap:10px;align-items:baseline;text-align:left;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:6px 10px;cursor:pointer;font:inherit;font-size:.88rem}
 .su-alt span.gedaempft{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .su-aehnlich{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.su-bed{margin-top:14px}
+.su-bed{margin:6px 0 8px}
+.su-bed .fortschritt{margin-top:6px;max-width:520px}
 @media (max-width:640px){
   .su-titel{font-size:1.1rem}
   .su-netto{font-size:1.3rem}
