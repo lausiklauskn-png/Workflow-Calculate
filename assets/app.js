@@ -523,6 +523,15 @@
       .then(function () { BED.zustand = "bereit"; suErgebnis(); },
         function (e) { BED.zustand = "fehler"; BED.fehler = String((e && e.message) || e).slice(0, 160); suErgebnis(); });
   }
+  /* Woher kam das Modell? (Klaus 2026-10-13: „Ja“ — sonst sieht man es am Tablet nicht) */
+  function bedQuelle() {
+    var E = window.SbkimEmbedding, src = E && typeof E.getModelSource === "function" ? E.getModelSource() : null;
+    if (src === "remote") return { kurz: "huggingface", text: " · Modell von Hugging Face" };
+    if (src !== "local") return { kurz: "unbekannt", text: "" };
+    var root = typeof E.getModelRoot === "function" ? String(E.getModelRoot() || "") : "", m = /^https:\/\/([^\/]+)/.exec(root);
+    return m ? { kurz: m[1], text: " · Modell von " + m[1] } : { kurz: "eigen", text: " · Modell von dieser Adresse" };
+  }
+  window.__wcBedQuelle = bedQuelle; /* Probe-Brücke */
   function suBedeutungLeiste() {
     var z = BED.zustand, l = h("div", { class: "su-bed", "data-bed-zustand": z });
     if (z === "aus") l.append(knopf("🧠 Auch nach Bedeutung suchen", function () {
@@ -530,7 +539,7 @@
       bedStarten(); }, "klein", { id: "bed-an" }));
     else if (z === "laedt") l.append(h("span", { class: "klein" }, "🧠 Modell lädt … ", h("b", { "data-bed-prozent": "", text: BED.prozent == null ? "…" : Math.round(BED.prozent) + " %" })));
     else if (z === "ordnet") l.append(h("span", { class: "klein", text: "🧠 ordnet die Produkte ein …" }));
-    else if (z === "bereit") l.append(h("span", { class: "klein gedaempft", text: "🧠 Bedeutung an · " + BED.vek.size + " Produkte" }));
+    else if (z === "bereit") l.append(h("span", { class: "klein gedaempft", "data-bed-quelle": bedQuelle().kurz, text: "🧠 Bedeutung an · " + BED.vek.size + " Produkte" + bedQuelle().text }));
     else l.append(h("span", { class: "klein", text: "🧠 ging nicht: " + BED.fehler + " " }), knopf("↻ Nochmal", bedStarten, "klein"));
     return l;
   }

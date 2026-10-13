@@ -779,7 +779,8 @@ try {
       const D = ["tasse|henkel|kaffee|becher", "schild|alu|platte", "kugelschreiber|stift|kuli", "shirt|textil", "stick|polo|aufn"];
       const vek = (t) => { t = String(t).toLowerCase(); const v = D.map((d) => (new RegExp(d).test(t) ? 1 : 0)); v.push(0.2); const n = Math.hypot(...v); return Float32Array.from(v.map((x) => x / n)); };
       window.SbkimEmbedding = { init: () => { window.dispatchEvent(new CustomEvent("sbkim:embedding-progress", { detail: { status: "progress", file: "m.onnx", loaded: 5, total: 10 } })); return Promise.resolve(); },
-        embedPassageBatch: (l) => Promise.resolve(l.map(vek)), embedQuery: (t) => Promise.resolve(vek(t)) };
+        embedPassageBatch: (l) => Promise.resolve(l.map(vek)), embedQuery: (t) => Promise.resolve(vek(t)),
+        getModelSource: () => "local", getModelRoot: () => window.SBKIM_MODEL_ROOT };
       window.SbkimMatch = { match: (a, b) => a.reduce((s, x, i) => s + x * b[i], 0) };
     });
     let frage = "";
@@ -789,6 +790,14 @@ try {
     await q.waitForSelector('[data-bed-zustand="bereit"]', { timeout: 10000 }).catch(() => {});
     ok("BEDEUTUNG: nur auf Knopfdruck, vorher steht da, was woher geladen wird", /family-projekt\.de/.test(frage) && /Hugging Face/.test(frage) && /bleiben auf dem Gerät/.test(frage), frage);
     ok("BEDEUTUNG: Modul 03 bekommt den eigenen Server als Modell-Ort", await q.evaluate(() => window.SBKIM_MODEL_ROOT) === "https://family-projekt.de/models/");
+    ok("BEDEUTUNG: die Leiste sagt, woher das Modell kam („Modell von family-projekt.de“)",
+      /Bedeutung an · \d+ Produkte · Modell von family-projekt\.de/.test(await q.textContent('[data-bed-zustand="bereit"]').catch(() => "")));
+    const quelle = await q.evaluate(() => { const E = window.SbkimEmbedding, r = [];
+      E.getModelSource = () => "remote"; r.push(bedQuelleText()); E.getModelSource = () => "local"; E.getModelRoot = () => "/models/"; r.push(bedQuelleText());
+      delete E.getModelSource; r.push(bedQuelleText()); E.getModelSource = () => "local"; E.getModelRoot = () => window.SBKIM_MODEL_ROOT; return r;
+      function bedQuelleText() { return window.__wcBedQuelle ? window.__wcBedQuelle().text : "?"; } });
+    ok("BEDEUTUNG: Hugging Face und die eigene Adresse werden benannt, ohne Angabe steht nichts Erfundenes da",
+      quelle[0] === " · Modell von Hugging Face" && quelle[1] === " · Modell von dieser Adresse" && quelle[2] === "", quelle);
     await q.fill("#suche-feld", "Henkelgefäß für den Kaffee"); await q.dispatchEvent("#suche-feld", "input");
     await q.waitForSelector('[data-su-bed-treffer="tasse"]', { timeout: 5000 }).catch(() => {});
     ok("BEDEUTUNG: ohne Wort-Treffer findet die Bedeutung die Tasse („ähnlich“ unter den Karten)", await q.locator('[data-su-bed-treffer="tasse"]').count() === 1);
