@@ -713,7 +713,15 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   const SU = WC.suche, T = WC.tabelle;
   ok("PIN: suche.js · bedeutung.js · sprechen.js sind byte-gleich mit Workflow PDF", sha("assets/wfpdf/suche.js") === "df5e2cb9473d24f630ead34706281d666e8644c0831f3c7f94300cf7607380e6" &&
     sha("assets/wfpdf/bedeutung.js") === "749cea778b0bcc9bb86c733827aa7467a8468286cf78f22f7f189f465223ac7d" && sha("assets/wfpdf/sprechen.js") === "9e4feb404f9b729fa12e6e5aa5d7a87192e9e89595585504f22669b90c64da52");
-  ok("PIN: Sage-Module 03/04 sind byte-gleich (über Workflow PDF)", sha("vendor/sbkim/03_embedding.js") === "e4bb8bd6a237914e7841cab5165912daf636adf0ee90c5d4ffd0c74cc5d706e5" &&
+  {
+    const app = readFileSync(join(WURZEL, "assets/app.js"), "utf8"), ds = readFileSync(join(WURZEL, "datenschutz.html"), "utf8");
+    ok("MODELL: die App holt das Modell von family-projekt.de (window.SBKIM_MODEL_ROOT vor dem Laden von Modul 03)",
+      /MODELL_SERVER = "https:\/\/family-projekt\.de\/models\/"/.test(app) && app.indexOf("window.SBKIM_MODEL_ROOT = MODELL_SERVER") > -1 &&
+      app.indexOf("window.SBKIM_MODEL_ROOT = MODELL_SERVER") < app.indexOf('skriptLaden("vendor/sbkim/03_embedding.js'));
+    ok("MODELL: Frage vor dem Laden und Datenschutz nennen family-projekt.de und 118 MB (nicht ~30 MB)",
+      /family-projekt\.de[^"]*Hugging Face/.test(app) && /118 MB/.test(app) && !/~30 MB/.test(app) && /das Modell vom Server des Anbieters dieser App \(family-projekt\.de/.test(ds) && /118 MB/.test(ds));
+  }
+  ok("PIN: Sage-Module 03/04 sind byte-gleich (03 aus Sage #1071, 04 über Workflow PDF)", sha("vendor/sbkim/03_embedding.js") === "a6ac64d7536da3fa5cc426d0f7db9440fdaf5ab4460f0bdc66a10eb8203b1b68" &&
     sha("vendor/sbkim/04_match.js") === "5de95923c3f62f141e94f576feebcac0eecc55c60e40b564540a56420436a4cd");
   const kat = kopie(WC.START); kat.kleinmenge = Object.assign({}, A.KLEINMENGE_VORGABE);
   Object.keys(WC.STARTKATALOGE).forEach((gid) => WC.katalog.gebietHinzufuegen(kat, WC.STARTKATALOGE[gid]));

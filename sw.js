@@ -1,11 +1,11 @@
 /* Offline-Vorrat von Workflow Calculate. Wer eine Datei aus CORE ändert, erhöht CACHE_VERSION
    und ruft node tools/cache-stand.mjs — sonst liefert der Worker die alte Fassung weiter.
    Fremde Adressen fasst er nicht an (die App ruft keine auf). */
-const CACHE_VERSION = "workflow-calculate-v32";
+const CACHE_VERSION = "workflow-calculate-v33";
 const CORE = ["./", "index.html", "manifest.json", "assets/app.css?v=5",
   "assets/kern/geld.js?v=1", "assets/kern/mengen.js?v=1", "assets/kern/kalkulation.js?v=5", "assets/kern/versand.js?v=1", "assets/kern/markt.js?v=2",
   "assets/kern/katalog.js?v=3", "assets/kern/angebot.js?v=6", "assets/kern/aussen.js?v=4", "assets/kern/uebergabe.js?v=4", "assets/schluesseltresor.js?v=1", "assets/kern/sicherung.js?v=1", "assets/kern/nachkalk.js?v=3", "assets/kern/recherche.js?v=1", "assets/kern/mail.js?v=1", "assets/kern/unterlagen.js?v=2", "assets/kern/anfrage.js?v=4", "modules/25_pseudonym.js?v=1", "assets/kern/pruefer-mail.js?v=1", "assets/kern/ki-anfrage.js?v=1", "assets/wfpdf/suche.js?v=1", "assets/wfpdf/bedeutung.js?v=1", "assets/wfpdf/sprechen.js?v=1", "assets/kern/suche.js?v=2", "assets/kern/tabelle.js?v=1",
-  "assets/daten/werbetechnik.js?v=2", "assets/daten/stickerei.js?v=1", "assets/daten/dienstleistung.js?v=1", "assets/daten/handelsware.js?v=2", "assets/daten/laser.js?v=1", "assets/daten/beispiel-angebote.js?v=2", "assets/daten/bilder.js?v=3", "assets/daten/beispiel-fragen.js?v=1", "assets/app.js?v=14", "assets/installieren.js",
+  "assets/daten/werbetechnik.js?v=2", "assets/daten/stickerei.js?v=1", "assets/daten/dienstleistung.js?v=1", "assets/daten/handelsware.js?v=2", "assets/daten/laser.js?v=1", "assets/daten/beispiel-angebote.js?v=2", "assets/daten/bilder.js?v=3", "assets/daten/beispiel-fragen.js?v=1", "assets/app.js?v=15", "assets/installieren.js",
   "impressum.html", "datenschutz.html", "icons/favicon-32.png", "icons/favicon-48.png", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE_VERSION).then((c) =>

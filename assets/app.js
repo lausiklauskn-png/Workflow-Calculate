@@ -509,10 +509,14 @@
       return p.then(function () { return window.SbkimEmbedding.embedPassageBatch(t.get(id)); }).then(function (vs) { vek.set(id, { st: t.get(id).map(function (s, i) { return { text: s, v: vs[i] }; }) }); });
     }, Promise.resolve()).then(function () { BED.vek = vek; BED.sig = sig; BED.erg = null; BED.frage = ""; });
   }
+  var MODELL_SERVER = "https://family-projekt.de/models/";
   function bedStarten() {
     BED.zustand = "laedt"; BED.fehler = ""; BED.dateien = new Map(); suErgebnis();
     if (!BED.lauscher) { BED.lauscher = function (ev) { if (BED.zustand !== "laedt") return; BED.prozent = WFP.Bedeutung.ladeStand(BED.dateien, (ev && ev.detail) || {}).prozent; var b = document.querySelector("[data-bed-prozent]"); if (b) b.textContent = BED.prozent == null ? "…" : Math.round(BED.prozent) + " %"; }; window.addEventListener("sbkim:embedding-progress", BED.lauscher); }
-    Promise.resolve().then(function () { return window.SbkimEmbedding ? null : skriptLaden("vendor/sbkim/03_embedding.js?v=1"); })
+    /* Modell vom eigenen Server (Klaus 2026-10-13, gemessen: family-projekt.de/models/ liefert es mit CORS);
+       antwortet er nicht, nimmt Modul 03 selbst Hugging Face */
+    if (!window.SBKIM_MODEL_ROOT) window.SBKIM_MODEL_ROOT = MODELL_SERVER;
+    Promise.resolve().then(function () { return window.SbkimEmbedding ? null : skriptLaden("vendor/sbkim/03_embedding.js?v=2"); })
       .then(function () { return window.SbkimMatch ? null : skriptLaden("vendor/sbkim/04_match.js?v=1"); })
       .then(function () { return window.SbkimEmbedding.init(); })
       .then(function () { BED.zustand = "ordnet"; suErgebnis(); return bedEinordnen(); })
@@ -522,7 +526,7 @@
   function suBedeutungLeiste() {
     var z = BED.zustand, l = h("div", { class: "su-bed", "data-bed-zustand": z });
     if (z === "aus") l.append(knopf("🧠 Auch nach Bedeutung suchen", function () {
-      if (!confirm("Suche nach Bedeutung: einmalig wird ein Sprachmodell (~30 MB) aus dem Netz geladen (jsDelivr, Hugging Face). Deine Angebote, Kunden und Fragen bleiben auf dem Gerät. Laden?")) return;
+      if (!confirm("Suche nach Bedeutung: einmalig wird ein Sprachmodell (118 MB) geladen — von family-projekt.de, nur wenn das nicht antwortet von Hugging Face; das Programm dazu von jsDelivr. Deine Angebote, Kunden und Fragen bleiben auf dem Gerät. Laden?")) return;
       bedStarten(); }, "klein", { id: "bed-an" }));
     else if (z === "laedt") l.append(h("span", { class: "klein" }, "🧠 Modell lädt … ", h("b", { "data-bed-prozent": "", text: BED.prozent == null ? "…" : Math.round(BED.prozent) + " %" })));
     else if (z === "ordnet") l.append(h("span", { class: "klein", text: "🧠 ordnet die Produkte ein …" }));
