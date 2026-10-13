@@ -787,7 +787,8 @@ try {
     await q.fill("#suche-feld", "Henkelgefäß fürs Büro"); await q.dispatchEvent("#suche-feld", "input");
     await tippe(q, "#bed-an", "🧠 Bedeutung");
     await q.waitForSelector('[data-bed-zustand="bereit"]', { timeout: 10000 }).catch(() => {});
-    ok("BEDEUTUNG: nur auf Knopfdruck, vorher steht da, was aus dem Netz kommt", /aus dem Netz/.test(frage) && /bleiben auf dem Gerät/.test(frage), frage);
+    ok("BEDEUTUNG: nur auf Knopfdruck, vorher steht da, was woher geladen wird", /family-projekt\.de/.test(frage) && /Hugging Face/.test(frage) && /bleiben auf dem Gerät/.test(frage), frage);
+    ok("BEDEUTUNG: Modul 03 bekommt den eigenen Server als Modell-Ort", await q.evaluate(() => window.SBKIM_MODEL_ROOT) === "https://family-projekt.de/models/");
     await q.fill("#suche-feld", "Henkelgefäß für den Kaffee"); await q.dispatchEvent("#suche-feld", "input");
     await q.waitForSelector('[data-su-bed-treffer="tasse"]', { timeout: 5000 }).catch(() => {});
     ok("BEDEUTUNG: ohne Wort-Treffer findet die Bedeutung die Tasse („ähnlich“ unter den Karten)", await q.locator('[data-su-bed-treffer="tasse"]').count() === 1);

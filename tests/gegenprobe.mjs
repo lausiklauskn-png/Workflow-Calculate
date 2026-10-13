@@ -152,6 +152,17 @@ const FAELLE = [
     an: [["assets/app.css", "main{padding:16px;max-width:none;margin:0}", "main{padding:16px;max-width:1400px;margin:0 auto}"]] },
   { name: "BEISPIEL: Hochzeit fehlt", probe: K, erwartet: "BEISPIEL: statt Geburtstag",
     an: [["assets/daten/beispiel-angebote.js", '{ bid: "hochzeit",', '{ bid: "geburtstag",']] },
+  /* ── Modell vom eigenen Server (Klaus 2026-10-13) ── */
+  { name: "MODELL: Server-Adresse fehlt", probe: K, erwartet: "MODELL: die App holt das Modell von family-projekt.de",
+    an: [["assets/app.js", "    if (!window.SBKIM_MODEL_ROOT) window.SBKIM_MODEL_ROOT = MODELL_SERVER;\n", ""]] },
+  { name: "MODELL: Server-Adresse fehlt (im Browser)", probe: B, erwartet: "BEDEUTUNG: Modul 03 bekommt den eigenen Server",
+    an: [["assets/app.js", "    if (!window.SBKIM_MODEL_ROOT) window.SBKIM_MODEL_ROOT = MODELL_SERVER;\n", ""]] },
+  { name: "MODELL: alter Satz ~30 MB / nur Hugging Face", probe: K, erwartet: "MODELL: Frage vor dem Laden und Datenschutz",
+    an: [["assets/app.js", "einmalig wird ein Sprachmodell (118 MB) geladen — von family-projekt.de, nur wenn das nicht antwortet von Hugging Face; das Programm dazu von jsDelivr.", "einmalig wird ein Sprachmodell (~30 MB) aus dem Netz geladen (jsDelivr, Hugging Face)."]] },
+  { name: "MODELL: Datenschutz nennt den Server nicht", probe: K, erwartet: "MODELL: Frage vor dem Laden und Datenschutz",
+    an: [["datenschutz.html", "das Modell vom Server des Anbieters dieser App (family-projekt.de, Hetzner, Deutschland; Stand 2026-10-13),", "das Modell"]] },
+  { name: "MODELL: Modul 03 in alter Fassung", probe: K, erwartet: "PIN: Sage-Module 03/04",
+    an: [["vendor/sbkim/03_embedding.js", "  var MODEL_ROOT_SETTING = \"SBKIM_MODEL_ROOT\";", "  var MODEL_ROOT_SETTING = \"SBKIM_MODEL_ROOT_X\";"]] },
   /* ── Handelsware (Klaus 2026-10-13) ── */
   { name: "HANDEL: Handlungskosten fallen weg", probe: K, erwartet: "HANDEL: Handrechnung",
     an: [["assets/kern/kalkulation.js", "hk = rund(bez * (+s.handlungskostenPct || 0) / 100)", "hk = 0"]] },
