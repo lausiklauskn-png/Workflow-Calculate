@@ -547,7 +547,7 @@
   function suBedeutungLeiste() {
     var z = BED.zustand, l = h("div", { class: "su-bed", "data-bed-zustand": z });
     if (z === "aus") l.append(knopf("🧠 Auch nach Bedeutung suchen", function () {
-      if (!confirm("Suche nach Bedeutung: einmalig wird ein Sprachmodell (118 MB) geladen — von family-projekt.de, nur wenn das nicht antwortet von Hugging Face; das Programm dazu von jsDelivr. Deine Angebote, Kunden und Fragen bleiben auf dem Gerät. Laden?")) return;
+      if (!confirm("Suche nach Bedeutung: einmalig wird ein Sprachmodell (rund 135 MB) geladen — von family-projekt.de, nur wenn das nicht antwortet von Hugging Face; das Programm dazu von jsDelivr. Deine Angebote, Kunden und Fragen bleiben auf dem Gerät. Laden?")) return;
       bedStarten(); }, "klein", { id: "bed-an" }));
     else if (z === "laedt" || z === "ordnet") {
       l.append(z === "laedt" ? h("span", { class: "klein" }, "🧠 Modell lädt … ", h("b", { "data-bed-prozent": "" }), h("span", { class: "gedaempft", "data-bed-mb": "" }))
