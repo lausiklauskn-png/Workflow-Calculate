@@ -85,7 +85,11 @@ Fremdfertigung (2026-10-12): am Verfahren `vorhanden` (fehlt = da), an der Vorla
   `einkaufsprodukt` steht **nur** dort — nicht in der Produktwahl und nicht unter Katalog → Produktvorlagen (Löschen/Kopieren dort
   arbeitet trotzdem auf der GANZEN Liste). Rechnung: `WC.kalk.position` → `handelPosition` = `handel()` auf den Einkauf (Handlungskosten,
   Gewinn, Kundenklasse); **kein Versandposten** (`angebot.rechne` überspringt Einkaufsprodukte), Skonto/Rabatt wirken hier nicht.
-  **Zwischenmengen werden nicht geschätzt** — ohne Einkauf für genau diese Menge ist die Position offen. Mehrere Einkäufe je Menge:
+  **Staffel** (Klaus 2026-10-13, Tablet: „innerhalb der Staffelung steht der Preis ja fest“): ein Einkauf gilt AB seiner Menge; dazwischen
+  zählt der Stückpreis der nächstkleineren Staffel × Menge (20 Tassen = 89,90 €/10 × 20 = 179,80 €; der Versand im Einkauf wächst dabei
+  mit). Gerechnet, nicht geschätzt — der Rechenweg nennt die Staffel. Unter der kleinsten Staffel bleibt die Position offen; steht für die
+  Menge selbst eine Zeile OHNE Preis da, auch („Einkaufspreis fehlt“, nie still aus der kleineren Staffel).
+  ⚠ Tafel-Evolution: bis dahin war jede Zwischenmenge offen („Zwischenmengen werden nicht geschätzt“). Mehrere Einkäufe je Menge:
   der günstigste zählt. Lieferant, Link, Einkaufspreis gehen nie hinaus (Prüfwert `LIEFERANT-PRUEFWORT`, 123,45 €).
   ⚠ **Halbe Einkaufszeilen gehören in `katalog.hinweise`, nie in `pruefe`**: ein Katalog, der `pruefe` nicht besteht, wird beim Laden
   still durch den Startkatalog ersetzt. Links nur über `katalog.sichereAdresse` (nur https).
@@ -119,7 +123,7 @@ Fremdfertigung (2026-10-12): am Verfahren `vorhanden` (fehlt = da), an der Vorla
   wünscht“ findet Becker im Kundenstamm still. **Lernen** (Klaus: „soll sich selbst verbessern mit jeder Frage“): Menge ändern,
   Zusammensetzung öffnen, „＋ Angebot“, ✓ = passt; ✕ = passt nicht. Je Frage und Produkt einmal je Sitzung. **Bidirektional**
   (Klaus: „beides“): Frage → Produkt, und an der Zusammensetzung Produkt → gelernte Fragen, Beispiel-Fragen, Angebote; die Bedeutungs-
-  suche ordnet jede Vorlage MIT ihren gelernten Fragen ein. Ein Zukauf ohne Einkauf für genau die Menge bekommt halbe Punkte
+  suche ordnet jede Vorlage MIT ihren gelernten Fragen ein. Ein Zukauf unter der kleinsten Staffel bekommt halbe Punkte
   (sonst stünde „Kugelschreiber (Zukauf, nur 500)“ vor dem eigenen Kuli). Gezeigt: bis 4 Karten ab halber Punktzahl des besten;
   Produkte aus noch nicht geholten Gebieten klein als „Auch möglich: … ＋ Gebiet“.
   ⚠ Punkte (1 je Wort, 0,6 Teilwort, +0,5 erkannt, Lernen bis 3, „passt nicht“ × 1,5) sind **gewählt, nicht gemessen**.
@@ -161,7 +165,7 @@ Fremdfertigung (2026-10-12): am Verfahren `vorhanden` (fehlt = da), an der Vorla
   der Sprung nach BookLedgerPro mit Entsperren, Download/Dateiwahl der Sicherung am Tablet.
 - Handelsware: **kein Lieferant ist geprüft eingetragen** — die Seiten waren aus dem Behälter nicht abrufbar (Proxy 403, Abruf-Werkzeug
   ohne Namensauflösung); die Vorschläge stammen aus der Websuche. KI-Recherche der Einkaufspreise (Brief Punkt 8, optional) **nicht gebaut**.
-  Offen bei Klaus: Handlungskosten-Satz, Zwischenmengen, eigener Tab oder Ansicht (gebaut: Ansicht mit eigener Adresse), Lieferanten mit Konto.
+  Offen bei Klaus: Handlungskosten-Satz, eigener Tab oder Ansicht (gebaut: Ansicht mit eigener Adresse), Lieferanten mit Konto.
 - Die Parser-Probe gegen BookLedgerPro läuft nur, wenn der Klon daneben liegt (`BLP_KLON` oder `../BookLedgerPro`).
 
 ## Prüfen

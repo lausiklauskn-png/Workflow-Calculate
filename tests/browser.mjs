@@ -466,8 +466,9 @@ try {
     ok("LASER-SEITE: Flaschenöffner (Faserlaser fehlt) — nicht kalkuliert, mit Knopf zur Fremdfertigung", /kein eigenes Gerät/.test(await q.textContent('[data-position="P-1"] [data-nicht-kalkuliert]').catch(() => "")) &&
       await q.locator('[data-fremd-nehmen="name_oeffner_zukauf"]').count() === 1);
     await tippe(q, '[data-fremd-nehmen="name_oeffner_zukauf"]', "Fremdfertigung nehmen");
-    ok("LASER-SEITE: Fremdfertigung genommen — Menge bleibt 60, und die Position sagt, dass für 60 kein Einkauf eingetragen ist",
-      await q.inputValue('[data-position="P-1"] [data-feld="menge"]').catch(() => "") === "60" && /für 60 Stk\. ist kein Einkauf eingetragen/.test(await q.textContent('[data-position="P-1"]').catch(() => "")));
+    ok("LASER-SEITE: Fremdfertigung genommen — Menge bleibt 60 und rechnet aus der Staffel ab 50 (Stückpreis × 60)",
+      await q.inputValue('[data-position="P-1"] [data-feld="menge"]').catch(() => "") === "60" && (await netto(q, "P-1")) > 0 &&
+      await q.locator('[data-position="P-1"] [data-nicht-kalkuliert]').count() === 0);
     await q.locator('[data-position="P-1"] [data-feld="menge"]').fill("50"); await q.locator('[data-position="P-1"] [data-feld="menge"]').press("Tab");
     ok("LASER-SEITE: bei 50 Stück rechnet die Fremdfertigung (Einkauf + Aufschlag)", (await netto(q, "P-1")) > 0 && await q.locator('[data-position="P-1"] [data-handel-hinweis]').count() === 1);
     const bl = await druck(q, "#druck-angebot");

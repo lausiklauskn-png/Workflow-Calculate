@@ -136,7 +136,7 @@
       if (lernN) gruende.push("gelernt aus " + lernN + " Frage" + (lernN === 1 ? "" : "n"));
       if (gegen) gruende.push("einmal als „passt nicht“ markiert");
       var mg = mengeFuer(q, v, anProd[v.id]);
-      /* Zukauf ohne Einkauf für genau diese Menge rechnet nicht (Zwischenmengen werden nicht geschätzt) — halbe Punkte */
+      /* Zukauf unter der kleinsten Staffel rechnet nicht — halbe Punkte */
       if (v.einkaufsprodukt && WC.kalk && !WC.kalk.einkaufFuer(v, mg.menge).treffer) { punkte *= 0.5; gruende.push("kein Einkauf für " + mg.menge + " " + (v.einheitText || "Stk.")); }
       if (punkte <= 0) return;
       out.push({ vorlage: v.id, name: v.titelVorgabe || v.name, intern: v.name, gebiet: v.gebiet, imKatalog: x.imKatalog, einkauf: !!v.einkaufsprodukt,
