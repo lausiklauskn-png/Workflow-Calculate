@@ -778,15 +778,29 @@ try {
     await q.evaluate(() => {
       const D = ["tasse|henkel|kaffee|becher", "schild|alu|platte", "kugelschreiber|stift|kuli", "shirt|textil", "stick|polo|aufn"];
       const vek = (t) => { t = String(t).toLowerCase(); const v = D.map((d) => (new RegExp(d).test(t) ? 1 : 0)); v.push(0.2); const n = Math.hypot(...v); return Float32Array.from(v.map((x) => x / n)); };
-      window.SbkimEmbedding = { init: () => { window.dispatchEvent(new CustomEvent("sbkim:embedding-progress", { detail: { status: "progress", file: "m.onnx", loaded: 5, total: 10 } })); return Promise.resolve(); },
+      /* das Laden hält bei 64 von 118 MB an, bis die Probe den Balken gemessen hat (window.__bedFrei) */
+      window.SbkimEmbedding = { init: () => { window.dispatchEvent(new CustomEvent("sbkim:embedding-progress", { detail: { status: "progress", file: "m.onnx", loaded: 64e6, total: 118e6 } })); return new Promise((r) => { window.__bedFrei = r; }); },
         embedPassageBatch: (l) => Promise.resolve(l.map(vek)), embedQuery: (t) => Promise.resolve(vek(t)),
         getModelSource: () => "local", getModelRoot: () => window.SBKIM_MODEL_ROOT };
       window.SbkimMatch = { match: (a, b) => a.reduce((s, x, i) => s + x * b[i], 0) };
     });
     let frage = "";
     q.once("dialog", (d) => { frage = d.message(); d.accept(); });
+    await q.fill("#suche-feld", ""); await q.dispatchEvent("#suche-feld", "input");
+    const bedLage = await q.evaluate(() => { const box = document.getElementById("suche-ergebnis"), l = box && box.querySelector("[data-bed-zustand]");
+      const feld = document.getElementById("suche-feld"); if (!l || !feld) return null;
+      return { erstes: box.firstElementChild === l, abstand: Math.round(l.getBoundingClientRect().top - feld.closest("form").getBoundingClientRect().bottom) }; });
+    ok("BEDEUTUNG: der Knopf steht direkt unter dem Suchfeld, auch ohne Frage (Klaus 2026-10-13)", !!bedLage && bedLage.erstes && bedLage.abstand >= 0 && bedLage.abstand < 40, bedLage);
     await q.fill("#suche-feld", "Henkelgefäß fürs Büro"); await q.dispatchEvent("#suche-feld", "input");
+    ok("BEDEUTUNG: mit Frage steht er weiter oben, vor den Karten", await q.evaluate(() => { const box = document.getElementById("suche-ergebnis"); return !!box && box.firstElementChild && box.firstElementChild.hasAttribute("data-bed-zustand"); }));
     await tippe(q, "#bed-an", "🧠 Bedeutung");
+    await q.waitForFunction(() => typeof window.__bedFrei === "function", null, { timeout: 10000 }).catch(() => {});
+    await q.waitForFunction(() => { const i = document.querySelector('[data-bed-balken="laedt"] i'); return !!i && i.style.width !== "0%"; }, null, { timeout: 5000 }).catch(() => {});
+    const balken = await q.evaluate(() => { const l = document.querySelector('[data-bed-zustand="laedt"]'); const i = l && l.querySelector('[data-bed-balken="laedt"] i');
+      return l ? { breite: i ? i.style.width : null, text: l.textContent, klasse: l.querySelector(".fortschritt") ? 1 : 0, erstes: document.getElementById("suche-ergebnis").firstElementChild === l } : null; });
+    ok("BEDEUTUNG: beim Laden ein Ladebalken wie sonst in der App (54 % · 64 / 118 MB), unter dem Suchfeld",
+      !!balken && balken.klasse === 1 && /^54\.2%$/.test(balken.breite || "") && /54 %/.test(balken.text) && /64 \/ 118 MB/.test(balken.text) && balken.erstes, balken);
+    await q.evaluate(() => window.__bedFrei && window.__bedFrei());
     await q.waitForSelector('[data-bed-zustand="bereit"]', { timeout: 10000 }).catch(() => {});
     ok("BEDEUTUNG: nur auf Knopfdruck, vorher steht da, was woher geladen wird", /family-projekt\.de/.test(frage) && /Hugging Face/.test(frage) && /bleiben auf dem Gerät/.test(frage), frage);
     ok("BEDEUTUNG: Modul 03 bekommt den eigenen Server als Modell-Ort", await q.evaluate(() => window.SBKIM_MODEL_ROOT) === "https://family-projekt.de/models/");

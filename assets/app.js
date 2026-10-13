@@ -310,6 +310,8 @@
     var box = document.getElementById("suche-ergebnis"); if (!box) return;
     box.replaceChildren();
     var es = suEinst(), frage = String(S.frage || "").trim();
+    /* 🧠 direkt unter dem Suchfeld, auch ohne Frage (Klaus 2026-10-13) */
+    box.append(suBedeutungLeiste());
     box.append(suKundeZeile());
     if (S.uebung != null) box.append(suUebungLeiste());
     if (!frage) { box.append(suBeispiele()); return; }
@@ -340,7 +342,6 @@
         return h("button", { type: "button", class: "su-alt", "data-su-angebot": a.id, title: "Öffnen", onclick: function () { S.aktiv = a.id; lsSet(LS.aktiv, a.id); geheZu("angebot"); } },
           h("span", { text: a.nummer }), h("span", { class: "gedaempft", text: prod }), h("b", { text: euro(r.summen.netto) }));
       })));
-    box.append(suBedeutungLeiste());
   }
 
   /* ── Eine Karte: Produkt · Menge · Preis. Nichts aus der Kalkulation — die klappt nur auf Tipp auf. ── */
@@ -489,7 +490,7 @@
      assets/wfpdf/bedeutung.js (byte-1:1). Nur auf Knopfdruck; vorher steht da, was aus dem Netz kommt.
      Eingeordnet werden: jede Vorlage (Name, Text, Gebiet) mit ihren GELERNTEN Fragen und Beispiel-Fragen — so findet eine
      neue Frage das Produkt auch über frühere Fragen. Die Vektoren liegen nur im Speicher (wenige Dutzend, Sekunden). ── */
-  var BED = { zustand: "aus", prozent: null, fehler: "", vek: new Map(), dateien: new Map(), sig: "", erg: null, frage: "" };
+  var BED = { zustand: "aus", prozent: null, geladen: 0, gesamt: 0, ordnet: { i: 0, n: 0 }, fehler: "", vek: new Map(), dateien: new Map(), sig: "", erg: null, frage: "" };
   function skriptLaden(src) {
     return new Promise(function (res, rej) { var el = document.createElement("script"); el.src = src; el.onload = function () { res(); }; el.onerror = function () { rej(new Error("Datei fehlt: " + src)); }; document.head.appendChild(el); });
   }
@@ -505,14 +506,25 @@
     var t = bedTexte(), sig = JSON.stringify(Array.from(t.entries()));
     if (sig === BED.sig) return Promise.resolve();
     var ids = Array.from(t.keys()), vek = new Map();
+    BED.ordnet = { i: 0, n: ids.length }; bedBalken();
     return ids.reduce(function (p, id) {
-      return p.then(function () { return window.SbkimEmbedding.embedPassageBatch(t.get(id)); }).then(function (vs) { vek.set(id, { st: t.get(id).map(function (s, i) { return { text: s, v: vs[i] }; }) }); });
+      return p.then(function () { return window.SbkimEmbedding.embedPassageBatch(t.get(id)); }).then(function (vs) { vek.set(id, { st: t.get(id).map(function (s, i) { return { text: s, v: vs[i] }; }) }); BED.ordnet.i++; bedBalken(); });
     }, Promise.resolve()).then(function () { BED.vek = vek; BED.sig = sig; BED.erg = null; BED.frage = ""; });
   }
   var MODELL_SERVER = "https://family-projekt.de/models/";
+  /* Ladebalken (Klaus 2026-10-13: „mit Ladebalken, wie die anderen auch“) — nur die Balken-Teile werden
+     erneuert, nicht die ganze Liste (die Fortschritts-Meldungen kommen sehr oft) */
+  function bedMb(b) { return String(Math.round(b / 1e6)); }
+  function bedBalken() {
+    var laedt = BED.zustand === "laedt", w = laedt ? (BED.prozent == null ? 0 : BED.prozent) : (BED.ordnet.n ? BED.ordnet.i / BED.ordnet.n * 100 : 0);
+    var i = document.querySelector("[data-bed-balken] i"); if (i) i.style.width = Math.max(0, Math.min(100, w)).toFixed(1) + "%";
+    var p = document.querySelector("[data-bed-prozent]"); if (p) p.textContent = BED.prozent == null ? "…" : Math.round(BED.prozent) + " %";
+    var mb = document.querySelector("[data-bed-mb]"); if (mb) mb.textContent = BED.gesamt > 0 ? " · " + bedMb(BED.geladen) + " / " + bedMb(BED.gesamt) + " MB" : "";
+    var o = document.querySelector("[data-bed-ordnet]"); if (o) o.textContent = BED.ordnet.i + " von " + BED.ordnet.n;
+  }
   function bedStarten() {
-    BED.zustand = "laedt"; BED.fehler = ""; BED.dateien = new Map(); suErgebnis();
-    if (!BED.lauscher) { BED.lauscher = function (ev) { if (BED.zustand !== "laedt") return; BED.prozent = WFP.Bedeutung.ladeStand(BED.dateien, (ev && ev.detail) || {}).prozent; var b = document.querySelector("[data-bed-prozent]"); if (b) b.textContent = BED.prozent == null ? "…" : Math.round(BED.prozent) + " %"; }; window.addEventListener("sbkim:embedding-progress", BED.lauscher); }
+    BED.zustand = "laedt"; BED.fehler = ""; BED.dateien = new Map(); BED.prozent = null; BED.geladen = 0; BED.gesamt = 0; BED.ordnet = { i: 0, n: 0 }; suErgebnis();
+    if (!BED.lauscher) { BED.lauscher = function (ev) { if (BED.zustand !== "laedt") return; var st = WFP.Bedeutung.ladeStand(BED.dateien, (ev && ev.detail) || {}); BED.prozent = st.prozent; BED.geladen = st.geladen; BED.gesamt = st.gesamt; bedBalken(); }; window.addEventListener("sbkim:embedding-progress", BED.lauscher); }
     /* Modell vom eigenen Server (Klaus 2026-10-13, gemessen: family-projekt.de/models/ liefert es mit CORS);
        antwortet er nicht, nimmt Modul 03 selbst Hugging Face */
     if (!window.SBKIM_MODEL_ROOT) window.SBKIM_MODEL_ROOT = MODELL_SERVER;
@@ -537,8 +549,12 @@
     if (z === "aus") l.append(knopf("🧠 Auch nach Bedeutung suchen", function () {
       if (!confirm("Suche nach Bedeutung: einmalig wird ein Sprachmodell (118 MB) geladen — von family-projekt.de, nur wenn das nicht antwortet von Hugging Face; das Programm dazu von jsDelivr. Deine Angebote, Kunden und Fragen bleiben auf dem Gerät. Laden?")) return;
       bedStarten(); }, "klein", { id: "bed-an" }));
-    else if (z === "laedt") l.append(h("span", { class: "klein" }, "🧠 Modell lädt … ", h("b", { "data-bed-prozent": "", text: BED.prozent == null ? "…" : Math.round(BED.prozent) + " %" })));
-    else if (z === "ordnet") l.append(h("span", { class: "klein", text: "🧠 ordnet die Produkte ein …" }));
+    else if (z === "laedt" || z === "ordnet") {
+      l.append(z === "laedt" ? h("span", { class: "klein" }, "🧠 Modell lädt … ", h("b", { "data-bed-prozent": "" }), h("span", { class: "gedaempft", "data-bed-mb": "" }))
+        : h("span", { class: "klein" }, "🧠 ordnet die Produkte ein … ", h("b", { "data-bed-ordnet": "" })),
+        h("div", { class: "fortschritt", "data-bed-balken": z }, h("i", { style: "width:0%" })));
+      setTimeout(bedBalken, 0);
+    }
     else if (z === "bereit") l.append(h("span", { class: "klein gedaempft", "data-bed-quelle": bedQuelle().kurz, text: "🧠 Bedeutung an · " + BED.vek.size + " Produkte" + bedQuelle().text }));
     else l.append(h("span", { class: "klein", text: "🧠 ging nicht: " + BED.fehler + " " }), knopf("↻ Nochmal", bedStarten, "klein"));
     return l;
