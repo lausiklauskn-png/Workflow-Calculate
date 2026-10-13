@@ -102,12 +102,26 @@
   /* ── Handelsware (Einkaufsprodukt, Klaus 2026-10-13): fertig eingekauft, mit Aufschlag weiterverkauft ──
      vorlage.einkauf = [{ menge, gesamtCent, lieferant, url, datum }] — Komplettpreis je Menge INKL. Versand.
      Verkauf = handel(Einkauf) als EINE Position, ebenfalls inkl. Versand (kein eigener Versandposten, s. angebot.js).
-     ⚠ Zwischenmengen werden NICHT geschätzt: steht für die Menge kein Einkauf da, ist die Position offen.
+     Staffel (Klaus 2026-10-13: „innerhalb der Staffelung steht der Preis ja fest“): ein Einkauf gilt AB seiner Menge.
+     Steht für die Menge selbst nichts da, zählt der Stückpreis der nächstkleineren Staffel × Menge (20 Tassen = je Stück
+     aus „10 Stk.“ × 20). Das ist gerechnet, nicht geschätzt. Unter der kleinsten Staffel bleibt die Position offen.
      Mehrere Einkäufe für dieselbe Menge (Lieferanten im Vergleich): der günstigste zählt, und es steht dabei. */
   function einkaufFuer(vorlage, menge) {
-    var l = (vorlage.einkauf || []).filter(function (x) { return x && Math.round(+x.menge) === menge && zahl(x.gesamtCent) != null; });
-    l.sort(function (a, b) { return a.gesamtCent - b.gesamtCent; });
-    return { treffer: l[0] || null, anzahl: l.length };
+    var alle = (vorlage.einkauf || []).filter(function (x) { return x && Math.round(+x.menge) > 0 && zahl(x.gesamtCent) != null; });
+    function guenstigste(m) {
+      var l = alle.filter(function (x) { return Math.round(+x.menge) === m; });
+      l.sort(function (a, b) { return a.gesamtCent - b.gesamtCent; });
+      return l;
+    }
+    var genau = guenstigste(menge);
+    if (genau.length) return { treffer: genau[0], anzahl: genau.length, ab: menge, gesamtCent: Math.round(+genau[0].gesamtCent), staffel: false };
+    /* eine Zeile für genau diese Menge ohne Preis: offen („Einkaufspreis fehlt“), nicht still aus der kleineren Staffel */
+    var halb = (vorlage.einkauf || []).some(function (x) { return x && Math.round(+x.menge) === menge; });
+    var ab = 0;
+    if (!halb) alle.forEach(function (x) { var m = Math.round(+x.menge); if (m < menge && m > ab) ab = m; });
+    if (!ab || !(menge > 0)) return { treffer: null, anzahl: 0, ab: 0, gesamtCent: null, staffel: false };
+    var l = guenstigste(ab);
+    return { treffer: l[0], anzahl: l.length, ab: ab, gesamtCent: Math.round(+l[0].gesamtCent * menge / ab), staffel: true };
   }
   function einkaufsMengen(vorlage) {
     var m = (vorlage.einkauf || []).map(function (x) { return Math.round(+x.menge); }).filter(function (n) { return n > 0; });
@@ -119,16 +133,19 @@
     if (!ein) {
       var stehtDa = (vorlage.einkauf || []).some(function (x) { return x && Math.round(+x.menge) === menge; });
       offen.push(stehtDa ? "Einkaufspreis für " + menge + einh + " fehlt"
-        : "für " + menge + einh + " ist kein Einkauf eingetragen" + (mengen.length ? " (eingetragen: " + mengen.join(", ") + ")" : "") + " — Zwischenmengen werden nicht geschätzt");
+        : "für " + menge + einh + " ist kein Einkauf eingetragen" + (mengen.length ? " — kleinste Staffel: " + mengen[0] + einh + " (eingetragen: " + mengen.join(", ") + ")" : ""));
     }
-    var bez = ein ? Math.round(+ein.gesamtCent) : 0, hd = handel(bez, sf.s);
+    var bez = ein ? ek.gesamtCent : 0, hd = handel(bez, sf.s);
     var lf = ein ? finde(kat.lieferanten, ein.lieferant) : null;
     if (ein) {
-      weg.push("Einkauf " + menge + einh + " komplett inkl. Versand: " + (bez / 100).toFixed(2).replace(".", ",") + " €" + (lf ? " · " + lf.name : "") + (ein.datum ? " · Stand " + ein.datum : ""));
-      if (ek.anzahl > 1) weg.push(ek.anzahl + " Einkäufe für diese Menge eingetragen — der günstigste zählt");
+      var eu = function (c) { return (c / 100).toFixed(2).replace(".", ",") + " €"; };
+      if (ek.staffel) weg.push("Staffel ab " + ek.ab + einh + ": Einkauf " + ek.ab + einh + " komplett inkl. Versand " + eu(Math.round(+ein.gesamtCent)) +
+        " → je " + einh.trim() + " " + eu(Math.round(+ein.gesamtCent / ek.ab)) + " × " + menge + " = " + eu(bez) + (lf ? " · " + lf.name : "") + (ein.datum ? " · Stand " + ein.datum : ""));
+      else weg.push("Einkauf " + menge + einh + " komplett inkl. Versand: " + eu(bez) + (lf ? " · " + lf.name : "") + (ein.datum ? " · Stand " + ein.datum : ""));
+      if (ek.anzahl > 1) weg.push(ek.anzahl + " Einkäufe für " + ek.ab + einh + " eingetragen — der günstigste zählt");
       weg.push("+ Handlungskosten " + r2(+sf.s.handlungskostenPct || 0) + " % · + Gewinn " + r2(+sf.s.gewinnPct || 0) + " % → Verkauf komplett inkl. Versand, ohne eigenen Versandposten");
     }
-    var zeilen = [["bezugspreis", "Einkauf komplett inkl. Versand (Bezugspreis)", hd.bezugspreis], ["handlungskosten", "+ Handlungskosten " + r2(+sf.s.handlungskostenPct || 0) + " %", hd.handlungskosten],
+    var zeilen = [["bezugspreis", ek.staffel ? "Einkauf inkl. Versand — Stückpreis aus der Staffel ab " + ek.ab + einh + " × " + menge + " (Bezugspreis)" : "Einkauf komplett inkl. Versand (Bezugspreis)", hd.bezugspreis], ["handlungskosten", "+ Handlungskosten " + r2(+sf.s.handlungskostenPct || 0) + " %", hd.handlungskosten],
       ["selbstkosten", "= Selbstkosten", hd.selbstkosten], ["gewinn", "+ Gewinn " + r2(+sf.s.gewinnPct || 0) + " %", hd.gewinn], ["listenpreis", "= Verkauf komplett inkl. Versand netto", hd.netto]]
       .map(function (z) { return { key: z[0], text: z[1], cent: z[2] }; });
     var sch = { herstellkosten: hd.bezugspreis, selbstkosten: hd.selbstkosten, listenpreis: hd.netto, zeilen: zeilen };
@@ -144,7 +161,7 @@
       platzhalter: !!(sf.gebiet.platzhalter || vorlage.platzhalter || (ein && ein.platzhalter)),
       lage: lage(netto, sch), ustSatz: zahl(sf.s.ustSatz) == null ? 19 : +sf.s.ustSatz,
       handel: { bezugspreis: hd.bezugspreis, handlungskosten: hd.handlungskosten, gewinn: hd.gewinn, lieferant: ein ? String(ein.lieferant || "") : "",
-        lieferantName: lf ? lf.name : "", url: ein ? String(ein.url || (lf && lf.url) || "") : "", datum: ein ? String(ein.datum || "") : "", mengen: mengen },
+        staffelAb: ek.staffel ? ek.ab : null, lieferantName: lf ? lf.name : "", url: ein ? String(ein.url || (lf && lf.url) || "") : "", datum: ein ? String(ein.datum || "") : "", mengen: mengen },
     };
   }
 

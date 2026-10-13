@@ -459,8 +459,18 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   ok("HANDEL: Staffel aus den eingetragenen Einkaufsmengen (250, 500, 1000)", pv.staffeln.join() === "250,500,1000" && pv.menge === 250);
   pv.menge = 300;
   const z = K.position(kat, pv, {});
-  ok("HANDEL: Zwischenmenge (300) wird NICHT geschätzt — nicht kalkuliert, mit den eingetragenen Mengen", !z.ok && /300 Stk\. ist kein Einkauf eingetragen \(eingetragen: 250, 500, 1000\)/.test(z.offen[0]), z.offen);
-  ok("HANDEL: die nicht kalkulierte Zwischenmenge zählt nicht in die Summe", A.rechne(a, kat, null, false).summen.offen === 1);
+  const g250 = v.einkauf.find((x) => x.menge === 250).gesamtCent;
+  ok("STAFFEL: Zwischenmenge (300) rechnet aus der Staffel ab 250 — Stückpreis × 300", z.ok && z.handel.bezugspreis === Math.round(g250 * 300 / 250) && z.handel.staffelAb === 250 &&
+    z.weg.some((w) => /Staffel ab 250 Stk\./.test(w)), [z.offen, z.handel && z.handel.bezugspreis]);
+  /* Klaus 2026-10-13: Tasse mit Namen, Einkauf 1 Stk. 14,90 · 10 Stk. 89,90 · 25 Stk. 189,90 */
+  const ts = (m) => K.position(kat, { vorlage: "tasse_sublimation_zukauf", menge: m }, {});
+  ok("STAFFEL: 20 Tassen = 10er-Stückpreis 8,99 × 20 = 179,80 € Einkauf", ts(20).ok && ts(20).handel.bezugspreis === 17980, ts(20).handel);
+  ok("STAFFEL: 11 Tassen = 8,99 × 11 = 98,89 € · 2 Tassen = 14,90 × 2 = 29,80 € · 25 Tassen = genau der Einkauf 189,90 €",
+    ts(11).handel.bezugspreis === 9889 && ts(2).handel.bezugspreis === 2980 && ts(25).handel.bezugspreis === 18990 && ts(25).handel.staffelAb === null);
+  ok("STAFFEL: 30 Tassen nehmen die 25er-Staffel, nicht die 10er", ts(30).handel.bezugspreis === Math.round(18990 * 30 / 25), ts(30).handel.bezugspreis);
+  const unter = K.position(kat, { vorlage: "kuli_zukauf", menge: 250 }, {});
+  ok("STAFFEL: unter der kleinsten Staffel (250 Kulis, Staffel ab 500) bleibt die Position offen und nennt die kleinste Staffel",
+    !unter.ok && /250 Stk\. ist kein Einkauf eingetragen — kleinste Staffel: 500 Stk\./.test(unter.offen[0]), unter.offen);
   pv.menge = 500;
   v.einkauf.push({ menge: 500, gesamtCent: 2500, lieferant: "", url: "", datum: "2026-10-13" }, { menge: 500, gesamtCent: 3500, lieferant: "", url: "", datum: "2026-10-13" });
   const g = K.position(kat, pv, {});
@@ -731,7 +741,9 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   ok("KLASSE: die versteckte Kundenklasse wirkt auf den Preis (A < B < C)", pa.netto < pb.netto && pb.netto < pc.netto, [pa.netto, pb.netto, pc.netto]);
   ok("PREIS: fehlt die Vorlage im Katalog, wird das Gebiet genannt statt geschätzt", SU.preis(kopie(WC.START), "polo_stick", 10, {}).fehltGebiet === "stickerei");
   const nk = SU.preis(kat, "kuli_zukauf", 250, {});
-  ok("PREIS: Zukauf ohne Einkauf für die Menge bleibt offen (nichts geschätzt)", !nk.ok && /kein Einkauf/.test(nk.offen[0]), nk.offen);
+  ok("PREIS: Zukauf unter der kleinsten Staffel bleibt offen (nichts geschätzt)", !nk.ok && /kein Einkauf/.test(nk.offen[0]), nk.offen);
+  const t20 = SU.preis(kat, "tasse_sublimation_zukauf", 20, {});
+  ok("PREIS: Karte „Tasse mit Namen“, 20 Stk. — rechnet aus der Staffel ab 10 (Klaus' Tablet-Befund 2026-10-13)", t20.ok && t20.netto > 0, t20.offen);
   /* Lernen */
   const qa = SU.lesen("12 Kaffeepötte mit Familienfoto", kat, null, []);
   ok("LERNEN: unbekannte Wörter finden zuerst nichts", !SU.kandidaten(qa, kat, {}).some((c) => c.vorlage === "tasse"));

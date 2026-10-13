@@ -1161,7 +1161,7 @@
     });
     karte.append(g);
     if (v.einkaufsprodukt) karte.append(h("p", { class: "gedaempft klein", "data-handel-hinweis": "" }, "🛒 Einkaufsprodukt — Verkauf komplett inkl. Versand, kein eigener Versandposten. Eingetragene Mengen: " +
-      (K.einkaufsMengen(v).join(", ") || "keine") + " (Zwischenmengen werden nicht geschätzt). ", knopf("Einkauf ansehen", function () { geheZu("handel"); }, "klein")));
+      (K.einkaufsMengen(v).join(", ") || "keine") + " (dazwischen: Stückpreis der nächstkleineren Staffel × Menge). ", knopf("Einkauf ansehen", function () { geheZu("handel"); }, "klein")));
 
     /* Bilder der Position */
     var daumen = h("div", { class: "daumen", "data-pos-bilder": "" });
@@ -1340,7 +1340,7 @@
     var l = [];
     var lohnKey = e.saetze.modus === "voll" ? "lohnCent" : "stundensatzCent";
     if (art === "menge") {
-      /* Handelsware: nur Mengen mit eingetragenem Einkauf — Zwischenmengen werden nicht geschätzt */
+      /* Handelsware: die eingetragenen Staffeln als Vorschläge (dazwischen rechnet die Staffel) */
       var ms = (e.handel ? e.handel.mengen : [Math.max(1, Math.round(p.menge / 2)), p.menge * 2].concat(p.staffeln)).filter(function (m, i, s) { return m !== p.menge && s.indexOf(m) === i; }).sort(function (q, w) { return q - w; });
       ms.forEach(function (m) { l.push({ label: m + " Stück", tun: function (q) { q.menge = m; if (q.staffeln.indexOf(m) < 0) q.staffeln = q.staffeln.concat([m]).sort(function (x, y) { return x - y; }); } }); });
     } else if (art === "verfahren") {
@@ -1776,7 +1776,7 @@
     }, "pri", { id: "handel-neu" })));
     main.append(lieferantenKarte(kat));
     main.append(h("div", { class: "karte gedaempft klein", "data-handel-grenzen": "" },
-      h("p", { text: "Zwischenmengen werden nicht geschätzt: steht für eine Menge kein Einkauf da, rechnet die Position nicht und sagt das. Wie es stattdessen gehen soll, ist noch offen." }),
+      h("p", { text: "Staffel: ein Einkauf gilt ab seiner Menge. Dazwischen zählt der Stückpreis der nächstkleineren Staffel × Menge (20 Stück = je Stück aus „10 Stk.“ × 20). Unter der kleinsten Staffel rechnet die Position nicht und sagt das." }),
       h("p", { text: "Wiederverkäuferpreise stehen bei vielen Lieferanten erst nach der Anmeldung — eingetragen wird, was auf deinem Konto oder deiner Rechnung steht." }),
       h("p", { text: "Kundenrabatt und Skonto aus den Sätzen wirken bei Handelsware nicht — es zählen Handlungskosten, Gewinn und die Kundenklasse." })));
   }
