@@ -41,6 +41,9 @@ unterscheiden), Violett = intern wie dort.
 | `assets/daten/bilder.js` | Beispielbilder als **Zeichnungen** (SVG), mehrere Ansichten je Beispiel |
 | `assets/app.js` · `app.css` | Oberfläche (Schrittleiste, Preis nachbessern, Lernen, Markt, Katalog-Editor, Rechner) |
 | `assets/installieren.js` | byte-1:1 aus Sage (über Workflow-Needs), SHA in `tests/kern.mjs` |
+| `modules/*.js` | **SBKIM-Module 01 02 05 05b 07 15 16 16b 23 23-UI noble byte-1:1 aus Sage** (origin/main 2026-10-13), SHA in `tests/kern.mjs` (`KNOTEN_PINS`). Nie hier abwandeln. 03/04 liegen weiter in `vendor/sbkim/` |
+| `assets/sbkim-init.js` | app-eigener Klebstoff des Knotens: Kette, Lampen, Leiste, Gerätename, gemeinsamer Lader `WC_skriptEinmal` |
+| `assets/siegel-inhalt.js` | Identität des Knotens (`SBKIM_SIEGEL_WIZ`) — wird nie verteilt |
 | `icons/quelle/icon-klaus.png` | Klaus' App-Symbol (2026-10-12, rot: Zahnrad, Rechenzeichen, Pfeil) → `python3 tools/icons-bauen.py`, danach Cache erhöhen |
 
 **Speicher (nie ändern):** IndexedDB `WorkflowCalculate1` mit `angebote`, `kunden`, `bilder` (Blobs) ·
@@ -149,6 +152,36 @@ Fremdfertigung (2026-10-12): am Verfahren `vorhanden` (fehlt = da), an der Vorla
 - **WorkFloh liest die Auftragsdatei mit „📥 Importieren“.** Gleiche Angebotsnummer zweimal → WorkFloh fragt nach.
 - Chromium im Behälter versucht bei jedem Start google.com/gvt1 zu erreichen (Proxy weist ab) — das ist
   der Browser, nicht die App.
+
+## SBKIM-Knoten mit Netz-Einstellung (2026-10-13)
+
+Workflow Calculate ist ein eigener SBKIM-Knoten, nach der Bauart des Sende-Prüfers: feste Leiste in der Kopfzeile
+(`#netzleiste`: Lampen `#lamp-alive` · `#lamp-traffic` · `#lamp-fremd`, `#siegel-platz`, `[data-sbkim-mycel-platz]`),
+**kein Modul 17**. Breit stehen Lampen-Namen, Siegel und Mycel-Knopf in der Leiste; bis 1100 px nur drei Punkte, ein
+Tipp klappt Siegel und Mycel-Knopf darunter auf. In der Mycel-Blase steht die Box **„Netz“** (`[data-sbkim-netz-box]`,
+aus Modul 23-UI): öffentlich ist die Vorgabe, ein eigenes Firmennetz kommt über einen Beitritts-Link oder von Hand.
+**Der Netz-Code steht nie im Depot.**
+
+- **Schublade `workflowcalculate`** steht im `<head>` VOR jedem Skript (Modul 01 liest sie beim Laden) und im Klebstoff. Nie ändern.
+- **Modul 03/04 sind dieselben Dateien wie für die Bedeutungs-Suche** (`vendor/sbkim/`, gleiche `?v=`). Ein gemeinsamer
+  Lader (`WC_skriptEinmal`, Schlüssel = Pfad ohne `?`) holt jede Datei höchstens einmal; die Suche (`skriptLaden` in
+  `app.js`) delegiert an ihn, und die Kette überspringt ein Modul, dessen Global schon steht. `SBKIM_MODEL_ROOT`
+  setzt der Klebstoff vor der Kette — das Modell kommt also auch hier vom eigenen Server.
+  ⚠ **Preis:** Modul 03 (der Code, nicht das Modell) wird jetzt nach dem Laden in der Leerlauf-Pause mitgeholt, auch
+  wenn niemand nach Bedeutung sucht. Das Modell (135 MB) lädt weiter erst auf „🧠 Auch nach Bedeutung suchen“.
+- **Die Module stehen nicht im Installations-Vorrat**; der Worker (Netz zuerst, legt 200er ab) nimmt sie beim ersten Abruf.
+- Siegel-Band „WORKFLOW CALCULATE“, `allowedOrigins: []`, Gerätename vom Klebstoff ins Verbinden-Panel (`data-sbkim-geraetename`).
+- Die Beschreibung (`siegel-inhalt.js`) beginnt mit „Workflow Calculate“ und trägt **keinen Preis, keinen Satz, keine
+  Kundendaten** — ein Wächter sucht €, Prozent, Beträge und @.
+- Im Druck (Kundenblatt) ist die Leiste verborgen; beim Laden geht kein Websocket und keine Anfrage an einen fremden Rechner hinaus.
+- Die Probe zur Bedeutungs-Suche wartet jetzt auf `WC_KNOTEN_BEREIT`, bevor sie ihr gestelltes Modul 03 setzt — sonst
+  überschriebe das echte aus der Kette den Stub.
+
+Gemessen (2026-10-13): kern **306 grün · 0 ROT** (28 neue `KNOTEN:`) · browser **214 grün · 0 ROT** · Kopfleiste bei
+320 · 360 · 380 px ohne Querlaufen, ← Zurück und 🛒 erreichbar, Box „Netz“ über die Lampen erreichbar · Modul 03 genau
+einmal angefordert. Gegenprobe `KNOTEN:` **9 gefangen · 0 blind · 0 aus falschem Grund · 0 tote Anker**, `NUR_ANKER` 201 · 0 tot.
+⚠ Nicht gemessen: das Tablet, der Beitritt über einen echten Link, das interne Relais (steht noch nicht), Zeit/Speicher
+der zusätzlich geladenen Module.
 
 ## Benannte Grenzen
 

@@ -798,5 +798,63 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
 /* ── STUFE 2: Klaus' Symbol ── */
 ok("ICON: App-Symbole sind aus Klaus' Vorlage gebaut (Grundfarbe rot)", existsSync(join(WURZEL, "icons/quelle/icon-klaus.png")) && /icon-klaus\.png/.test(lies("tools/icons-bauen.py")));
 
+/* ── KNOTEN: SBKIM-Endknoten mit Netz-Einstellung (2026-10-13) ── */
+{
+  /* byte-1:1 aus Sage-Protokol src/modules (origin/main 2026-10-13); 03/04 liegen in vendor/sbkim (PIN oben) */
+  const KNOTEN_PINS = {
+    "modules/01_storage.js": "5a5a4bf64dfcc107da7ed70fb755d7db5cce7d80e963b3e2fbc2004537747820",
+    "modules/02_spore.js": "6789fe6e903ad2e53f39b2dee576c640698555ef71ef4e9134eb75573fdb7d68",
+    "modules/05_anastomose.js": "255ac79aeb3b0203e92f0cebd0a905e47c488b43efe18f41332a7d35520bbf23",
+    "modules/05b_nostr_relay.js": "6edc89091861184da3b702b744691a596bbed6051fd40dbdd45492fba2bec363",
+    "modules/07_apoptose.js": "0acdd6ab2d95e131fa6953061cc0e95a2396e05fff091a7dc690b2668a4c035a",
+    "modules/15_membran.js": "829a5bc01976b59c5ce428125314b87b314b6212cd5a473634c2d22c02579397",
+    "modules/16_siegel.js": "d84fa539e76e0cc54c956b648fcb1505f08843662d97854dc1a95e6ab65b7e25",
+    "modules/16b_andock_wizard.js": "c415eafdb1b660a5256e19957c667074b64b0c3990cc8acc4daeeef34a57e85d",
+    "modules/23_rendezvous.js": "b02f1a1c93130ae74e81796b500d1c613b2504a53c9a9d852ef55ba9eb93891b",
+    "modules/23_rendezvous_ui.js": "bff48ea0d0292afa745e7d85a655c99f49b1c03c6058bef06f0f757b3d270a2d",
+    "modules/noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1"
+  };
+  for (const [f, h] of Object.entries(KNOTEN_PINS)) ok("KNOTEN: " + f + " ist byte-gleich mit Sage", existsSync(join(WURZEL, f)) && sha(f) === h);
+  const html = lies("index.html"), init = lies("assets/sbkim-init.js"), sw = lies("sw.js"), app = lies("assets/app.js");
+  const core = JSON.parse(sw.match(/const CORE = (\[[\s\S]*?\]);/)[1]);
+  /* die Schublade steht im <head> und VOR jedem Skript mit src (Modul 01 liest sie beim Laden) */
+  const zuweisung = html.search(/<script>\s*window\.SBKIM_DB_SUFFIX = "workflowcalculate";\s*<\/script>/);
+  const erstesSrc = html.search(/<script[^>]*\ssrc=/);
+  ok("KNOTEN: die Schublade „workflowcalculate“ steht im <head> vor dem ersten Skript", zuweisung > -1 && zuweisung < html.indexOf("</head>") && (erstesSrc === -1 || zuweisung < erstesSrc), [zuweisung, erstesSrc]);
+  ok("KNOTEN: der Klebstoff nennt dieselbe Schublade", /dbSuffix: "workflowcalculate"/.test(init));
+  /* die Kette: jedes Glied mit Komma getrennt — ein fehlendes Komma ist kein Syntaxfehler, sondern ein Index-Zugriff */
+  const kette = (init.match(/var KANON = \[([\s\S]*?)\n  \];/) || [])[1] || "";
+  const glieder = kette.split("\n").map((z) => z.replace(/\/\/.*$/, "").trim()).filter(Boolean);
+  ok("KNOTEN: die Kette hat 13 Glieder, jedes durch ein Komma getrennt", glieder.length === 13 && glieder.slice(0, -1).every((z) => z.endsWith(",")), glieder);
+  const pfade = glieder.map((z) => (z.match(/"((?:modules|vendor|assets)\/[^"?]+)/) || [])[1]);
+  const pflicht = ["modules/01_storage.js", "modules/02_spore.js", "vendor/sbkim/03_embedding.js", "vendor/sbkim/04_match.js", "modules/05_anastomose.js", "modules/07_apoptose.js",
+    "modules/15_membran.js", "modules/16_siegel.js", "modules/05b_nostr_relay.js", "modules/23_rendezvous.js", "modules/23_rendezvous_ui.js", "assets/siegel-inhalt.js", "modules/16b_andock_wizard.js"];
+  ok("KNOTEN: die Kette lädt alle Pflicht-Module in Sages Reihenfolge (kein Modul 17)", JSON.stringify(pfade) === JSON.stringify(pflicht) && !/17_widget/.test(init), pfade);
+  ok("KNOTEN: Modul 05b lädt als ES-Modul", /\["module", "modules\/05b_nostr_relay\.js"\]/.test(init));
+  ok("KNOTEN: Modul 03/04 sind DIESELBEN Dateien wie für die Bedeutungs-Suche (vendor/sbkim, gleiche ?v=)",
+    init.includes('"vendor/sbkim/03_embedding.js?v=2", "SbkimEmbedding"') && init.includes('"vendor/sbkim/04_match.js?v=1", "SbkimMatch"') &&
+    app.includes('skriptLaden("vendor/sbkim/03_embedding.js?v=2")') && app.includes('skriptLaden("vendor/sbkim/04_match.js?v=1")') && !existsSync(join(WURZEL, "modules/03_embedding.js")));
+  ok("KNOTEN: ein gemeinsamer Lader holt jede Datei höchstens einmal (Suche und Kette)",
+    /if \(geladen\[schluessel\]\) return geladen\[schluessel\];/.test(init) && /window\.WC_skriptEinmal = skriptEinmal;/.test(init) && /if \(k\[2\] && window\[k\[2\]\]\)/.test(init) &&
+    /if \(typeof window\.WC_skriptEinmal === "function"\) return window\.WC_skriptEinmal\(src\);/.test(app));
+  ok("KNOTEN: SBKIM_MODEL_ROOT steht, bevor die Kette Modul 03 lädt (eigener Server wie die Suche)",
+    /if \(!window\.SBKIM_MODEL_ROOT\) window\.SBKIM_MODEL_ROOT = "https:\/\/family-projekt\.de\/models\/";/.test(init) && init.indexOf("window.SBKIM_MODEL_ROOT =") < init.indexOf("var KANON"));
+  ok("KNOTEN: kein Modul aus der Kette steht im Installations-Vorrat (der Worker legt sie beim ersten Abruf ab)",
+    !core.some((u) => /^(modules\/(0[1-9]|1[56]|23|noble)|vendor\/|assets\/siegel-inhalt)/.test(u)), core.filter((u) => /modules|vendor|siegel/.test(u)));
+  const vInit = (html.match(/assets\/sbkim-init\.js\?v=(\d+)/) || [])[1];
+  ok("KNOTEN: sbkim-init.js steht mit derselben ?v= in Seite und Vorrat", !!vInit && core.includes("assets/sbkim-init.js?v=" + vInit) && html.indexOf("assets/sbkim-init.js") > html.indexOf("assets/app.js"));
+  ok("KNOTEN: Kopfleiste trägt Lampen, Siegel-Platz und Mycel-Platz",
+    ["id=\"lamp-alive\"", "id=\"lamp-traffic\"", "id=\"lamp-fremd\"", "id=\"siegel-platz\"", "data-sbkim-mycel-platz"].every((t) => html.includes(t)));
+  ok("KNOTEN: keine fremde Herkunft darf per postMessage reden", /allowedOrigins: \[\]/.test(init));
+  ok("KNOTEN: Siegel mit Band „WORKFLOW CALCULATE“", /ribbonText: "WORKFLOW CALCULATE"/.test(init));
+  ok("KNOTEN: der Gerätename hängt vom Klebstoff ins Verbinden-Panel (data-sbkim-geraetename)", /getElementById\("sbkim-rdv-panel"\)/.test(init) && /setAttribute\("data-sbkim-geraetename", "1"\)/.test(init));
+  /* die Beschreibung: eigener Name vorn, Protokoll genannt — und nie ein Preis, ein Satz oder Kundendaten */
+  const sandbox = {}; new Function("window", lies("assets/siegel-inhalt.js"))(sandbox);
+  const W = sandbox.SBKIM_SIEGEL_WIZ || {}, d = String(W.domainDescription || "");
+  ok("KNOTEN: die Beschreibung beginnt mit „Workflow Calculate“ und nennt SBKIM, Mycel und Sage-Protokol", d.startsWith("Workflow Calculate") && /SBKIM/.test(d) && /Mycel/.test(d) && /Sage-Protokol/.test(d) && W.nodeName === "Workflow Calculate");
+  ok("KNOTEN: die Beschreibung trägt keinen Betrag, keinen Satz, keine Mailadresse", !/\d+[,.]\d{2}\s*(€|EUR)|€|\d+\s*%|@|Stundensatz\s*\d/.test(d + JSON.stringify(W.domainKeywords || [])), d.match(/\d+[,.]\d{2}|€|%|@/g));
+  ok("KNOTEN: die Leiste ist im Druck (Kundenblatt) verborgen", /@media print\{\.netzleiste\{display:none!important\}\}/.test(lies("assets/app.css")));
+}
+
 console.log(`kern: ${gruen} grün · ${rot} ROT`);
 process.exit(rot ? 1 : 0);

@@ -2,6 +2,8 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
+<!-- SBKIM: die eigene Schublade MUSS stehen, bevor irgendein Modul lädt (Modul 01 liest sie beim Laden). Nie ändern. -->
+<script>window.SBKIM_DB_SUFFIX = "workflowcalculate";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Workflow Calculate</title>
 <meta name="description" content="Angebote kalkulieren — Material, Arbeitszeit, Verpackung und Versand, offline. Die Kalkulation bleibt intern.">
@@ -10,13 +12,25 @@
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
 <link rel="icon" href="icons/favicon-48.png" sizes="48x48">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/app.css?v=6">
+<link rel="stylesheet" href="assets/app.css?v=7">
 </head>
 <body>
 <header class="kopf">
   <div class="marke">
     <img src="icons/icon-192.png" alt="" width="34" height="34">
     <div style="min-width:0"><b id="app-name">Workflow Calculate</b><small id="app-unter"></small></div>
+  </div>
+  <div class="netzleiste" id="netzleiste" data-offen="0">
+    <button class="lampen" id="lampen" type="button" aria-expanded="false" aria-controls="netz-mehr" title="SBKIM-Knoten: lebt · verkehr · fremd — tippen zeigt Siegel und Netz">
+      <span class="lamp" id="lamp-alive" title="lebt — eigene Identität geladen"><span class="lamp-t">lebt</span></span>
+      <span class="lamp" id="lamp-traffic" title="verkehr — mit dem Netz verbunden"><span class="lamp-t">verkehr</span></span>
+      <span class="lamp" id="lamp-fremd" title="fremd — eine fremde Seite hat sich gemeldet"><span class="lamp-t">fremd</span></span>
+    </button>
+    <span class="netz-mehr" id="netz-mehr">
+      <span class="lampen-legende" aria-hidden="true"><span class="lamp" data-lampe-kopie="lamp-alive">lebt</span><span class="lamp" data-lampe-kopie="lamp-traffic">verkehr</span><span class="lamp" data-lampe-kopie="lamp-fremd">fremd</span></span>
+      <span class="siegel-platz" id="siegel-platz"></span>
+      <span class="mycel-platz" data-sbkim-mycel-platz></span>
+    </span>
   </div>
   <div class="kopf-knoepfe">
     <button type="button" class="btn rund zurueck-knopf" id="seite-zurueck" title="Zurück" aria-label="Zurück" disabled>←</button>
@@ -65,7 +79,8 @@
 <script src="assets/daten/beispiel-angebote.js?v=2"></script>
 <script src="assets/daten/bilder.js?v=3"></script>
 <script src="assets/daten/beispiel-fragen.js?v=1"></script>
-<script src="assets/app.js?v=18"></script>
+<script src="assets/app.js?v=19"></script>
+<script src="assets/sbkim-init.js?v=1"></script>
 <script src="assets/installieren.js" data-name="Workflow Calculate" data-vor="thema"></script>
 <script>
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
