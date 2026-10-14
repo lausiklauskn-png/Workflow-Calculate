@@ -803,15 +803,15 @@ ok("ICON: App-Symbole sind aus Klaus' Vorlage gebaut (Grundfarbe rot)", existsSy
   /* byte-1:1 aus Sage-Protokol src/modules (origin/main 2026-10-13); 03/04 liegen in vendor/sbkim (PIN oben) */
   const KNOTEN_PINS = {
     "modules/01_storage.js": "5a5a4bf64dfcc107da7ed70fb755d7db5cce7d80e963b3e2fbc2004537747820",
-    "modules/02_spore.js": "6789fe6e903ad2e53f39b2dee576c640698555ef71ef4e9134eb75573fdb7d68",
+    "modules/02_spore.js": "0cbf0664e2a79f1301c03e52f7ac0030d4b2961f03b97b38e8634827a52353c5",
     "modules/05_anastomose.js": "255ac79aeb3b0203e92f0cebd0a905e47c488b43efe18f41332a7d35520bbf23",
     "modules/05b_nostr_relay.js": "37eee5b196b3efad57131edd1cc3c0ee23acb97b5ca40740d6a0771db4b4a421",
     "modules/07_apoptose.js": "0acdd6ab2d95e131fa6953061cc0e95a2396e05fff091a7dc690b2668a4c035a",
     "modules/15_membran.js": "829a5bc01976b59c5ce428125314b87b314b6212cd5a473634c2d22c02579397",
-    "modules/16_siegel.js": "d84fa539e76e0cc54c956b648fcb1505f08843662d97854dc1a95e6ab65b7e25",
+    "modules/16_siegel.js": "7c12bc487d445f7a284469eb860fcaec7bf93f84e146a00091cc93e5af210fec",
     "modules/16b_andock_wizard.js": "c415eafdb1b660a5256e19957c667074b64b0c3990cc8acc4daeeef34a57e85d",
-    "modules/23_rendezvous.js": "9464fba75e5a4ed46ebabcd05b2b62f118a5a056f10ebf929421b282d4f6631f",
-    "modules/23_rendezvous_ui.js": "a81fc9081271544e94ee8921ea692ebe1dc7ee9ab8a59f2c6a3187871f7b45c3",
+    "modules/23_rendezvous.js": "05a6eb42ec687e74a8617f9941491a4f14bddda2257f84034eefbf3a106a624f",
+    "modules/23_rendezvous_ui.js": "efecd89ea80d8fa19c61c61a77b71a6d1b8cc8981c6ec1efd10ee92595a44f40",
     "modules/noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1"
   };
   for (const [f, h] of Object.entries(KNOTEN_PINS)) ok("KNOTEN: " + f + " ist byte-gleich mit Sage", existsSync(join(WURZEL, f)) && sha(f) === h);
