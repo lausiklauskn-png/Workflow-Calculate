@@ -724,7 +724,7 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
       /family-projekt\.de[^"]*Hugging Face/.test(app) && /rund 135 MB/.test(app) && !/118 MB/.test(app) && !/~30 MB/.test(app) && /das Modell vom Server des Anbieters dieser App \(family-projekt\.de/.test(ds) && /rund 135 MB/.test(ds));
   }
   ok("PIN: Sage-Module 03/04 sind byte-gleich (03 aus Sage #1071, 04 über Workflow PDF)", sha("vendor/sbkim/03_embedding.js") === "a6ac64d7536da3fa5cc426d0f7db9440fdaf5ab4460f0bdc66a10eb8203b1b68" &&
-    sha("vendor/sbkim/04_match.js") === "5de95923c3f62f141e94f576feebcac0eecc55c60e40b564540a56420436a4cd");
+    sha("vendor/sbkim/04_match.js") === "721eecc3c0d6ea4c259259e6071215ec1cd16f1c43c87b42ce9e72e9a0b5e41c");
   const kat = kopie(WC.START); kat.kleinmenge = Object.assign({}, A.KLEINMENGE_VORGABE);
   Object.keys(WC.STARTKATALOGE).forEach((gid) => WC.katalog.gebietHinzufuegen(kat, WC.STARTKATALOGE[gid]));
   ok("MENGE: „in 2 Wochen“ ist keine Menge, „30 Kaffeepötte“ schon (eine Zahl, kein Warenwort)", SU.lesen("Tassen in 2 Wochen", kat).mengen.length === 0 && SU.lesen("30 Kaffeepötte", kat).mengen.join() === "30");
