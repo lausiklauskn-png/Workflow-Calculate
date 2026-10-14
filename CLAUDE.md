@@ -213,3 +213,9 @@ npm run gegenprobe            # NUR_FALL="BLATT:" für einzelne Fälle
 
 Freibrief · frisch von `origin/main` · Ton · kein PII · Ehrlichkeit:
 [Sage-Protokol/docs/NETZWEIT.md](https://github.com/lausiklauskn-png/Sage-Protokol/blob/main/docs/NETZWEIT.md)
+
+
+## 🛡 Prüfliste vor dem KI-Richter (Sage Bau 04.J, 2026-10-14)
+
+Modul 04 kommt neu aus dem Kanon (Sage #1082). Der Richter prüft die Suchfrage und die Antworten fremder Knoten mit der Prüfliste (`pruefer-mail.js`). Fehlt die Liste, läuft er nicht. Eine Antwort, in der eine Anweisung an eine KI steht, geht nicht an die KI. Sie bekommt „gefahr“ und `ausgeschlossen: "ki-anweisung"`.
+Die Seite lädt `assets/kern/pruefer-mail.js` schon. Gemessen im Browser: `prueflisteGeladen` ist true. Cache v39. Das Tablet ist nicht gemessen.
