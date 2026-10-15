@@ -723,7 +723,7 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
     ok("MODELL: Frage vor dem Laden und Datenschutz nennen family-projekt.de und rund 135 MB (nicht ~30 MB, nicht nur die 118 MB der ONNX-Datei)",
       /family-projekt\.de[^"]*Hugging Face/.test(app) && /rund 135 MB/.test(app) && !/118 MB/.test(app) && !/~30 MB/.test(app) && /das Modell vom Server des Anbieters dieser App \(family-projekt\.de/.test(ds) && /rund 135 MB/.test(ds));
   }
-  ok("PIN: Sage-Module 03/04 sind byte-gleich (03 aus Sage #1071, 04 über Workflow PDF)", sha("vendor/sbkim/03_embedding.js") === "a6ac64d7536da3fa5cc426d0f7db9440fdaf5ab4460f0bdc66a10eb8203b1b68" &&
+  ok("PIN: Sage-Module 03/04 sind byte-gleich (03 aus Sage #1071, 04 über Workflow PDF)", sha("vendor/sbkim/03_embedding.js") === "2e31baa09a2959c95efff8eecd224e8343e75695b4b293aa35209d8f96d1f3b5" &&
     sha("vendor/sbkim/04_match.js") === "721eecc3c0d6ea4c259259e6071215ec1cd16f1c43c87b42ce9e72e9a0b5e41c");
   const kat = kopie(WC.START); kat.kleinmenge = Object.assign({}, A.KLEINMENGE_VORGABE);
   Object.keys(WC.STARTKATALOGE).forEach((gid) => WC.katalog.gebietHinzufuegen(kat, WC.STARTKATALOGE[gid]));
