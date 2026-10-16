@@ -1,7 +1,7 @@
 /* Offline-Vorrat von Workflow Calculate. Wer eine Datei aus CORE ändert, erhöht CACHE_VERSION
    und ruft node tools/cache-stand.mjs — sonst liefert der Worker die alte Fassung weiter.
    Fremde Adressen fasst er nicht an (die App ruft keine auf). */
-const CACHE_VERSION = "workflow-calculate-v44";
+const CACHE_VERSION = "workflow-calculate-v45";
 const CORE = ["./", "index.html", "manifest.json", "assets/app.css?v=7",
   "assets/kern/geld.js?v=1", "assets/kern/mengen.js?v=1", "assets/kern/kalkulation.js?v=5", "assets/kern/versand.js?v=1", "assets/kern/markt.js?v=2",
   "assets/kern/katalog.js?v=3", "assets/kern/angebot.js?v=6", "assets/kern/aussen.js?v=4", "assets/kern/uebergabe.js?v=4", "assets/schluesseltresor.js?v=1", "assets/kern/sicherung.js?v=1", "assets/kern/nachkalk.js?v=3", "assets/kern/recherche.js?v=1", "assets/kern/mail.js?v=1", "assets/kern/unterlagen.js?v=2", "assets/kern/anfrage.js?v=4", "modules/25_pseudonym.js?v=1", "assets/kern/pruefer-mail.js?v=1", "assets/kern/ki-anfrage.js?v=1", "assets/wfpdf/suche.js?v=1", "assets/wfpdf/bedeutung.js?v=1", "assets/wfpdf/sprechen.js?v=1", "assets/kern/suche.js?v=2", "assets/kern/tabelle.js?v=1",
