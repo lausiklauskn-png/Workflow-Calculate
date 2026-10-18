@@ -219,3 +219,7 @@ Freibrief · frisch von `origin/main` · Ton · kein PII · Ehrlichkeit:
 
 Modul 04 kommt neu aus dem Kanon (Sage #1082). Der Richter prüft die Suchfrage und die Antworten fremder Knoten mit der Prüfliste (`pruefer-mail.js`). Fehlt die Liste, läuft er nicht. Eine Antwort, in der eine Anweisung an eine KI steht, geht nicht an die KI. Sie bekommt „gefahr“ und `ausgeschlossen: "ki-anweisung"`.
 Die Seite lädt `assets/kern/pruefer-mail.js` schon. Gemessen im Browser: `prueflisteGeladen` ist true. Cache v39. Das Tablet ist nicht gemessen.
+
+## ⬇ Installieren-Erklärtext ohne „Daten löschen“ (2026-10-18)
+
+`assets/installieren.js` neu byte-1:1 aus Sage-Protokol (PR #1151, über denselben Stand wie Workflow-Needs). Der alte Rat „Websiteeinstellungen → Daten löschen“ ist ersetzt: auf `lausiklauskn-png.github.io` teilen sich alle Apps einen Speicher, das hätte die Daten ALLER Apps gelöscht. Pin in `tests/kern.mjs` = `09c533b3…2193`, Cache v51, `installieren.js?v=2`.

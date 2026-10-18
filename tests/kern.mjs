@@ -30,7 +30,7 @@ function pos(kat, vorlage, extra) {
 }
 
 /* ── PINS ── */
-ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("assets/installieren.js") === "6de57ef331b5deb55b18ca7745da402f16b4401f22259d466b8d828ccbd1b909");
+ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("assets/installieren.js") === "09c533b3e674c88f1dd089302cfb44a9472bc845e6e01fbd8728b42d79bc2193");
 
 /* ── KATALOG ── */
 {
