@@ -223,3 +223,5 @@ Die Seite lädt `assets/kern/pruefer-mail.js` schon. Gemessen im Browser: `pruef
 ## ⬇ Installieren-Erklärtext ohne „Daten löschen“ (2026-10-18)
 
 `assets/installieren.js` neu byte-1:1 aus Sage-Protokol (PR #1151, über denselben Stand wie Workflow-Needs). Der alte Rat „Websiteeinstellungen → Daten löschen“ ist ersetzt: auf `lausiklauskn-png.github.io` teilen sich alle Apps einen Speicher, das hätte die Daten ALLER Apps gelöscht. Pin in `tests/kern.mjs` = `09c533b3…2193`, Cache v51, `installieren.js?v=2`.
+
+**Nachtrag 2026-10-18 · Kontrast:** am Handy stand das Erklärfenster hell auf weiß (`color:inherit` erbt helle Schrift, `--flaeche` fehlt → weiß). `assets/installieren.js` neu byte-1:1 aus Sage (#1152, sha `874d2a29…8dc4`): nach dem Einhängen wird der Kontrast gemessen, unter 4,5 steht die Meldung fest `#1a1a1a` auf `#fff`. Pin in `tests/kern.mjs` nachgezogen, `installieren.js?v=3`, Cache v52. ⚠ Am Tablet nicht gemessen.

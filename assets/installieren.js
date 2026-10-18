@@ -55,9 +55,32 @@
       m.appendChild(zu);
       var t = document.createElement("span"); t.id = "install-meldung-text"; m.appendChild(t);
       document.body.appendChild(m);
+      lesbar(m);
     }
     document.getElementById("install-meldung-text").textContent = text;
     m.hidden = false;
+  }
+
+  /* Lesbar machen (Klaus 2026-10-18, Handy: „helle Schrift auf hellem Hintergrund“).
+     color:inherit erbt die Schrift der Seite, --flaeche fehlt in manchen Apps → weiß.
+     Ist der Kontrast unter 4,5, steht die Meldung fest dunkel auf weiß. */
+  function farbe(c) {
+    var z = String(c).match(/[\d.]+/g); if (!z || z.length < 3) return null;
+    var a = z.length > 3 ? +z[3] : 1; return a < 0.5 ? null : [+z[0], +z[1], +z[2]];
+  }
+  function hell(f) {
+    var l = f.map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
+  }
+  function kontrast(a, b) { var x = hell(a), y = hell(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  function lesbar(m) {
+    try {
+      var s = getComputedStyle(m), g = farbe(s.backgroundColor), t = farbe(s.color);
+      if (!g || !t || kontrast(g, t) < 4.5) {
+        m.style.background = "#fff"; m.style.color = "#1a1a1a"; m.style.borderColor = "#bbb";
+        m.setAttribute("data-lesbar", "fest");
+      } else m.setAttribute("data-lesbar", "seite");
+    } catch (_e) { m.style.background = "#fff"; m.style.color = "#1a1a1a"; }
   }
 
   function knopfZeichnen() {
