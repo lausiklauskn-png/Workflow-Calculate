@@ -25,6 +25,14 @@
      dort liegt beim Öffnen der Eingang (Safe, Tür) über der Kopfleiste und verdeckte
      ihn (Klaus 2026-09-30: „kein Installieren-Button gewesen“). */
   var FEST = !!(me && me.hasAttribute("data-fest"));
+  /* data-in (Klaus 2026-10-18: „unter Einstellungen, Installier-Button hinten … wie bei meinem
+     Rezeptbuch“): ein CSS-Selektor für den Behälter der Einstellungen. Der Knopf wird dort HINTEN
+     angehängt — auch wenn der Behälter erst später entsteht (Fenster beim Öffnen gebaut).
+     data-klasse: Klasse für diesen Knopf (sonst die des letzten Knopfs im Behälter).
+     data-vor und data-in dürfen zusammen stehen: dann gibt es zwei Knöpfe, beide verschwinden,
+     sobald die App installiert ist. */
+  var IN = (me && me.getAttribute("data-in")) || "";
+  var KLASSE = (me && me.getAttribute("data-klasse")) || "";
   var OBEN = 2147483000;
 
   function alsApp() {
@@ -84,8 +92,10 @@
   }
 
   function knopfZeichnen() {
-    var k = document.getElementById("installieren");
-    if (!k) return;
+    var alle = document.querySelectorAll("[data-install-knopf]");
+    for (var i = 0; i < alle.length; i++) zeichneEinen(alle[i]);
+  }
+  function zeichneEinen(k) {
     var app = alsApp();
     k.hidden = app; k.style.display = app ? "none" : "";   /* als App: weg, nicht „✓ App“ */
     k.dataset.lage = app ? "app" : (ereignis ? "angeboten" : "nicht-angeboten");
@@ -129,16 +139,48 @@
       "uninstall the app under Android Settings → Apps, close Chrome completely, reload this page and install again. Please do NOT “delete site data”: all apps at this address share one storage, that would delete the data of all of them."));
   }
 
-  function einhaengen() {
-    if (document.getElementById("installieren")) return;
-    var vor = VOR && document.getElementById(VOR);
-    if (!vor || !vor.parentNode) return;
+  function neuerKnopf(id, klasse) {
     var k = document.createElement("button");
-    k.type = "button"; k.className = vor.className; if (vor.getAttribute("style")) k.setAttribute("style", vor.getAttribute("style")); k.id = "installieren";
+    k.type = "button"; k.className = klasse || ""; k.id = id; k.setAttribute("data-install-knopf", "");
     var z = document.createElement("span"); z.setAttribute("aria-hidden", "true"); z.setAttribute("data-z", "");
     var t = document.createElement("span"); t.className = "t";
     k.appendChild(z); k.appendChild(t);
     k.addEventListener("click", klick);
+    return k;
+  }
+
+  /* In den Einstellungen: hinten an den Behälter (data-in). */
+  function einstellungenEinhaengen() {
+    if (!IN) return;
+    var b; try { b = document.querySelector(IN); } catch (_e) { return; }
+    if (!b || b.querySelector("[data-install-knopf]")) return;
+    var muster = b.querySelectorAll("button");
+    var k = neuerKnopf("installieren-einstellungen",
+      KLASSE || (muster.length ? muster[muster.length - 1].className : ""));
+    k.setAttribute("data-ort", "einstellungen");
+    b.appendChild(k);
+    zeichneEinen(k);
+  }
+
+  function einhaengen() {
+    einstellungenEinhaengen();
+    if (IN) {
+      try {
+        var wartet = false;
+        new MutationObserver(function () {
+          if (wartet) return; wartet = true;
+          (window.requestAnimationFrame || setTimeout)(function () { wartet = false; einstellungenEinhaengen(); });
+        }).observe(document.body, { childList: true, subtree: true });
+      } catch (_e) {}
+    }
+    if (document.getElementById("installieren")) return;
+    var vor = VOR && document.getElementById(VOR);
+    if (!vor || !vor.parentNode) {
+      try { new MutationObserver(knopfZeichnen).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] }); } catch (_e) {}
+      return;
+    }
+    var k = neuerKnopf("installieren", vor.className);
+    if (vor.getAttribute("style")) k.setAttribute("style", vor.getAttribute("style"));
     vor.parentNode.insertBefore(k, vor);
     if (FEST) { k.style.position = "fixed"; k.style.top = "10px"; k.style.right = "10px"; k.style.left = "auto"; k.style.bottom = "auto"; k.style.margin = "0"; k.style.zIndex = String(OBEN); k.setAttribute("data-fest", ""); }
     /* Die Sprache kann nach dem Laden wechseln — dann neu beschriften. */
@@ -157,5 +199,5 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", einhaengen);
   else einhaengen();
 
-  window.APP_INSTALL = { alsApp: alsApp, lage: function () { var k = document.getElementById("installieren"); return k ? k.dataset.lage : null; } };
+  window.APP_INSTALL = { alsApp: alsApp, lage: function () { var k = document.querySelector("[data-install-knopf]"); return k ? k.dataset.lage : null; } };
 })();

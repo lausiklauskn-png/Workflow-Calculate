@@ -243,6 +243,7 @@
     var fk = fokusMerken();
     zeichneKopf();
     var main = document.getElementById("inhalt"); main.replaceChildren();
+    main.setAttribute("data-reiter", S.reiter);   /* Ziel für den Installieren-Knopf in den Einstellungen (installieren.js data-in) */
     if (S.meldung) main.append(h("div", { class: "hinweis " + (S.meldung.art || ""), role: "status", "data-meldung": "" }, S.meldung.text));
     var fn = { angebote: zAngebote, angebot: zAngebot, katalog: zKatalog, kunden: zKunden, einstellungen: zEinstellungen, handel: zHandel, suche: zSuche, daten: zDaten }[S.reiter] || zSuche;
     fn(main);
