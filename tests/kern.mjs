@@ -218,6 +218,26 @@ ok("PIN: installieren.js ist byte-gleich mit Sage (über Workflow-Needs)", sha("
   ok("SCHALE: kein fremder Abruf (nur der Such-Link auf Tipp)", !/src="https?:|fetch\(\s*["']https?:/.test(idx + lies("assets/app.js")));
 }
 
+/* ── MANIFEST-ID: Chrome löst `id` gegen den URSPRUNG auf, nicht gegen den App-Ordner (Klaus 2026-10-18) ──
+   Alle Apps liegen auf https://lausiklauskn-png.github.io/<Repo>/. Mit "id": "./" wird daraus
+   https://lausiklauskn-png.github.io/ — für JEDE App, die es so schreibt. Chrome hält dann
+   verschiedene Apps für EINE („bereits installiert", „App konnte nicht geöffnet werden").
+   Gemessen an chrome://webapks: zehn Apps mit derselben Manifest Id. Gerechnet wird wie Chrome. */
+{
+  const chromeId = (id, startUrl, manifestUrl) => new URL(id, new URL(startUrl, manifestUrl).origin).href;
+  const BASIS = "https://lausiklauskn-png.github.io/Workflow-Calculate/";
+  ok("MANIFEST-ID: Rechnung wie Chrome — \"./\" landet auf dem Ursprung, nicht im App-Ordner",
+    chromeId("./", "./index.html", BASIS + "manifest.json") === "https://lausiklauskn-png.github.io/"
+    && chromeId("/Workflow-Calculate/index.html", "./index.html", BASIS + "manifest.json") === BASIS + "index.html"
+    && chromeId("index.html", "./index.html", BASIS + "manifest.json") === "https://lausiklauskn-png.github.io/index.html");
+  const mf = JSON.parse(readFileSync(join(WURZEL, "manifest.json"), "utf8"));
+  const start = new URL(mf.start_url, BASIS + "manifest.json");
+  const bereich = new URL(mf.scope || "./", start).href;
+  const id = mf.id ? chromeId(mf.id, mf.start_url, BASIS + "manifest.json") : start.origin + start.pathname;
+  ok("MANIFEST-ID: die id liegt im eigenen Bereich (" + bereich + ")", id.startsWith(bereich), { id: mf.id, aufgeloest: id });
+  ok("MANIFEST-ID: die id ist der Pfad der Start-Adresse ohne Anhängsel", id === start.origin + start.pathname, { id, start: start.href });
+}
+
 /* ── STUFE 2: Fassungen ── */
 {
   const kat = kopie(WC.START), alle = [];

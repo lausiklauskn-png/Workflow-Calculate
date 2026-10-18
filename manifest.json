@@ -2,7 +2,7 @@
   "name": "Workflow Calculate",
   "short_name": "Calculate",
   "description": "Angebote kalkulieren — Material, Arbeitszeit, Verpackung und Versand, offline. Die Kalkulation bleibt intern.",
-  "id": "./",
+  "id": "/Workflow-Calculate/index.html",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
