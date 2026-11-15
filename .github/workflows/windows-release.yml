@@ -1,0 +1,111 @@
+name: Workflow Calculate Pro Windows veröffentlichen
+
+# Nur von Hand und nur auf Klaus' Wort (Actions → „Workflow Calculate Pro Windows veröffentlichen“ → Run workflow, Feld „ja“).
+# Vorbild BookLedgerPro windows-release.yml. Baut den Auslieferungs-Installer, unterschreibt aktuell-windows.json (Ed25519, Geheimnis
+# UPDATE_SIGNING_KEY – derselbe Schlüssel wie für Android), prüft die Unterschrift gegen den in der App eingebauten öffentlichen
+# Schlüssel und lädt alles nach https://family-projekt.de/updates/workflow-calculate/ (rsync mit UPDATE_UPLOAD_KEY, der nur nach
+# /srv/family-project/updates schreiben darf). Alte Windows-Dateien im Ordner werden ersetzt, Android-Dateien bleiben unberührt.
+on:
+  workflow_dispatch:
+    inputs:
+      bestaetigung:
+        description: 'Klaus hat die Veröffentlichung freigegeben (genau "ja")'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
+
+jobs:
+  bauen:
+    if: ${{ github.event.inputs.bestaetigung == 'ja' && github.ref == 'refs/heads/main' }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - name: Öffentlicher Schlüssel eingetragen (Windows und Android gleich)
+        shell: bash
+        run: |
+          set -euo pipefail
+          W=$(grep -o 'SCHLUESSEL = "[^"]*"' windows/engine/src/DesktopUpdates.java | cut -d'"' -f2)
+          A=$(grep -o 'SCHLUESSEL = "[^"]*"' android/app/src/main/java/de/familyprojekt/workflowcalculate/UpdateFeed.java | cut -d'"' -f2)
+          [[ "$W" =~ ^MCowBQYDK2VwAyEA[A-Za-z0-9+/]{43}=$ ]] || { echo "::error::Öffentlicher Update-Schlüssel fehlt in DesktopUpdates.java (docs/WINDOWS.md)"; exit 1; }
+          [ "$W" = "$A" ] || { echo "::error::Windows und Android tragen verschiedene Update-Schlüssel"; exit 1; }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci --ignore-scripts --prefix windows
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows/src-tauri -> target
+      - run: node windows/engine/test.mjs
+      - run: node windows/tools/prepare-runtime.mjs
+      - run: npm run tauri --prefix windows -- build --bundles nsis
+      - name: Auslieferungsbau installieren, starten, entfernen
+        run: ./windows/pruefung/production.ps1
+      - run: node windows/tools/distribution.mjs
+        env:
+          WC_SOURCE_COMMIT: ${{ github.sha }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-update
+          path: windows/distribution/
+          if-no-files-found: error
+          retention-days: 90
+
+  veroeffentlichen:
+    needs: bauen
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-update
+          path: dist
+      - name: aktuell-windows.json bauen, unterschreiben, gegen den Schlüssel der App prüfen
+        env:
+          SIGNIERSCHLUESSEL: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SIGNIERSCHLUESSEL" || { echo "::error::Geheimnis UPDATE_SIGNING_KEY fehlt"; exit 1; }
+          mkdir -p hoch && cp dist/Workflow-Calculate-Pro-Windows-*-x64-setup.exe hoch/
+          (cd dist && sha256sum -c SHA256SUMS)
+          node windows/tools/update-feed.mjs dist hoch/aktuell-windows.json
+          umask 077; printf '%s\n' "$SIGNIERSCHLUESSEL" > "$RUNNER_TEMP/sig.pem"
+          openssl pkeyutl -sign -rawin -inkey "$RUNNER_TEMP/sig.pem" -in hoch/aktuell-windows.json -out "$RUNNER_TEMP/sig.bin"
+          base64 -w0 "$RUNNER_TEMP/sig.bin" > hoch/aktuell-windows.json.sig; echo >> hoch/aktuell-windows.json.sig
+          rm -f "$RUNNER_TEMP/sig.pem"
+          PUB=$(grep -o 'SCHLUESSEL = "[^"]*"' windows/engine/src/DesktopUpdates.java | cut -d'"' -f2)
+          { echo '-----BEGIN PUBLIC KEY-----'; echo "$PUB"; echo '-----END PUBLIC KEY-----'; } > "$RUNNER_TEMP/pub.pem"
+          openssl pkeyutl -verify -rawin -pubin -inkey "$RUNNER_TEMP/pub.pem" -in hoch/aktuell-windows.json -sigfile "$RUNNER_TEMP/sig.bin"
+          ls -la hoch
+      - name: Auf family-projekt.de hochladen (alte Windows-Stände werden ersetzt)
+        env:
+          HOCHLADESCHLUESSEL: ${{ secrets.UPDATE_UPLOAD_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$HOCHLADESCHLUESSEL" || { echo "::error::Geheimnis UPDATE_UPLOAD_KEY fehlt"; exit 1; }
+          umask 077; mkdir -p ~/.ssh
+          printf '%s\n' "$HOCHLADESCHLUESSEL" > ~/.ssh/upload
+          # Server-Kennung fest (wie BookLedgerPro): eine fremde Gegenstelle bekommt nichts.
+          echo '167.233.204.72 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIhzSmN0kY2Vk2oem2u6dH8rq04A8UXVZyay2WWRjOmR' > ~/.ssh/known_hosts
+          rsync -rt --delete-after --delay-updates --include='aktuell-windows.json' --include='aktuell-windows.json.sig' --include='Workflow-Calculate-Pro-Windows-*-x64-setup.exe' --exclude='*' -e "ssh -i ~/.ssh/upload -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" hoch/ root@167.233.204.72:workflow-calculate/
+          rm -f ~/.ssh/upload
+      - name: Von außen prüfen, was die App sieht
+        run: |
+          set -euo pipefail
+          B=https://family-projekt.de/updates/workflow-calculate
+          curl -fsS "$B/aktuell-windows.json" | cmp - hoch/aktuell-windows.json
+          curl -fsS "$B/aktuell-windows.json.sig" | cmp - hoch/aktuell-windows.json.sig
+          D=$(ls hoch/*.exe | xargs -n1 basename)
+          curl -fsS "$B/$D" | sha256sum | grep -q "$(sha256sum "hoch/$D" | cut -d' ' -f1)"
+          echo "Veröffentlicht: $B/$D"

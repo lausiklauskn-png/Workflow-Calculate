@@ -1,0 +1,9 @@
+dist/
+runtime/
+engine/build/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/icons/
+pruef-out/
+node_modules/
+distribution/

@@ -1,0 +1,65 @@
+name: Android-App
+
+# Baut „Workflow Calculate Pro“ (Android) aus dem unveränderten Web-Stand (Klaus 15.11.2026, Vorbild Datei-Organizer Pro / BookLedgerPro).
+# Nur ein Prüf-Bau (debug): keine Signatur, keine Veröffentlichung – die kommt nur auf Klaus' Wort (android-release.yml).
+# Auf main immer (android-release.yml verlangt einen grünen „android“-Lauf auf dem main-Commit), im PR nur bei Änderungen an der
+# App-Hülle oder am Web-Stand; sonst von Hand. Die Web-Teile prüft npm test (tests/kern.mjs, tests/browser.mjs).
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    paths: ['android/**', 'index.html', 'impressum.html', 'datenschutz.html', 'sicherheit.html', 'manifest.json', 'assets/**', 'modules/**', 'vendor/**', 'icons/**', 'native/**', 'tools/native/**', 'tools/signing/**', 'capacitor.config.json', 'package.json', 'package-lock.json', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - name: Browser für die Probe (Chromium)
+        run: npx playwright-core install --with-deps chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/pw
+      - name: Web-Paket und Hülle prüfen (ohne Android, App-Paket im Browser mit gestellter Brücke)
+        run: node tools/native/test-native.mjs
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/pw
+      - name: Signier-Werkzeuge mit Wegwerf-Schlüssel prüfen (kein echter Schlüssel)
+        run: node --test tools/signing/test-identity.mjs tools/signing/test-unlock-file.mjs tools/signing/test-release-policy.mjs
+      - name: APK-Signatur mit echtem apksigner an künstlicher APK prüfen (Wegwerf-Schlüssel)
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'build-tools;36.0.0' 'platforms;android-36' > /dev/null
+          WC_ANDROID_SDK="$ANDROID_HOME" node --test tools/signing/test-apk.mjs
+      - name: Web-Paket bauen und in die Hülle legen
+        run: npm run sync:android
+      - name: Bauen, Lint und JVM-Proben
+        working-directory: android
+        run: ./gradlew --no-daemon --max-workers=2 assembleDebug lintDebug testDebugUnitTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: workflow-calculate-pro-android-debug
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/reports/
+          if-no-files-found: warn
+          retention-days: 14

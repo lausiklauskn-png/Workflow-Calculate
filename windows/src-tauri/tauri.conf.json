@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Workflow Calculate Pro",
+  "mainBinaryName": "workflow-calculate-pro",
+  "version": "1.0.0",
+  "identifier": "de.familyprojekt.workflowcalculate",
+  "build": {
+    "frontendDist": "../dist",
+    "beforeBuildCommand": "node tools/build-web.mjs"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "publisher": "Family-Projekt",
+    "category": "Business",
+    "shortDescription": "Angebote kalkulieren – offline, die Kalkulation bleibt intern",
+    "resources": {
+      "../runtime/": "runtime/"
+    },
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "German",
+          "English"
+        ]
+      }
+    }
+  }
+}

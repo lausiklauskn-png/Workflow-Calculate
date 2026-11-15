@@ -1,0 +1,99 @@
+name: Windows-App
+
+# Workflow Calculate Pro für Windows (Klaus 15.11.2026, Vorbild Datei-Organizer Pro / BookLedgerPro windows.yml): Tauri 2 / WebView2 + Java-Engine.
+# Baut einen Prüfbau (mit Prüf-Schnittstelle) und prüft ihn installiert (zweimal gestartet), dann den Auslieferungsbau ohne
+# Prüf-Schnittstelle. Unsigniert, KEINE Veröffentlichung — die kommt nur auf Klaus' Wort (windows-release.yml).
+# Auf main immer (vor einer Veröffentlichung braucht es einen grünen Lauf), im PR nur bei Änderungen an Windows-Teilen oder am Web-Stand.
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    paths: ['windows/**', 'index.html', 'impressum.html', 'datenschutz.html', 'sicherheit.html', 'manifest.json', 'assets/**', 'modules/**', 'vendor/**', 'icons/**', 'native/**', 'tools/native/prepare-web.mjs', '.github/workflows/windows.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      LANG: C.UTF-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Engine mit gestellter Hülle (Speichern unter, Updates)
+        run: node windows/engine/test.mjs
+      - name: Echter Kindprozess über stdio
+        run: node windows/engine/protocol-test.mjs
+      - name: Brücke und Verträge im Browser (gestellte Tauri-Schnittstelle)
+        run: |
+          npm ci --ignore-scripts --prefix windows
+          npx --prefix windows playwright-core install chromium
+          NODE_PATH=windows/node_modules node windows/tools/test-bruecke.mjs
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - name: Quellen ohne Zeilenumwandlung auschecken
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci --ignore-scripts --prefix windows
+      - name: Rust-Abhängigkeiten
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows/src-tauri -> target
+          cache-on-failure: true
+      - name: Engine auf dem Windows-Dateisystem
+        run: node windows/engine/test.mjs
+      - name: Eigene Java-Laufzeit (jlink) und Symbol
+        run: node windows/tools/prepare-runtime.mjs
+      - name: Kindprozess mit der gebündelten Laufzeit
+        run: node windows/engine/protocol-test.mjs windows/runtime/jre/bin/java.exe windows/runtime
+      - name: Prüfbau (mit Prüf-Schnittstelle)
+        run: npm run tauri --prefix windows -- build --bundles nsis --features messprobe
+      - name: Installiert prüfen, zweimal starten, deinstallieren
+        timeout-minutes: 20
+        run: ./windows/pruefung/installed.ps1
+        env:
+          WC_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-abnahme
+          path: windows/pruef-out/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Auslieferungsbau ohne Prüf-Schnittstelle
+        run: npm run tauri --prefix windows -- build --bundles nsis
+      - name: Auslieferungsbau installieren, starten, entfernen
+        run: ./windows/pruefung/production.ps1
+      - name: Installer mit Prüfsumme bereitlegen
+        run: node windows/tools/distribution.mjs
+        env:
+          WC_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workflow-calculate-pro-windows-unsigniert
+          path: windows/distribution/
+          if-no-files-found: error
+          retention-days: 30

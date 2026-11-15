@@ -1,7 +1,21 @@
 {
   "name": "workflow-calculate",
   "private": true,
-  "description": "Workflow Calculate: Angebote kalkulieren mit versteckter Kalkulation (PWA)",
-  "scripts": { "test": "node tests/alle.mjs", "gegenprobe": "node tests/gegenprobe.mjs" },
-  "devDependencies": { "playwright-core": "1.56.1" }
+  "description": "Workflow Calculate: Angebote kalkulieren mit versteckter Kalkulation (PWA; als App „Workflow Calculate Pro“ für Android und Windows)",
+  "scripts": {
+    "test": "node tests/alle.mjs",
+    "gegenprobe": "node tests/gegenprobe.mjs",
+    "build:native": "node tools/native/prepare-web.mjs",
+    "sync:android": "node tools/native/prepare-web.mjs && cap sync android",
+    "test:native": "node tools/native/test-native.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.56.1",
+    "@capacitor/cli": "8.5.3"
+  },
+  "version": "1.0.0",
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3"
+  }
 }
