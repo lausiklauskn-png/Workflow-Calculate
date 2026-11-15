@@ -45,7 +45,9 @@ try{
     let datei='';
     for(let i=0;i<80&&!datei;i++){datei=(await readdir(SPEICHER).catch(()=>[])).find(n=>/^Angebote-ohne-Kundendaten-.*\.csv$/.test(n))||'';if(!datei)await pause(250);}
     const soll=await page.evaluate(()=>window.__wcCsv);
-    ok('„⬇ ohne Kundendaten“ geht über „Speichern unter“, Datei byte-gleich',!!datei&&(await readFile(resolve(SPEICHER,datei),'utf8'))===soll&&soll.includes(nummer));
+    // Ein frisches Angebot ohne Position hat keine Zeile in der CSV (eine Zeile je Position): verglichen wird die ganze Datei.
+    const ist=datei?await readFile(resolve(SPEICHER,datei)):null;report.csv={datei,bytes:ist?ist.length:0,soll:Buffer.byteLength(soll||'')};
+    ok('„⬇ ohne Kundendaten“ geht über „Speichern unter“, Datei byte-gleich',!!ist&&typeof soll==='string'&&soll.length>0&&ist.equals(Buffer.from(soll,'utf8')));
     if((await page.evaluate(()=>document.documentElement.dataset.theme))!=='light')await page.locator('#thema').click();
     ok('Hell-Thema gewählt',await page.evaluate(()=>document.documentElement.dataset.theme==='light'));
     await pause(3000);
