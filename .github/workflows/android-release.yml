@@ -1,0 +1,223 @@
+name: Workflow Calculate Pro Android veröffentlichen
+
+# Signierte Android-APK „Workflow Calculate Pro“ – nur auf Klaus' Wort, nur von Hand (Vorbild BookLedgerPro android-release.yml).
+# Nur von main, nur ein zuvor geprüfter Commit (Check „android“ grün), Feld „bestaetigung“ = ja, Signatur mit der dauerhaften
+# Identität (signing/, erst nach „initialize“ vorhanden) über WC_SIGNING_UNLOCK der Umgebung android-production, echte
+# Erstinstallation mit Datenerhalt im Emulator, Download danach bytegleich geprüft, danach auf den eigenen Update-Server.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Regulärer Tag, z. B. v0.1.0 (muss zu versionName passen)
+        required: true
+        type: string
+      commit:
+        description: Vollständiger zuvor geprüfter main-Commit
+        required: true
+        type: string
+      bestaetigung:
+        description: Zum Veröffentlichen „ja“ eintragen (Klaus' Wort)
+        required: true
+        type: string
+      entwurf_freigeben:
+        description: Nur einen vorhandenen, schon geprüften Entwurf dieses Tags freigeben (kein neuer Bau)
+        required: false
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  checks: read
+concurrency:
+  group: workflow-calculate-android-release
+  cancel-in-progress: false
+jobs:
+  entwurf:
+    if: github.ref == 'refs/heads/main' && inputs.bestaetigung == 'ja' && inputs.entwurf_freigeben
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: android-production
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Entwurf prüfen und freigeben
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          EXPECTED_COMMIT: ${{ inputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == 'lausiklauskn-png/Workflow-Calculate' ]]
+          [[ "$EXPECTED_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          node tools/signing/publish-release.mjs "$RELEASE_TAG" "$EXPECTED_COMMIT" --entwurf
+  build:
+    if: github.ref == 'refs/heads/main' && inputs.bestaetigung == 'ja' && !inputs.entwurf_freigeben
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Geprüften Stand verlangen
+        env:
+          EXPECTED_COMMIT: ${{ inputs.commit }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == 'lausiklauskn-png/Workflow-Calculate' ]]
+          [[ "$EXPECTED_COMMIT" =~ ^[a-f0-9]{40}$ && "$EXPECTED_COMMIT" == "$GITHUB_SHA" ]]
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          for file in package-lock.json android/gradlew signing/android-release.enc.json signing/android-certificate.json; do
+            test -f "$file" || { echo "Fehlt: $file"; exit 1; }
+          done
+          grep -q "versionName \"${RELEASE_TAG#v}\"" android/app/build.gradle || { echo 'versionName passt nicht zum Tag'; exit 1; }
+          grep -Eq 'SCHLUESSEL = "MCowBQYDK2VwAyEA[A-Za-z0-9+/]{43}="' android/app/src/main/java/de/familyprojekt/workflowcalculate/UpdateFeed.java \
+            || { echo 'Öffentlicher Update-Schlüssel fehlt noch (Platzhalter in UpdateFeed.java) – erst eintragen, dann veröffentlichen'; exit 1; }
+          passed=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs" --paginate \
+            --jq '[.check_runs[] | select(.name == "android" and .conclusion == "success")] | length' | awk '{n+=$1} END {print n}')
+          test "$passed" -ge 1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Proben
+        run: |
+          set -euo pipefail
+          npm ci
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/pw"
+          npx playwright-core install --with-deps chromium
+          node tests/kern.mjs
+          node tools/native/test-native.mjs
+          node --test tools/signing/test-identity.mjs tools/signing/test-unlock-file.mjs tools/signing/test-release-policy.mjs
+          npm run sync:android
+      - name: Unsignierte Release-APK bauen
+        working-directory: android
+        run: ./gradlew --no-daemon --max-workers=2 assembleRelease lintRelease testReleaseUnitTest
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-release-apk
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 3
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: android-production
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: unsigned-release-apk
+          path: unsigned-apk
+      - name: Android-Signierwerkzeuge
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'build-tools;36.0.0'
+          test -x "$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          test -x "$ANDROID_HOME/build-tools/36.0.0/aapt"
+      - name: Mit der dauerhaften Identität signieren und prüfen
+        env:
+          WC_SIGNING_UNLOCK: ${{ secrets.WC_SIGNING_UNLOCK }}
+          WC_RELEASE_TAG: ${{ inputs.tag }}
+          WC_RELEASE_COMMIT: ${{ github.sha }}
+          TMPDIR: ${{ runner.temp }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export WC_APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          export WC_AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
+          mkdir release-files
+          node tools/signing/cli.mjs sign-apk unsigned-apk/app-release-unsigned.apk \
+            "release-files/Workflow-Calculate-Pro-${WC_RELEASE_TAG#v}.apk"
+      - name: KVM für den Emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Signierte APK installieren, Angebot anlegen, überinstallieren, Angebot noch da
+        uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          ram-size: 4096M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: python3 tools/native/verify-signed-install.py "release-files/Workflow-Calculate-Pro-${RELEASE_TAG#v}.apk"
+      - name: Nachweise bei Fehler sichern
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-probe-failure
+          path: |
+            release-files/*.json
+            release-files/probe-*
+          if-no-files-found: ignore
+      - name: Veröffentlichen und Download prüfen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/signing/publish-release.mjs "$RELEASE_TAG" "$GITHUB_SHA" release-files
+      # Updates vom eigenen Server: dieselbe APK zusätzlich nach family-projekt.de/updates/workflow-calculate/,
+      # unterschrieben (Ed25519) und gegen den in der App eingebauten Schlüssel geprüft. Nur Android-Dateien werden abgeglichen.
+      - name: Update-Datei bauen, unterschreiben, gegen den Schlüssel der App prüfen
+        env:
+          SIGNIERSCHLUESSEL: ${{ secrets.UPDATE_SIGNING_KEY }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SIGNIERSCHLUESSEL" || { echo "::error::Geheimnis UPDATE_SIGNING_KEY fehlt"; exit 1; }
+          mkdir -p hoch && cp "release-files/Workflow-Calculate-Pro-${RELEASE_TAG#v}.apk" hoch/
+          node tools/native/update-feed-android.mjs "hoch/Workflow-Calculate-Pro-${RELEASE_TAG#v}.apk" hoch/aktuell-android.json
+          umask 077; printf '%s\n' "$SIGNIERSCHLUESSEL" > "$RUNNER_TEMP/sig.pem"
+          openssl pkeyutl -sign -rawin -inkey "$RUNNER_TEMP/sig.pem" -in hoch/aktuell-android.json -out "$RUNNER_TEMP/sig.bin"
+          base64 -w0 "$RUNNER_TEMP/sig.bin" > hoch/aktuell-android.json.sig; echo >> hoch/aktuell-android.json.sig
+          rm -f "$RUNNER_TEMP/sig.pem"
+          PUB=$(grep -o 'SCHLUESSEL = "[^"]*"' android/app/src/main/java/de/familyprojekt/workflowcalculate/UpdateFeed.java | cut -d'"' -f2)
+          test -n "$PUB" || { echo "::error::Öffentlicher Update-Schlüssel fehlt in UpdateFeed.java (Platzhalter) – erst eintragen"; exit 1; }
+          { echo '-----BEGIN PUBLIC KEY-----'; echo "$PUB"; echo '-----END PUBLIC KEY-----'; } > "$RUNNER_TEMP/pub.pem"
+          openssl pkeyutl -verify -rawin -pubin -inkey "$RUNNER_TEMP/pub.pem" -in hoch/aktuell-android.json -sigfile "$RUNNER_TEMP/sig.bin"
+      - name: Auf family-projekt.de hochladen und von außen prüfen
+        env:
+          HOCHLADESCHLUESSEL: ${{ secrets.UPDATE_UPLOAD_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOCHLADESCHLUESSEL" || { echo "::error::Geheimnis UPDATE_UPLOAD_KEY fehlt"; exit 1; }
+          umask 077; mkdir -p ~/.ssh; printf '%s\n' "$HOCHLADESCHLUESSEL" > ~/.ssh/upload
+          echo '167.233.204.72 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIhzSmN0kY2Vk2oem2u6dH8rq04A8UXVZyay2WWRjOmR' > ~/.ssh/known_hosts
+          rsync -rt --delete-after --delay-updates --include='aktuell-android.json' --include='aktuell-android.json.sig' --include='Workflow-Calculate-Pro-*.apk' --exclude='*' \
+            -e "ssh -i ~/.ssh/upload -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" hoch/ root@167.233.204.72:workflow-calculate/
+          rm -f ~/.ssh/upload
+          B=https://family-projekt.de/updates/workflow-calculate
+          curl -fsS "$B/aktuell-android.json" | cmp - hoch/aktuell-android.json
+          curl -fsS "$B/aktuell-android.json.sig" | cmp - hoch/aktuell-android.json.sig
+          D=$(ls hoch/*.apk | xargs -n1 basename)
+          curl -fsS "$B/$D" | sha256sum | grep -q "$(sha256sum "hoch/$D" | cut -d' ' -f1)"
+          echo "Auch auf dem Update-Server: $B/$D"

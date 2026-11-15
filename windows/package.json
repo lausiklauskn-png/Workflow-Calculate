@@ -1,0 +1,14 @@
+{
+  "name": "workflow-calculate-pro-windows",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "test:engine": "node engine/test.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4",
+    "playwright-core": "1.56.1"
+  }
+}

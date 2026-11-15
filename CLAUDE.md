@@ -229,3 +229,24 @@ Die Seite lädt `assets/kern/pruefer-mail.js` schon. Gemessen im Browser: `pruef
 **Nachtrag 2026-10-18 · Kontrast:** am Handy stand das Erklärfenster hell auf weiß (`color:inherit` erbt helle Schrift, `--flaeche` fehlt → weiß). `assets/installieren.js` neu byte-1:1 aus Sage (#1152, sha `874d2a29…8dc4`): nach dem Einhängen wird der Kontrast gemessen, unter 4,5 steht die Meldung fest `#1a1a1a` auf `#fff`. Pin in `tests/kern.mjs` nachgezogen, `installieren.js?v=3`, Cache v52. ⚠ Am Tablet nicht gemessen.
 
 **Nachtrag 2026-10-18 · Knopf in den Einstellungen:** `assets/installieren.js` neu byte-1:1 aus Sage (#1153, sha `e0644084…73c3`, enthält die Kontrast-Sicherung). Klaus: „Installieren-Button unter Einstellungen hinten.“ Das Skript-Tag trägt `data-in="#inhalt[data-reiter=einstellungen]" data-klasse="btn"`; `zeichne()` setzt dafür `data-reiter` an `#inhalt`. Im Browser gemessen (380 px): im Reiter Einstellungen steht `#installieren-einstellungen` als letztes Element, sichtbar; in anderen Reitern keiner; als App (standalone gestellt) beide weg. Pin nachgezogen, `installieren.js?v=4`, `app.js?v=20`, Cache v53. ⚠ Am Tablet nicht gemessen.
+
+## 📱 Workflow Calculate Pro – Android-App und Windows-Version (Klaus 2026-11-15)
+
+Klaus: „Workflow Needs und Calculate zu einer APK und einer Windows-Version bauen und sie Pro nennen.“ Bauweise von Datei-Organizer Pro
+(dahinter BookLedgerPro) übernommen; Einzelheiten und was Klaus einmalig tun muss: `docs/ANDROID.md`, `docs/WINDOWS.md`.
+- **Die PWA bleibt unverändert** (Name „Workflow Calculate“, kein Cache-Bump). Die App-Unterschiede stehen an EINER Stelle:
+  `native/wc-native.js`, die nur im App-Paket geladen wird (`tools/native/prepare-web.mjs` hängt sie in die Kopie von index.html und
+  nimmt dort die Service-Worker-Anmeldung heraus). Name „Workflow Calculate Pro“, Fassung, Speichern unter statt `<a download>`,
+  Drucken (Android: PrintManager), Spracheingabe aus, kein Installieren-Knopf, Updates vom eigenen Server.
+- Paket/Kennung `de.familyprojekt.workflowcalculate`, Fassung 1.0.0 (versionCode 1000), Plugins `WcDateien` und `WcUpdates`
+  (Android `android/…/workflowcalculate/`, Windows `windows/bridge/contracts.json` + Java-Engine). Update-Schlüssel **Platzhalter**
+  (`UpdateFeed.SCHLUESSEL` = `DesktopUpdates.SCHLUESSEL` = ""), Freigabe-Variable `WC_SIGNING_UNLOCK`.
+- **Wer eine Fassung ausgibt, erhöht** `package.json`, `android/app/build.gradle` (versionName/-Code), `windows/package*.json`,
+  `windows/src-tauri/Cargo.toml` (+ `Cargo.lock`), `tauri.conf.json` – `tools/native/test-native.mjs` prüft die Gleichheit.
+- **Wer index.html ändert:** `prepare-web` bricht ab, wenn die SBKIM-Schublade oder die Service-Worker-Anmeldung nicht mehr wortgleich
+  dasteht – dann `appIndex()` nachziehen, nicht raten.
+- ⚠ **BookLedgerPro bettet diesen Repo-Stand byte-1:1 ein** (`tools/apps-nachziehen.mjs` dort). Die neuen Ordner `android/`, `windows/`,
+  `native/`, `.github/`, `tools/native/`, `tools/signing/` gehören dort nicht hin – beim nächsten Nachziehen dort ausschließen.
+- Proben: `node tools/native/test-native.mjs` (auch App-Paket im Browser mit gestellter Brücke, PWA unberührt), JVM-Proben,
+  `LANG=C.UTF-8 node windows/engine/test.mjs`, `node windows/engine/protocol-test.mjs`, `windows/tools/test-bruecke.mjs`.
+  Gradle-, Lint- und Tauri-Bau nur in GitHub (`android.yml`, `windows.yml`). Nichts veröffentlichen ohne Klaus' Wort.
